@@ -85,7 +85,7 @@ WHAT'S INSIDE
 PRIVACY
 ━━━━━━━━━━━━━━━━━━━
 
-Skybreaker does not collect any data. No analytics, no ads, no account. Full privacy policy: https://origami.ms/skybreaker/privacy
+Skybreaker does not collect any data. No analytics, no ads, no account. Full privacy policy: https://yanipan.github.io/skybreaker/privacy.html
 
 ━━━━━━━━━━━━━━━━━━━
 

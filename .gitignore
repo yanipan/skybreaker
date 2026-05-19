@@ -24,10 +24,11 @@ Thumbs.db
 .idea/
 *.iml
 
-# Build output
-bin/
-build/
-exports/
+# Build output (root only — don't match scripts/build/)
+/bin/
+/build/
+/builds/
+/exports/
 *.apk
 *.aab
 *.ipa
