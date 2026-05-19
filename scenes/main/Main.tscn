@@ -1,20 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://skybreaker_main_scene"]
 
-[sub_resource type="GDScript" id="GDScript_main"]
-script/source = "extends Node2D
-
-func _ready() -> void:
-	print(\"Skybreaker booted. GameState.money = \", GameState.money)
-"
+[ext_resource type="Script" path="res://scripts/Main.gd" id="1_main_script"]
 
 [node name="Main" type="Node2D"]
-script = SubResource("GDScript_main")
-
-[node name="PlaceholderLabel" type="Label" parent="."]
-offset_left = 340.0
-offset_top = 900.0
-offset_right = 740.0
-offset_bottom = 980.0
-text = "SKYBREAKER"
-horizontal_alignment = 1
-vertical_alignment = 1
+script = ExtResource("1_main_script")

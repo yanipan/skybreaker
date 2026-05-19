@@ -42,3 +42,8 @@ exports/
 
 # User-specific Godot files
 *.cfg.user
+
+# Graphify tooling artifacts (regenerated)
+graphify-out/
+.graphify_staging/
+.graphify_python

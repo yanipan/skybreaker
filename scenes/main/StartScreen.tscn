@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://skybreaker_start_screen"]
+
+[ext_resource type="Script" path="res://scripts/StartScreen.gd" id="1_start_script"]
+
+[node name="StartScreen" type="Node2D"]
+script = ExtResource("1_start_script")

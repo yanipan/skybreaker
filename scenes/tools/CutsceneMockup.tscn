@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://skybreaker_cutscene_mockup"]
+
+[ext_resource type="Script" path="res://scripts/tools/CutsceneMockupGen.gd" id="1_mockup_script"]
+
+[node name="CutsceneMockup" type="Node"]
+script = ExtResource("1_mockup_script")

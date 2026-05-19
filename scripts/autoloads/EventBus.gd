@@ -11,6 +11,7 @@ signal player_healed(amount: int)
 # --- HUD signals ---
 signal money_changed(new_total: int)
 signal score_changed(new_total: int)
+signal high_score_changed(new_high: int)
 signal health_changed(current: int, max_hp: int)
 
 # --- Mission signals ---
@@ -25,3 +26,6 @@ signal pickup_collected(type: StringName, value: int)
 # --- UI signals ---
 signal pause_requested
 signal resume_requested
+
+# --- Camera / feedback ---
+signal screen_shake_requested(intensity: float, duration: float)

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://skybreaker_store_screenshots"]
+
+[ext_resource type="Script" path="res://scripts/tools/StoreScreenshotsGen.gd" id="1_ss_script"]
+
+[node name="StoreScreenshots" type="Node"]
+script = ExtResource("1_ss_script")
