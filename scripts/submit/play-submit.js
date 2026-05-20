@@ -42,8 +42,16 @@ async function initPublisher() {
     process.exit(1);
   }
   let googleapis;
-  try { googleapis = require('googleapis'); }
-  catch { console.error('\nRun: npm install googleapis\n'); process.exit(1); }
+  try {
+    googleapis = require('googleapis');
+  } catch {
+    try {
+      googleapis = require('C:/Users/User/lomed-english/node_modules/googleapis');
+    } catch {
+      console.error('\nRun: npm install googleapis (or install in C:/Users/User/lomed-english/)\n');
+      process.exit(1);
+    }
+  }
   const auth = new googleapis.google.auth.GoogleAuth({
     keyFile: PLAY_SA_PATH,
     scopes: ['https://www.googleapis.com/auth/androidpublisher'],

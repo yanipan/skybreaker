@@ -1,11 +1,11 @@
-# Headless Android AAB build for Skybreaker.
+﻿# Headless Android AAB build for Skybreaker.
 # Run after: keystore generated (1-generate-keystore.ps1), export templates
 # installed at %APPDATA%\Godot\export_templates\4.6.2.stable\, and
 # export_presets.cfg present at project root.
 
 $ErrorActionPreference = 'Stop'
 
-# Godot 4.6.2 binary — the outer .exe is actually a folder; the real exe is inside.
+# Godot 4.6.2 binary - the outer .exe is actually a folder; the real exe is inside.
 $Godot      = 'C:\Users\User\OneDrive\Desktop\Godot_v4.6.2-stable_win64.exe\Godot_v4.6.2-stable_win64_console.exe'
 $ProjectDir = 'C:\Users\User\Skybreaker'
 $Preset     = 'Android Release'
@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path $Output) | Out-Null
 
 Push-Location $ProjectDir
 try {
-  # First-time gradle source tree install (idempotent — Godot exits cleanly if already present).
+  # First-time gradle source tree install (idempotent - Godot exits cleanly if already present).
   if (-not (Test-Path (Join-Path $ProjectDir 'android\build'))) {
     Write-Host "Installing Android gradle build template (one-time)..."
     & $Godot --headless --install-android-build-template
@@ -47,7 +47,7 @@ try {
 if (Test-Path $Output) {
   $size = [math]::Round((Get-Item $Output).Length / 1MB, 2)
   Write-Host ""
-  Write-Host "OK — $Output ($size MB)" -ForegroundColor Green
+  Write-Host "OK - $Output ($size MB)" -ForegroundColor Green
   Write-Host "Upload to Play Console Production track."
 } else {
   Write-Host "Build did not produce $Output" -ForegroundColor Red
