@@ -58,7 +58,7 @@ FEATURES
 
 • BUILT FOR ONE HAND. Drag to fly. Tap to fire. Two big buttons for torpedoes and weapon switching. Works on the bus, in the bath, in the back of an Uber.
 
-• PREMIUM, NOT PREDATORY. Buy once, play forever. No ads. No loot boxes. No energy meters. No data collection.
+• FREE, NO STRINGS. No ads. No loot boxes. No energy meters. No in-app purchases. No data collection.
 
 ━━━━━━━━━━━━━━━━━━━
 THE STORY
@@ -73,7 +73,7 @@ WHAT'S INSIDE
 ━━━━━━━━━━━━━━━━━━━
 
 • 20 sectors, 9 enemy types, 5 bosses, 1 final encounter
-• 3 weapons × 20 upgrade levels
+• 4 primary weapons × 25 upgrade levels, plus bombs, EMP, drones and torpedoes
 • A fully-stocked starbase between sectors with a shopkeeper who slowly warms up to you
 • A sidekick wing-drone you can buy (or lose in combat)
 • Procedural wave generation so no two runs play identically
@@ -100,9 +100,9 @@ Answer the signal. Fly alone. Come home different.
 Launch build.
 • 20 sectors, 6 cutscenes, full campaign playable start to finish
 • Mobile-first controls: drag to move, two-finger-free one-hand play
-• Three weapon systems with 20 upgrade tiers each
+• Four primary weapons with 25 upgrade tiers each
 • Starbase shop with upgrades, repairs, and a shopkeeper who remembers you
-• No ads, no IAP, no data collection — just a game
+• Free. No ads, no IAP, no data collection, just a game
 ```
 
 ---
