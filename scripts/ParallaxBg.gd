@@ -6,10 +6,9 @@ class_name ParallaxBg
 ## past two huge billboards.
 ##
 ## How it works:
-##   * Every PNG is loaded once at boot and run through a chroma-key strip
-##     (corner-sample → average → erase pixels within tolerance) so the
-##     blocky white/black backgrounds the AI generator gives us drop out and
-##     only the silhouette remains. Cached as ImageTextures for the session.
+##   * Every PNG ships with its background already keyed out to alpha
+##     (baked offline by scripts/tools/strip_backgrounds.gd), so _ready just
+##     load()s them; Godot's resource cache shares them across instances.
 ##   * Bodies are spawned across THREE depth bands (FAR / MID / NEAR), each
 ##     with its own scale range, drift speed, alpha, and target on-screen
 ##     count. Far bodies are tiny, faded, drifting at 6 px/sec; near bodies
@@ -65,7 +64,7 @@ const BANDS: Array = [
 var _viewport_size: Vector2
 # Per-body: { sprite, speed, spin, band }
 var _bodies: Array = []
-# Cached chroma-keyed textures (built once on _ready).
+# Loaded (pre-stripped) textures.
 var _planet_textures: Array = []
 var _nebula_textures: Array = []
 # Nebula has its own slow cadence — they're huge and atmospheric, not part
@@ -75,16 +74,16 @@ var _nebula_cooldown: float = 0.0
 
 func _ready() -> void:
 	_viewport_size = get_viewport_rect().size
-	# Strip the background out of every PNG once at boot. Missing files get
-	# silently skipped so the scene still runs during asset churn.
+	# Missing files get silently skipped so the scene still runs during
+	# asset churn.
 	for path in PLANET_TEXTURES:
-		var stripped: Texture2D = _load_and_strip(path)
-		if stripped != null:
-			_planet_textures.append(stripped)
+		var tex: Texture2D = load(path) as Texture2D
+		if tex != null:
+			_planet_textures.append(tex)
 	for path in NEBULA_TEXTURES:
-		var stripped2: Texture2D = _load_and_strip(path)
-		if stripped2 != null:
-			_nebula_textures.append(stripped2)
+		var tex2: Texture2D = load(path) as Texture2D
+		if tex2 != null:
+			_nebula_textures.append(tex2)
 	# Pre-populate every depth band with bodies already spread vertically
 	# down the screen so the first frame isn't an empty void.
 	if _planet_textures.size() > 0:
@@ -195,46 +194,3 @@ func _spawn_nebula() -> void:
 	var spin: float = deg_to_rad(randf_range(-0.6, 0.6))
 	_bodies.append({"sprite": sprite, "speed": speed, "spin": spin, "band": -1})
 
-
-# Chroma-key strip: load a PNG, sample its four corner pixels, average them
-# into a "background" color, and erase every pixel within tolerance to fully
-# transparent. Returns the resulting ImageTexture, or null on failure.
-# Same trick used on the BOSS2 sprite, the in-game logo, and the alien trader.
-func _load_and_strip(path: String) -> Texture2D:
-	var raw: Texture2D = load(path) as Texture2D
-	if raw == null:
-		return null
-	var img: Image = raw.get_image()
-	if img == null:
-		return raw
-	if img.is_compressed():
-		img.decompress()
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	var w: int = img.get_width()
-	var h: int = img.get_height()
-	if w <= 2 or h <= 2:
-		return raw
-	# Sample the four corners and average them as our key color.
-	var c00: Color = img.get_pixel(0, 0)
-	var c10: Color = img.get_pixel(w - 1, 0)
-	var c01: Color = img.get_pixel(0, h - 1)
-	var c11: Color = img.get_pixel(w - 1, h - 1)
-	var key := Color(
-		(c00.r + c10.r + c01.r + c11.r) * 0.25,
-		(c00.g + c10.g + c01.g + c11.g) * 0.25,
-		(c00.b + c10.b + c01.b + c11.b) * 0.25,
-		1.0
-	)
-	# Tolerance — squared color distance. 0.20 is generous enough to catch
-	# JPEG-style compression artefacts around the silhouette edges.
-	var tol: float = 0.20
-	for y in h:
-		for x in w:
-			var p: Color = img.get_pixel(x, y)
-			var dr: float = p.r - key.r
-			var dg: float = p.g - key.g
-			var db: float = p.b - key.b
-			if dr * dr + dg * dg + db * db < tol:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	return ImageTexture.create_from_image(img)

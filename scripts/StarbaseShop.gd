@@ -113,10 +113,6 @@ var _items_root: Container
 # successful purchase advances the portrait by one (clamped to the last frame).
 var _alien_sprite: TextureRect = null
 var _alien_stage: int = 0
-# Lazily-built chroma-keyed copies of the four alien portraits so we only
-# pay the per-pixel scan cost once per session (and only for the stages the
-# player actually sees).
-var _alien_textures_stripped: Array = [null, null, null, null]
 
 # --- Trader speech bubble ---
 # A small panel anchored to the upper-right of the trader portrait that shows
@@ -298,7 +294,7 @@ func _build_ui() -> void:
 	_alien_sprite.size = Vector2(panel_w - 80, banner_h - 16)
 	_alien_sprite.position = Vector2(40, banner_y + 8)
 	_alien_sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# Force trilinear filtering on the runtime ImageTexture so the 1024x1024
+	# Force trilinear filtering (the .import generates mipmaps) so the 1024x1024
 	# portrait downscales smoothly into the ~450px banner. Without this the
 	# CanvasLayer's default filter applies and the alien reads as pixelated.
 	_alien_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
@@ -691,55 +687,13 @@ func _say_line(line: String) -> void:
 	tw.tween_property(_bubble, "modulate:a", 1.0, 0.18)
 
 
-## Lazy chroma-key getter: returns a background-stripped copy of the Nth
-## alien portrait, building it on first access and caching for the rest of
-## the session. Samples the four corners of the image and erases any pixel
-## within tolerance of the average corner color (same trick used on BOSS2
-## and the in-game logo).
+## Returns the Nth alien portrait. The PNGs ship with the background already
+## keyed out to alpha (scripts/tools/strip_backgrounds.gd) and their .import
+## files generate mipmaps for the downscaled banner.
 func _get_alien_texture(stage: int) -> Texture2D:
 	if stage < 0 or stage >= ALIEN_TEXTURES_RAW.size():
 		return null
-	if _alien_textures_stripped[stage] != null:
-		return _alien_textures_stripped[stage]
-	var raw: Texture2D = ALIEN_TEXTURES_RAW[stage]
-	var img: Image = raw.get_image()
-	if img == null:
-		return raw
-	if img.is_compressed():
-		img.decompress()
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	var w: int = img.get_width()
-	var h: int = img.get_height()
-	if w <= 2 or h <= 2:
-		return raw
-	var c00: Color = img.get_pixel(0, 0)
-	var c10: Color = img.get_pixel(w - 1, 0)
-	var c01: Color = img.get_pixel(0, h - 1)
-	var c11: Color = img.get_pixel(w - 1, h - 1)
-	var key := Color(
-		(c00.r + c10.r + c01.r + c11.r) * 0.25,
-		(c00.g + c10.g + c01.g + c11.g) * 0.25,
-		(c00.b + c10.b + c01.b + c11.b) * 0.25,
-		1.0
-	)
-	var tol: float = 0.18
-	for y in h:
-		for x in w:
-			var p: Color = img.get_pixel(x, y)
-			var dr: float = p.r - key.r
-			var dg: float = p.g - key.g
-			var db: float = p.b - key.b
-			if dr * dr + dg * dg + db * db < tol:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	# Mipmaps are required for a clean DOWNSCALE — the source is 1024x1024
-	# and the banner draws it at ~450px. Without mipmaps the runtime
-	# ImageTexture aliases hard and the alien looks pixelated.
-	img.generate_mipmaps()
-	var tex: ImageTexture = ImageTexture.create_from_image(img)
-	_alien_textures_stripped[stage] = tex
-	return tex
-
+	return ALIEN_TEXTURES_RAW[stage]
 
 ## Advance the trader portrait one frame, capped at the last image. Each
 ## purchase makes the alien progressively more excited about your business.

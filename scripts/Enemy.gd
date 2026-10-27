@@ -21,16 +21,13 @@ const TEX_DODGER: Texture2D = preload("res://assets/sprites/enemy_dodger.png")
 const TEX_BOMBER: Texture2D = preload("res://assets/sprites/enemy_bomber.png")
 const TEX_STRAFER: Texture2D = preload("res://assets/sprites/enemy_strafer.png")
 const TEX_TANK: Texture2D = preload("res://assets/sprites/enemy_tank.png")
-# These three were dropped in with solid black backgrounds (RGB, not RGBA),
-# so they're loaded raw and chroma-keyed at runtime via _stripped_tex().
-# The first instance to spawn pays the per-pixel scan; every other spawn
-# of the same type reuses the cached ImageTexture.
-const TEX_SWARMER_RAW: Texture2D = preload("res://assets/sprites/enemy_swarmer.png")
-const TEX_LANCER_RAW: Texture2D = preload("res://assets/sprites/enemy_lancer.png")
-const TEX_BROODER_RAW: Texture2D = preload("res://assets/sprites/enemy_brooder.png")
-const TEX_REAPER_RAW: Texture2D = preload("res://assets/sprites/enemy_reaper.png")
-# Static cache for chroma-keyed enemy textures. Keyed by Type enum value.
-static var _stripped_cache: Dictionary = {}
+# These four shipped with solid black backgrounds; the background is baked
+# out to alpha offline (scripts/tools/strip_backgrounds.gd) and their
+# .import files generate mipmaps, matching the old runtime ImageTexture.
+const TEX_SWARMER: Texture2D = preload("res://assets/sprites/enemy_swarmer.png")
+const TEX_LANCER: Texture2D = preload("res://assets/sprites/enemy_lancer.png")
+const TEX_BROODER: Texture2D = preload("res://assets/sprites/enemy_brooder.png")
+const TEX_REAPER: Texture2D = preload("res://assets/sprites/enemy_reaper.png")
 
 @export var type: Type = Type.GRUNT
 
@@ -376,13 +373,13 @@ func _build_sprite() -> void:
 		Type.TANK:
 			tex = TEX_TANK
 		Type.SWARMER:
-			tex = _stripped_tex(Type.SWARMER, TEX_SWARMER_RAW)
+			tex = TEX_SWARMER
 		Type.LANCER:
-			tex = _stripped_tex(Type.LANCER, TEX_LANCER_RAW)
+			tex = TEX_LANCER
 		Type.BROODER:
-			tex = _stripped_tex(Type.BROODER, TEX_BROODER_RAW)
+			tex = TEX_BROODER
 		Type.REAPER:
-			tex = _stripped_tex(Type.REAPER, TEX_REAPER_RAW)
+			tex = TEX_REAPER
 		_:
 			tex = null
 	if tex == null:
@@ -535,51 +532,6 @@ func _brooder_death_spawn() -> void:
 		bullet.style = EnemyBullet.Style.SPARK
 		bullet.speed = 320.0
 		get_parent().add_child(bullet)
-
-
-## Lazily chroma-key strip an enemy texture and cache the result. Same trick
-## as ParallaxBg / StarbaseShop — sample the four corners as the background
-## color and erase every pixel within tolerance. Cached statically so the
-## per-pixel scan only happens once per type per session.
-static func _stripped_tex(type_key: int, raw: Texture2D) -> Texture2D:
-	if _stripped_cache.has(type_key):
-		return _stripped_cache[type_key]
-	if raw == null:
-		return null
-	var img: Image = raw.get_image()
-	if img == null:
-		return raw
-	if img.is_compressed():
-		img.decompress()
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	var w: int = img.get_width()
-	var h: int = img.get_height()
-	if w <= 2 or h <= 2:
-		return raw
-	var c00: Color = img.get_pixel(0, 0)
-	var c10: Color = img.get_pixel(w - 1, 0)
-	var c01: Color = img.get_pixel(0, h - 1)
-	var c11: Color = img.get_pixel(w - 1, h - 1)
-	var key := Color(
-		(c00.r + c10.r + c01.r + c11.r) * 0.25,
-		(c00.g + c10.g + c01.g + c11.g) * 0.25,
-		(c00.b + c10.b + c01.b + c11.b) * 0.25,
-		1.0
-	)
-	var tol: float = 0.20
-	for y in h:
-		for x in w:
-			var p: Color = img.get_pixel(x, y)
-			var dr: float = p.r - key.r
-			var dg: float = p.g - key.g
-			var db: float = p.b - key.b
-			if dr * dr + dg * dg + db * db < tol:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	img.generate_mipmaps()
-	var tex: ImageTexture = ImageTexture.create_from_image(img)
-	_stripped_cache[type_key] = tex
-	return tex
 
 
 func _spawn_enemy_bullet(dir: Vector2, dmg: int) -> void:

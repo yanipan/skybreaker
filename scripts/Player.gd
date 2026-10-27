@@ -143,14 +143,16 @@ func _ready() -> void:
 		_apply_energy_cells()
 		GameState.clear_respawn()
 	elif GameState.carry_active:
+		# Raise the caps BEFORE clamping into them, so shop-bought shield and
+		# torpedo capacity come back fully charged/stocked.
+		max_shield = max(max_shield, GameState.carry_max_shield)
+		max_torpedoes = max(max_torpedoes, GameState.carry_max_torpedoes)
 		hp = clamp(GameState.carry_hp, 1, max_hp)
 		shield = clamp(GameState.carry_shield, 0.0, float(max_shield))
 		_load_weapon_levels(GameState.carry_weapon_levels, GameState.carry_power_level)
 		torpedo_count = clamp(GameState.carry_torpedo_count, 0, max_torpedoes)
 		weapon_type = clamp(GameState.carry_weapon_type, 0, 2)
 		_refresh_derived_power()
-		max_shield = max(max_shield, GameState.carry_max_shield)
-		max_torpedoes = max(max_torpedoes, GameState.carry_max_torpedoes)
 		speed_tier = clamp(GameState.carry_speed_tier, 0, SPEED_TIER_MAX)
 		energy_cells_bought = clamp(GameState.carry_energy_cells, 0, ENERGY_CELL_MAX)
 		_apply_energy_cells()
@@ -212,7 +214,8 @@ func _take_damage(amount: int) -> void:
 		else:
 			AudioManager.play_sfx(AudioManager.SFX_TAKING_IMPACT, -8.0)
 		AudioManager.haptic_light()
-		print("Shield absorbed hit (full negate)")
+		if OS.is_debug_build():
+			print("Shield absorbed hit (full negate)")
 
 	# Anything left bleeds into the hull
 	if remaining > 0:
@@ -220,7 +223,8 @@ func _take_damage(amount: int) -> void:
 		AudioManager.play_sfx(AudioManager.SFX_TAKING_IMPACT, -3.0)
 		AudioManager.haptic_medium()
 		EventBus.screen_shake_requested.emit(8.0, 0.18)
-		print("Hull hit! HP=", hp)
+		if OS.is_debug_build():
+			print("Hull hit! HP=", hp)
 
 	if hp <= 0:
 		_die()
@@ -285,17 +289,20 @@ func _consume_pickup(pickup: Area2D) -> void:
 			hp = min(max_hp, hp + int(round(max_hp * 0.25)))
 			if sidekick != null and sidekick.has_method("receive_heal_pct"):
 				sidekick.receive_heal_pct(0.25)
-			print("Picked up HEALTH_SMALL. HP=", hp)
+			if OS.is_debug_build():
+				print("Picked up HEALTH_SMALL. HP=", hp)
 		Pickup.Type.HEALTH_MEDIUM:
 			hp = min(max_hp, hp + int(round(max_hp * 0.5)))
 			if sidekick != null and sidekick.has_method("receive_heal_pct"):
 				sidekick.receive_heal_pct(0.5)
-			print("Picked up HEALTH_MEDIUM. HP=", hp)
+			if OS.is_debug_build():
+				print("Picked up HEALTH_MEDIUM. HP=", hp)
 		Pickup.Type.HEALTH_FULL:
 			hp = max_hp
 			if sidekick != null and sidekick.has_method("receive_heal_pct"):
 				sidekick.receive_heal_pct(1.0)
-			print("Picked up HEALTH_FULL. HP=", hp)
+			if OS.is_debug_build():
+				print("Picked up HEALTH_FULL. HP=", hp)
 		Pickup.Type.POWER:
 			# Legacy generic power — boosts whichever weapon is currently active.
 			# Drop tables now use the per-weapon variants below; this branch
@@ -304,43 +311,51 @@ func _consume_pickup(pickup: Area2D) -> void:
 			if sidekick != null and sidekick.has_method("receive_power_up"):
 				sidekick.receive_power_up()
 			AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -3.0)
-			print("Picked up POWER. Level=", power_level, " (weapon ", weapon_type, ")")
+			if OS.is_debug_build():
+				print("Picked up POWER. Level=", power_level, " (weapon ", weapon_type, ")")
 		Pickup.Type.POWER_PHASER:
 			add_power_to_weapon(WeaponType.PHASER)
 			if sidekick != null and sidekick.has_method("receive_power_up"):
 				sidekick.receive_power_up()
 			AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -3.0)
-			print("Picked up POWER_PHASER. Phaser=", weapon_levels[WeaponType.PHASER])
+			if OS.is_debug_build():
+				print("Picked up POWER_PHASER. Phaser=", weapon_levels[WeaponType.PHASER])
 		Pickup.Type.POWER_BEAM:
 			add_power_to_weapon(WeaponType.BEAM)
 			if sidekick != null and sidekick.has_method("receive_power_up"):
 				sidekick.receive_power_up()
 			AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -3.0)
-			print("Picked up POWER_BEAM. Beam=", weapon_levels[WeaponType.BEAM])
+			if OS.is_debug_build():
+				print("Picked up POWER_BEAM. Beam=", weapon_levels[WeaponType.BEAM])
 		Pickup.Type.POWER_MISSILE:
 			add_power_to_weapon(WeaponType.MISSILE)
 			if sidekick != null and sidekick.has_method("receive_power_up"):
 				sidekick.receive_power_up()
 			AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -3.0)
-			print("Picked up POWER_MISSILE. Missile=", weapon_levels[WeaponType.MISSILE])
+			if OS.is_debug_build():
+				print("Picked up POWER_MISSILE. Missile=", weapon_levels[WeaponType.MISSILE])
 		Pickup.Type.TORPEDO:
 			torpedo_count = min(max_torpedoes, torpedo_count + 1)
-			print("Picked up TORPEDO. Ammo=", torpedo_count)
+			if OS.is_debug_build():
+				print("Picked up TORPEDO. Ammo=", torpedo_count)
 		Pickup.Type.MONEY:
 			var coins: int = pickup.money_value if "money_value" in pickup else 1
 			GameState.add_money(coins)
 			AudioManager.play_sfx(AudioManager.SFX_COIN_PICKUP, -4.0)
-			print("Picked up MONEY +", coins, " (total=", GameState.money, ")")
+			if OS.is_debug_build():
+				print("Picked up MONEY +", coins, " (total=", GameState.money, ")")
 		Pickup.Type.WEAPON_CHANGE:
 			cycle_weapon()
 		Pickup.Type.LIFE:
 			GameState.lives = min(GameState.MAX_LIVES, GameState.lives + 1)
 			AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, 0.0)
-			print("Picked up LIFE. Lives=", GameState.lives)
+			if OS.is_debug_build():
+				print("Picked up LIFE. Lives=", GameState.lives)
 		Pickup.Type.SIDEKICK:
 			_grant_sidekick()
 			AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, 0.0)
-			print("Picked up SIDEKICK")
+			if OS.is_debug_build():
+				print("Picked up SIDEKICK")
 	AudioManager.haptic_light()
 	pickup.queue_free()
 
@@ -1021,7 +1036,8 @@ func cycle_weapon() -> void:
 	# Reset cooldown so the new weapon's first shot is immediate instead of
 	# inheriting whatever the previous weapon was mid-cycle on.
 	_fire_cooldown = 0.0
-	print("Weapon switched to ", weapon_type, " (level ", power_level, ")")
+	if OS.is_debug_build():
+		print("Weapon switched to ", weapon_type, " (level ", power_level, ")")
 	AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -3.0)
 	AudioManager.haptic_medium()
 

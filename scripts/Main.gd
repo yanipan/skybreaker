@@ -207,8 +207,8 @@ func _spawn_camera() -> void:
 	# It's centered on the viewport and stays put unless shake is active.
 	_camera = Camera2D.new()
 	_camera.position = _viewport_size * 0.5
-	_camera.make_current()
 	add_child(_camera)
+	_camera.make_current()
 
 
 func _on_screen_shake_requested(intensity: float, duration: float) -> void:
@@ -245,11 +245,9 @@ func _spawn_title() -> void:
 	if logo_raw == null:
 		print("Title logo missing — skipping title spawn")
 		return
-	# Strip the white background out of the logo so the HUD shows just the
-	# letterforms over the starfield. Same chroma-key trick used on BOSS2.
-	var logo: Texture2D = _strip_white_bg(logo_raw)
-	if logo == null:
-		logo = logo_raw
+	# The PNG's white background is already keyed out to alpha (baked
+	# offline by scripts/tools/strip_backgrounds.gd).
+	var logo: Texture2D = logo_raw
 	var sprite := Sprite2D.new()
 	sprite.texture = logo
 	sprite.centered = true
@@ -273,43 +271,6 @@ func _spawn_title() -> void:
 	print("Title spawned (logo)")
 
 
-# Chroma-key strip: removes near-white pixels by sampling the four corners,
-# averaging them as a key color, and erasing every pixel within tolerance.
-# Returns null on failure so the caller can fall back to the raw texture.
-func _strip_white_bg(tex: Texture2D) -> ImageTexture:
-	var img: Image = tex.get_image()
-	if img == null:
-		return null
-	if img.is_compressed():
-		img.decompress()
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	var w: int = img.get_width()
-	var h: int = img.get_height()
-	if w <= 0 or h <= 0:
-		return null
-	var c00: Color = img.get_pixel(0, 0)
-	var c10: Color = img.get_pixel(w - 1, 0)
-	var c01: Color = img.get_pixel(0, h - 1)
-	var c11: Color = img.get_pixel(w - 1, h - 1)
-	var key := Color(
-		(c00.r + c10.r + c01.r + c11.r) * 0.25,
-		(c00.g + c10.g + c01.g + c11.g) * 0.25,
-		(c00.b + c10.b + c01.b + c11.b) * 0.25,
-		1.0
-	)
-	var tol: float = 0.20
-	for y in h:
-		for x in w:
-			var p: Color = img.get_pixel(x, y)
-			var dr: float = p.r - key.r
-			var dg: float = p.g - key.g
-			var db: float = p.b - key.b
-			if dr * dr + dg * dg + db * db < tol:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	return ImageTexture.create_from_image(img)
-
-
 func _spawn_hud() -> void:
 	# Money — left column, tucked BELOW the logo banner (logo center y=70,
 	# height ~120, so its bottom edge sits near y=130).
@@ -322,10 +283,17 @@ func _spawn_hud() -> void:
 
 	# Score — top-right. Width pinned to the right edge with a bit of padding
 	# so the label can grow with longer numbers without running off-screen.
+	# On mobile the column respects the notch/safe area and stays clear of
+	# MobileControls' pause button (top-right, ~107 px wide incl. inset).
+	var safe: Rect2 = _hud_safe_rect()
+	var score_top: float = safe.position.y
+	var score_right: float = safe.position.x + safe.size.x
+	if OS.has_feature("mobile"):
+		score_right -= 112.0
 	var score_w: float = 260.0
-	var score_x: float = _viewport_size.x - score_w - 16.0
+	var score_x: float = score_right - score_w - 16.0
 	_score_label = Label.new()
-	_score_label.position = Vector2(score_x, 60)
+	_score_label.position = Vector2(score_x, score_top + 60)
 	_score_label.size = Vector2(score_w, 40)
 	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_score_label.add_theme_font_override("font", Fonts.HEADLINE)
@@ -335,7 +303,7 @@ func _spawn_hud() -> void:
 
 	# High score — under score, dimmer/smaller
 	_high_score_label = Label.new()
-	_high_score_label.position = Vector2(score_x, 96)
+	_high_score_label.position = Vector2(score_x, score_top + 96)
 	_high_score_label.size = Vector2(score_w, 28)
 	_high_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_high_score_label.add_theme_font_override("font", Fonts.SUBHEAD)
@@ -351,6 +319,19 @@ func _spawn_hud() -> void:
 	_lives_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.55))
 	add_child(_lives_label)
 
+
+
+## Safe area in viewport coordinates, same conversion MobileControls uses for
+## its buttons, so HUD text and touch buttons agree on notch insets.
+func _hud_safe_rect() -> Rect2:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	if not OS.has_feature("mobile"):
+		return Rect2(Vector2.ZERO, vp)
+	var sr: Rect2i = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var win_size: Vector2i = DisplayServer.window_get_size()
+	var sx: float = vp.x / max(1.0, float(win_size.x))
+	var sy: float = vp.y / max(1.0, float(win_size.y))
+	return Rect2(Vector2(sr.position.x * sx, sr.position.y * sy), Vector2(sr.size.x * sx, sr.size.y * sy))
 
 func _refresh_hud() -> void:
 	if _money_label != null:

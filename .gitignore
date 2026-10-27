@@ -48,3 +48,6 @@ Thumbs.db
 graphify-out/
 .graphify_staging/
 .graphify_python
+
+# Godot Android gradle build template (installed per machine)
+/android/

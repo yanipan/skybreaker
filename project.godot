@@ -31,13 +31,14 @@ SaveSystem="*res://scripts/autoloads/SaveSystem.gd"
 EventBus="*res://scripts/autoloads/EventBus.gd"
 AudioManager="*res://scripts/autoloads/AudioManager.gd"
 Fonts="*res://scripts/autoloads/Fonts.gd"
-ScreenshotCapture="*res://scripts/tools/ScreenshotCapture.gd"
+DevTools="*res://scripts/autoloads/DevTools.gd"
 
 [display]
 
 window/size/viewport_width=816
 window/size/viewport_height=1452
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 window/handheld/orientation=1
 
 [gui]

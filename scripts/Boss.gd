@@ -92,13 +92,9 @@ func _build_sprite() -> void:
 	if tex == null:
 		return
 	_sprite = Sprite2D.new()
-	# BOSS2 ships with an opaque background — chroma-key it at runtime so
-	# the rest of the sprite atlas can stay untouched. Cheap one-time pass
-	# during _ready, then the cached ImageTexture is reused per draw.
-	if type == Type.BOSS2:
-		_sprite.texture = _strip_background(tex)
-	else:
-		_sprite.texture = tex
+	# boss2.png's opaque background is baked out to alpha offline
+	# (scripts/tools/strip_backgrounds.gd), so every type uses its PNG as is.
+	_sprite.texture = tex
 	# Draw the sprite BEHIND the parent so the parent's _draw smoke/effects
 	# layer on top of the boss body rather than getting covered by it.
 	_sprite.show_behind_parent = true
@@ -108,47 +104,6 @@ func _build_sprite() -> void:
 		var s: float = boss_size / max_side
 		_sprite.scale = Vector2(s, s)
 	add_child(_sprite)
-
-
-## Sample the four corners of a texture, find the dominant background color,
-## and return a new ImageTexture where pixels close to that color are made
-## fully transparent. Used to clean up sprites that shipped with an opaque
-## background instead of being authored on alpha. Tolerance is intentionally
-## generous so JPG-style fringe noise also disappears.
-func _strip_background(tex: Texture2D) -> ImageTexture:
-	var img: Image = tex.get_image()
-	if img == null:
-		return null
-	# Make sure we can write per-pixel alpha
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	var w: int = img.get_width()
-	var h: int = img.get_height()
-	if w <= 0 or h <= 0:
-		return ImageTexture.create_from_image(img)
-	# Average the four corner pixels — if the artwork has solid borders this
-	# yields a stable key color even when one corner has a stray dark pixel.
-	var c00: Color = img.get_pixel(0, 0)
-	var c10: Color = img.get_pixel(w - 1, 0)
-	var c01: Color = img.get_pixel(0, h - 1)
-	var c11: Color = img.get_pixel(w - 1, h - 1)
-	var key := Color(
-		(c00.r + c10.r + c01.r + c11.r) * 0.25,
-		(c00.g + c10.g + c01.g + c11.g) * 0.25,
-		(c00.b + c10.b + c01.b + c11.b) * 0.25,
-		1.0,
-	)
-	var tol: float = 0.18  # Squared distance threshold (about ~25% per channel)
-	for y in h:
-		for x in w:
-			var p: Color = img.get_pixel(x, y)
-			var dr: float = p.r - key.r
-			var dg: float = p.g - key.g
-			var db: float = p.b - key.b
-			var d: float = dr * dr + dg * dg + db * db
-			if d < tol:
-				img.set_pixel(x, y, Color(0, 0, 0, 0))
-	return ImageTexture.create_from_image(img)
 
 
 func _configure() -> void:

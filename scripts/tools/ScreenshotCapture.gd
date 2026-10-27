@@ -10,10 +10,9 @@ extends Node
 ## Output lands in `assets/store/screenshots/<device>/gameplay_NNN_<ts>.png`
 ## with the master at `assets/store/screenshots/master/shot_NNN_<ts>.png`.
 ##
-## Registered as an autoload — see project.godot `[autoload]` section.
-## For production builds you should REMOVE the autoload line (or wrap
-## this script's key handler in an `if OS.is_debug_build():` guard) so
-## shipping users don't have a hidden screenshot key active.
+## Mounted in debug builds by the DevTools autoload (scripts/autoloads/DevTools.gd).
+## The file is excluded from exports and the key handler is also guarded by
+## OS.is_debug_build(), so shipping users never get a hidden screenshot key.
 ##
 ## Why not just capture at whatever the viewport happens to be? Because
 ## the editor runs at the project viewport size (816×1452 by default),

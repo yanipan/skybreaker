@@ -175,7 +175,8 @@ func _drop_guaranteed_power() -> void:
 	var x: float = randf_range(_viewport_size.x * 0.20, _viewport_size.x * 0.80)
 	pickup.position = Vector2(x, -40.0)
 	get_parent().add_child(pickup)
-	print("Guaranteed POWER drop (variant ", pwr, ") at x=", x)
+	if OS.is_debug_build():
+		print("Guaranteed POWER drop (variant ", pwr, ") at x=", x)
 
 
 ## WEAPON_CHANGE pickup is gone — the player switches weapons manually with
@@ -194,7 +195,8 @@ func _drop_life() -> void:
 	var x: float = randf_range(_viewport_size.x * 0.25, _viewport_size.x * 0.75)
 	pickup.position = Vector2(x, -40.0)
 	get_parent().add_child(pickup)
-	print("Rare LIFE drop at x=", x)
+	if OS.is_debug_build():
+		print("Rare LIFE drop at x=", x)
 
 
 ## Force-drops a rare SIDEKICK pickup from the top of the screen.
@@ -205,7 +207,8 @@ func _drop_sidekick() -> void:
 	var x: float = randf_range(_viewport_size.x * 0.25, _viewport_size.x * 0.75)
 	pickup.position = Vector2(x, -40.0)
 	get_parent().add_child(pickup)
-	print("Rare SIDEKICK drop at x=", x)
+	if OS.is_debug_build():
+		print("Rare SIDEKICK drop at x=", x)
 
 
 ## Spawns a friendly starbase that drifts down from above.
