@@ -205,4 +205,7 @@ func _drop(t: int, mv: int) -> void:
 	if mv > 0:
 		pickup.money_value = mv
 	pickup.position = global_position + Vector2(randf_range(-10, 10), 0)
-	get_parent().add_child(pickup)
+	# Deferred: drops usually spawn from inside an area_entered callback
+	# (bullet / ram kill), where adding an Area2D trips "Can't change this
+	# state while flushing queries".
+	get_parent().add_child.call_deferred(pickup)

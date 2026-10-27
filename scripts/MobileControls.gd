@@ -28,7 +28,7 @@ class_name MobileControls
 ##   * The finger ring listens via _input (NOT _unhandled_input) so it sees
 ##     touches even when other nodes will consume them, but it never calls
 ##     accept_event() so the player still gets the same events.
-##   * Safe area: on iOS / Android we pull DisplayServer.screen_get_usable_rect
+##   * Safe area: on iOS / Android we pull DisplayServer.get_display_safe_area
 ##     so the buttons sit above the home indicator and avoid the notch.
 ##   * Visibility: auto-shows on real mobile builds (OS.has_feature("mobile"))
 ##     and can be force-shown in the editor via the `force_visible` export
@@ -100,6 +100,8 @@ func _ready() -> void:
 	_build_torpedo_button()
 	_build_weapon_button()
 	_build_pause_button()
+	EventBus.cutscene_started.connect(_on_cutscene_started)
+	EventBus.cutscene_finished.connect(_on_cutscene_finished)
 	set_process(true)
 
 
@@ -275,9 +277,10 @@ func _cycle_weapon() -> void:
 func _build_pause_button() -> void:
 	var safe := _safe_area()
 	var size: float = _button_size() * 0.55  # Smaller than the action buttons
+	# Top edge 12 px below the notch / Dynamic Island inset.
 	var center := Vector2(
 		safe.position.x + safe.size.x - BUTTON_INSET * 0.55,
-		safe.position.y + BUTTON_INSET * 0.55
+		safe.position.y + 12.0 + size * 0.5
 	)
 	_pause_btn = _make_circle_button(center, size, &"PAUSE")
 	_pause_btn.gui_input.connect(_on_pause_input)
@@ -304,6 +307,23 @@ func _on_pause_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
+
+
+## The cutscene SKIP button shares the top-right corner (iPad), so a second
+## SKIP tap used to land on PAUSE once the cutscene freed itself. Hide the
+## pause button for the cutscene plus a short grace window after it.
+func _on_cutscene_started() -> void:
+	if _pause_btn != null:
+		_pause_btn.visible = false
+
+
+func _on_cutscene_finished() -> void:
+	if _pause_btn == null:
+		return
+	get_tree().create_timer(0.6, true).timeout.connect(func() -> void:
+		if is_instance_valid(_pause_btn):
+			_pause_btn.visible = true
+	)
 
 
 ## Routes to Main._toggle_pause directly so we reuse the existing pause
@@ -463,18 +483,33 @@ func _pop(node: Control) -> void:
 ## On desktop or platforms without a usable rect we just return the full
 ## viewport.
 func _safe_area() -> Rect2:
-	if OS.has_feature("mobile"):
-		var sr: Rect2i = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
-		var win_size := DisplayServer.window_get_size()
-		# Convert from screen pixels to viewport coordinates by ratio.
-		var vp := get_viewport().get_visible_rect().size
-		var sx: float = vp.x / max(1.0, float(win_size.x))
-		var sy: float = vp.y / max(1.0, float(win_size.y))
-		return Rect2(
-			Vector2(sr.position.x * sx, sr.position.y * sy),
-			Vector2(sr.size.x * sx, sr.size.y * sy)
-		)
-	return get_viewport().get_visible_rect()
+	return safe_rect_canvas(get_viewport())
+
+
+## Safe area (notch, Dynamic Island, home indicator) in canvas coordinates.
+## get_display_safe_area() is in physical window pixels; screen_get_usable_rect
+## does NOT include the iOS island inset. Under stretch mode canvas_items +
+## aspect expand the canvas is the window scaled uniformly from (0,0), so
+## dividing by window_size / visible_rect.size maps pixels to canvas units.
+## Shared with Main._hud_safe_rect so HUD text and buttons agree.
+static func safe_rect_canvas(viewport: Viewport) -> Rect2:
+	var vp_rect: Rect2 = viewport.get_visible_rect()
+	if not OS.has_feature("mobile"):
+		return vp_rect
+	var sr: Rect2i = DisplayServer.get_display_safe_area()
+	if sr.size.x <= 0 or sr.size.y <= 0:
+		sr = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var win_size: Vector2i = DisplayServer.window_get_size()
+	if sr.size.x <= 0 or sr.size.y <= 0 or win_size.x <= 0 or win_size.y <= 0:
+		return vp_rect
+	var sx: float = vp_rect.size.x / float(win_size.x)
+	var sy: float = vp_rect.size.y / float(win_size.y)
+	var safe := Rect2(
+		Vector2(sr.position.x * sx, sr.position.y * sy),
+		Vector2(sr.size.x * sx, sr.size.y * sy)
+	)
+	# Never extend past the canvas (safe area can be reported in screen space).
+	return safe.intersection(vp_rect) if safe.intersects(vp_rect) else vp_rect
 
 
 ## Button size scales gently with viewport width so the controls feel the

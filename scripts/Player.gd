@@ -1021,7 +1021,8 @@ func _grant_sidekick() -> void:
 		return
 	var sk: Area2D = SidekickScript.new()
 	sk.position = global_position + Vector2(80, 18)
-	get_parent().add_child(sk)
+	# Deferred: the SIDEKICK pickup grants this from inside area_entered.
+	get_parent().add_child.call_deferred(sk)
 
 
 ## Cycle to the next weapon type. Called by middle-mouse-button click on

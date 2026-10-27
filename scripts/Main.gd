@@ -13,7 +13,9 @@ var _viewport_size: Vector2
 var _money_label: Label
 var _score_label: Label
 var _high_score_label: Label
-var _lives_label: Label
+## Heart shapes, one per possible life (MAX_LIVES). Drawn as polygons because
+## neither Rajdhani nor Orbitron carries a U+2665 glyph — a ♥ label renders blank.
+var _lives_hearts: Array[Polygon2D] = []
 var _survival_accumulator: float = 0.0
 
 # --- Death sequence ---
@@ -31,6 +33,11 @@ var _game_over: bool = false
 # --- Pause overlay ---
 # Toggled with P. Pauses the tree and shows Resume / Main Menu / Quit.
 var _pause_layer: CanvasLayer = null
+## True between a background notification and the deferred overlay build.
+## add_child() fails inside _notification (the tree is propagating it, so
+## every parent is "busy setting up children"), so the overlay is built on
+## the next idle frame while the tree is already paused.
+var _pause_pending: bool = false
 
 # --- Level state ---
 var _starfield: Node2D
@@ -292,8 +299,10 @@ func _spawn_hud() -> void:
 		score_right -= 112.0
 	var score_w: float = 260.0
 	var score_x: float = score_right - score_w - 16.0
+	# Below the Dynamic Island / notch with a 12 px margin; desktop keeps 60.
+	var score_y: float = max(60.0, score_top + 12.0)
 	_score_label = Label.new()
-	_score_label.position = Vector2(score_x, score_top + 60)
+	_score_label.position = Vector2(score_x, score_y)
 	_score_label.size = Vector2(score_w, 40)
 	_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_score_label.add_theme_font_override("font", Fonts.HEADLINE)
@@ -303,7 +312,7 @@ func _spawn_hud() -> void:
 
 	# High score — under score, dimmer/smaller
 	_high_score_label = Label.new()
-	_high_score_label.position = Vector2(score_x, score_top + 96)
+	_high_score_label.position = Vector2(score_x, score_y + 36)
 	_high_score_label.size = Vector2(score_w, 28)
 	_high_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_high_score_label.add_theme_font_override("font", Fonts.SUBHEAD)
@@ -311,27 +320,29 @@ func _spawn_hud() -> void:
 	_high_score_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	add_child(_high_score_label)
 
-	# Lives — under money on the left, hearts read instantly across the HUD
-	_lives_label = Label.new()
-	_lives_label.position = Vector2(30, 178)
-	_lives_label.size = Vector2(290, 32)
-	_lives_label.add_theme_font_size_override("font_size", 26)
-	_lives_label.add_theme_color_override("font_color", Color(1.0, 0.55, 0.55))
-	add_child(_lives_label)
+	# Lives — under money on the left, hearts read instantly across the HUD.
+	# Parametric heart curve, ~26 px wide, one polygon per possible life.
+	var heart_pts := PackedVector2Array()
+	for i in 32:
+		var t: float = TAU * float(i) / 32.0
+		var hx: float = 16.0 * pow(sin(t), 3)
+		var hy: float = -(13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t))
+		heart_pts.append(Vector2(hx, hy) * 0.8)
+	for i in GameState.MAX_LIVES:
+		var heart := Polygon2D.new()
+		heart.polygon = heart_pts
+		heart.color = Color(1.0, 0.35, 0.40)
+		heart.position = Vector2(30 + 13 + i * 34, 178 + 16)
+		heart.visible = false
+		add_child(heart)
+		_lives_hearts.append(heart)
 
 
 
 ## Safe area in viewport coordinates, same conversion MobileControls uses for
 ## its buttons, so HUD text and touch buttons agree on notch insets.
 func _hud_safe_rect() -> Rect2:
-	var vp: Vector2 = get_viewport().get_visible_rect().size
-	if not OS.has_feature("mobile"):
-		return Rect2(Vector2.ZERO, vp)
-	var sr: Rect2i = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
-	var win_size: Vector2i = DisplayServer.window_get_size()
-	var sx: float = vp.x / max(1.0, float(win_size.x))
-	var sy: float = vp.y / max(1.0, float(win_size.y))
-	return Rect2(Vector2(sr.position.x * sx, sr.position.y * sy), Vector2(sr.size.x * sx, sr.size.y * sy))
+	return MobileControls.safe_rect_canvas(get_viewport())
 
 func _refresh_hud() -> void:
 	if _money_label != null:
@@ -343,13 +354,10 @@ func _refresh_hud() -> void:
 		# updates live as the player passes their previous best.
 		var best: int = max(GameState.high_score, GameState.mission_score)
 		_high_score_label.text = "BEST %d" % best
-	if _lives_label != null:
-		# One heart glyph per remaining life — caps at MAX_LIVES.
-		var hearts := ""
-		var shown_lives: int = 0 if _game_over else GameState.lives
-		for i in clamp(shown_lives, 0, GameState.MAX_LIVES):
-			hearts += "♥ "
-		_lives_label.text = hearts.strip_edges()
+	# One heart per remaining life — caps at MAX_LIVES, none on GAME OVER.
+	var shown_lives: int = clamp(0 if _game_over else GameState.lives, 0, GameState.MAX_LIVES)
+	for i in _lives_hearts.size():
+		_lives_hearts[i].visible = i < shown_lives
 
 
 func _on_money_changed(_value: int) -> void:
@@ -394,8 +402,25 @@ func _spawn_level_banner() -> void:
 	_level_banner.size = Vector2(_viewport_size.x, 80)
 	_level_banner.position = Vector2(0, _viewport_size.y * 0.35)
 	_level_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fit_banner(_level_banner, Fonts.HEADLINE, 56, 6)
 	add_child(_level_banner)
 	_banner_time_left = 3.0
+
+
+## Full-viewport-width, centred, single-line banner. Shrinks the font so the
+## text (plus outline) fits in 90% of the viewport width — Orbitron at 60 px
+## is wider than the 816 px design width for "WARPING TO SECTOR 20".
+func _fit_banner(label: Label, font: Font, base_size: int, outline: int) -> void:
+	var vw: float = get_viewport_rect().size.x
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.position.x = 0.0
+	label.size.x = vw
+	var w: float = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, base_size).x + outline * 2
+	var font_size: int = base_size
+	if w > vw * 0.9:
+		font_size = max(12, int(floor(base_size * vw * 0.9 / w)))
+	label.add_theme_font_size_override("font_size", font_size)
 
 
 func _update_level_banner(delta: float) -> void:
@@ -450,6 +475,7 @@ func _begin_cutscene(key: StringName, then_warp: bool) -> void:
 			_begin_warp_transition()
 		return
 	_cutscene_active = true
+	EventBus.cutscene_started.emit()
 	# Freeze the spawner so nothing keeps ticking behind the overlay. The
 	# cutscene also pauses the whole tree via get_tree().paused, but the
 	# explicit spawner freeze is defense-in-depth.
@@ -461,6 +487,7 @@ func _begin_cutscene(key: StringName, then_warp: bool) -> void:
 	var is_ending: bool = key == CutsceneData.ENDING_KEY
 	cs.finished.connect(func() -> void:
 		_cutscene_active = false
+		EventBus.cutscene_finished.emit()
 		# Mark intro as seen regardless of whether player tapped skip —
 		# once they've been shown it, we don't subject them to it again.
 		if key == CutsceneData.INTRO_KEY and not GameState.intro_seen:
@@ -514,6 +541,7 @@ func _begin_warp_transition() -> void:
 	_warp_label.size = Vector2(_viewport_size.x, 80)
 	_warp_label.position = Vector2(0, _viewport_size.y * 0.40)
 	_warp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fit_banner(_warp_label, Fonts.HEADLINE, 60, 6)
 	add_child(_warp_label)
 	# Black fade curtain — alpha starts at 0 and ramps to 1 during the last
 	# stretch of the warp so the reload_current_scene() hitch happens under
@@ -753,12 +781,13 @@ func _on_player_died() -> void:
 	_death_label.size = Vector2(_viewport_size.x, 90)
 	_death_label.position = Vector2(0, _viewport_size.y * 0.38)
 	_death_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fit_banner(_death_label, Fonts.HEADLINE, 72, 8)
 	_death_label.modulate = Color(1, 1, 1, 0)
 	add_child(_death_label)
 	# Subtitle — either lives remaining or GAME OVER
 	_death_subtitle = Label.new()
 	if not _game_over:
-		_death_subtitle.text = "%d LIVES REMAINING" % GameState.lives
+		_death_subtitle.text = ("%d LIFE REMAINING" if GameState.lives == 1 else "%d LIVES REMAINING") % GameState.lives
 		_death_subtitle.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
 	else:
 		_death_subtitle.text = "GAME OVER"
@@ -769,6 +798,7 @@ func _on_player_died() -> void:
 	_death_subtitle.size = Vector2(_viewport_size.x, 50)
 	_death_subtitle.position = Vector2(0, _viewport_size.y * 0.50)
 	_death_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fit_banner(_death_subtitle, Fonts.BODY, 38, 5)
 	_death_subtitle.modulate = Color(1, 1, 1, 0)
 	add_child(_death_subtitle)
 
@@ -831,7 +861,7 @@ func _notification(what: int) -> void:
 		return
 	if not is_inside_tree() or not GameState.has_active_run:
 		return
-	if _pause_layer != null:
+	if _pause_layer != null or _pause_pending:
 		return
 	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning:
 		return
@@ -840,13 +870,24 @@ func _notification(what: int) -> void:
 		# just persist the current loadout.
 		_snapshot_and_save()
 		return
-	_open_pause()
+	# Save + freeze NOW (the OS may suspend us right after this returns), but
+	# build the overlay deferred: we're inside SceneTree's propagate_notification,
+	# so add_child() here fails with "Parent node is busy setting up children"
+	# and the tree would stay paused with no overlay. The deferred call runs on
+	# the first idle frame after return; nothing auto-resumes on FOCUS_IN.
+	_snapshot_and_save()
+	get_tree().paused = true
+	_pause_pending = true
+	call_deferred("_open_pause")
 
 
 func _open_pause() -> void:
 	# Pause is the most common quit precursor on mobile (player swipes home
 	# or gets a call) — save the full run state before freezing so the app
 	# can die mid-pause without losing anything.
+	_pause_pending = false
+	if _pause_layer != null:
+		return
 	_snapshot_and_save()
 	get_tree().paused = true
 	_pause_layer = CanvasLayer.new()

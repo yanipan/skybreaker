@@ -616,7 +616,10 @@ func _drop_pickup(t: int) -> void:
 	pickup.type = t
 	# Slight horizontal scatter so multi-drops don't perfectly overlap
 	pickup.position = global_position + Vector2(randf_range(-12, 12), 0)
-	get_parent().add_child(pickup)
+	# Deferred: drops usually spawn from inside an area_entered callback
+	# (bullet / ram kill), where adding an Area2D trips "Can't change this
+	# state while flushing queries".
+	get_parent().add_child.call_deferred(pickup)
 
 
 ## Equal-weight pick across the three per-weapon power variants. Used by
@@ -635,7 +638,10 @@ func _drop_money() -> void:
 	pickup.type = Pickup.Type.MONEY
 	pickup.money_value = money_value
 	pickup.position = global_position + Vector2(randf_range(-12, 12), 0)
-	get_parent().add_child(pickup)
+	# Deferred: drops usually spawn from inside an area_entered callback
+	# (bullet / ram kill), where adding an Area2D trips "Can't change this
+	# state while flushing queries".
+	get_parent().add_child.call_deferred(pickup)
 
 
 func _on_area_entered(_area: Area2D) -> void:

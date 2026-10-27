@@ -418,7 +418,10 @@ func _drop(t: int, off: Vector2) -> void:
 	var pickup: Pickup = PickupScript.new()
 	pickup.type = t
 	pickup.position = global_position + off
-	get_parent().add_child(pickup)
+	# Deferred: drops usually spawn from inside an area_entered callback
+	# (bullet / ram kill), where adding an Area2D trips "Can't change this
+	# state while flushing queries".
+	get_parent().add_child.call_deferred(pickup)
 
 
 func _drop_money(value: int, off: Vector2) -> void:
@@ -426,7 +429,10 @@ func _drop_money(value: int, off: Vector2) -> void:
 	pickup.type = Pickup.Type.MONEY
 	pickup.money_value = value
 	pickup.position = global_position + off
-	get_parent().add_child(pickup)
+	# Deferred: drops usually spawn from inside an area_entered callback
+	# (bullet / ram kill), where adding an Area2D trips "Can't change this
+	# state while flushing queries".
+	get_parent().add_child.call_deferred(pickup)
 
 
 func _on_area_entered(_area: Area2D) -> void:

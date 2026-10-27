@@ -26,6 +26,10 @@ signal pickup_collected(type: StringName, value: int)
 # --- UI signals ---
 signal pause_requested
 signal resume_requested
+## Story cutscene overlay shown / dismissed (Main emits). MobileControls hides
+## the pause button meanwhile so a double SKIP tap can't pause the game.
+signal cutscene_started
+signal cutscene_finished
 
 # --- Camera / feedback ---
 signal screen_shake_requested(intensity: float, duration: float)
