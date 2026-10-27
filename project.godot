@@ -22,7 +22,7 @@ config/features=PackedStringArray("4.6", "GL Compatibility")
 boot_splash/bg_color=Color(0.02, 0.04, 0.1, 1)
 boot_splash/stretch_mode=0
 boot_splash/image="res://assets/sprites/ui/gamelogo.png"
-config/icon="res://icon.svg"
+config/icon="res://assets/sprites/ui/app_icon_1024.png"
 
 [autoload]
 
