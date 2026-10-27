@@ -187,7 +187,12 @@ func _make_skip_button() -> Control:
 	var w: float = _viewport_size.x * 0.22
 	var h: float = _viewport_size.y * 0.055
 	btn.size = Vector2(w, h)
-	btn.position = Vector2(_viewport_size.x - w - 20, 20)
+	# Inside the safe area (Dynamic Island / notch), same helper as the HUD.
+	var safe: Rect2 = MobileControls.safe_rect_canvas(get_viewport())
+	btn.position = Vector2(
+		min(_viewport_size.x, safe.position.x + safe.size.x) - w - 20,
+		max(20.0, safe.position.y + 12.0)
+	)
 	btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	btn.gui_input.connect(_on_skip_input)
 

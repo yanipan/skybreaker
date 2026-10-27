@@ -187,6 +187,9 @@ const ALIEN_LINES_MAXED: Array = [
 ]
 
 # Cached item buttons so we can refresh prices/labels after each purchase
+## Width of one grid card (half the scroll area minus separation + scrollbar).
+## Item titles are shrunk to fit it on one line — see _fit_item_name.
+var _card_w: float = 0.0
 var _item_rows: Array = []   ## Each: { row, name_label, desc_label, button, kind, get_price, get_label, can_buy }
 
 
@@ -345,6 +348,7 @@ func _build_ui() -> void:
 	scroll.position = Vector2(30, items_top)
 	scroll.size = Vector2(panel_w - 60, panel_h - items_top - items_bot_reserve)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_card_w = (scroll.size.x - 16.0 - 12.0) * 0.5
 	scroll.process_mode = Node.PROCESS_MODE_ALWAYS
 	panel.add_child(scroll)
 
@@ -449,8 +453,10 @@ func _add_item(item_name: String, item_desc: String, kind: StringName, icon: Tex
 	name_label.add_theme_constant_override("outline_size", 3)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.clip_text = true
+	# Single line, font shrunk to the card width in _fit_item_name (the old
+	# wrap + clip_text cut "PHASER POWER UP  [LVL 12/25]" off after "[LVL").
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	name_label.custom_minimum_size = Vector2(0, 52)
 	card.add_child(name_label)
 
@@ -612,6 +618,7 @@ func _refresh_all() -> void:
 					suffix = "  [%d/4]" % p.energy_cells_bought
 		var base_text := name_label.text.split("  [")[0]
 		name_label.text = base_text + suffix
+		_fit_item_name(name_label)
 		if price < 0:
 			# Friendlier per-row labels instead of the generic MAXED
 			if kind == &"repair":
@@ -631,6 +638,18 @@ func _refresh_all() -> void:
 		if icon_btn != null:
 			icon_btn.disabled = btn.disabled
 			icon_btn.modulate = Color(0.45, 0.45, 0.5, 0.7) if btn.disabled else Color(1, 1, 1, 1)
+
+
+## Shrink an item title's font (base 19, floor 11) so the whole string,
+## level suffix included, fits on one line inside its card.
+func _fit_item_name(label: Label) -> void:
+	var base_size: int = 19
+	var font_size: int = base_size
+	if _card_w > 0.0:
+		var w: float = _headline().get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, base_size).x + 6.0
+		if w > _card_w * 0.96:
+			font_size = max(11, int(floor(base_size * _card_w * 0.96 / w)))
+	label.add_theme_font_size_override("font_size", font_size)
 
 
 # --- Purchase handling ---

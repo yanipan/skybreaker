@@ -1,6 +1,6 @@
 # Save schema (v2)
 
-**File:** `user://savegame.dat` (JSON, single-file, overwritten in place)
+**File:** `user://savegame.dat` (JSON, single file). Written atomically: `SaveSystem.save_game()` writes `user://savegame.tmp`, closes it, rotates the previous `savegame.dat` to `user://savegame.bak`, then renames the `.tmp` over `savegame.dat`. A failed temp write keeps the previous save untouched.
 **Version:** `2` — bumped from v1. v1 saves load with defaults for missing fields.
 
 ## Why v2 exists
@@ -27,7 +27,7 @@ v2 drops the dead v1 fields and persists the fields the live gameplay actually u
 | `money` | int | 0 | GameState.add_money | Persistent funds. |
 | `total_score` | int | 0 | GameState.add_score | Cumulative across runs. |
 | `high_score` | int | 0 | GameState.commit_high_score | Best mission score. |
-| `intro_seen` | bool | false | Cutscene.gd (on intro dismiss) | Skip intro on subsequent New Game. |
+| `intro_seen` | bool | false | Main cutscene `finished` callback (on intro dismiss) | Stops the intro replaying on Continue / respawn within the run. New Game resets it to false (`StartScreen._on_new_game`), so every New Game replays the intro; SKIP dismisses it. |
 | `carry_active` | bool | false | Main._finish_warp_transition | Carry slot populated. |
 | `carry_hp` | int | 0 | same | HP snapshot at warp. |
 | `carry_shield` | float | 0.0 | same | Shield snapshot. |
@@ -68,9 +68,10 @@ v2 drops the dead v1 fields and persists the fields the live gameplay actually u
 | High-score commit | `GameState.commit_high_score` (always saves, not conditional on new record) |
 | Player death | `Main._on_player_died` (after `stash_respawn`) |
 | Pause opened | `Main._open_pause` (mobile home-swipe risk) |
+| App backgrounded / focus lost | `Main._notification` on `NOTIFICATION_APPLICATION_PAUSED` / `FOCUS_OUT` during an active run: snapshots the player, saves, pauses the tree, then opens the PAUSED overlay on the next idle frame. Returning (RESUMED / FOCUS_IN) never auto-resumes; the player taps RESUME. If the shop already holds the tree paused it only snapshots + saves. |
 | Main Menu from pause | `Main._on_main_menu` (explicit quit-ish) |
 | Shop purchase | `StarbaseShop._on_buy` (after applying purchase, deducting money) |
-| Cutscene dismissed | `Cutscene.gd` (when `intro_seen` flips true) — **to be wired by Track A** |
+| Cutscene dismissed | `Main._begin_cutscene` finished callback (when `intro_seen` flips true) |
 
 ## When save is read
 
@@ -78,8 +79,9 @@ Exactly once, at autoload init: `SaveSystem._ready()` → `load_game()` → `_ap
 
 ## Corruption handling
 
-- Missing file → `load_game()` returns silently; fresh defaults.
-- Malformed JSON → `push_error`, leaves GameState at compile-time defaults; player starts fresh.
+- Missing or unreadable `savegame.dat` → `load_game()` falls back to `savegame.bak` (covers a crash between the two renames).
+- Missing file and no `.bak` → `load_game()` returns silently; fresh defaults.
+- Malformed JSON in `savegame.dat` → treated like a missing file (`.bak` fallback). Only if both are bad does GameState stay at compile-time defaults and the player start fresh.
 - Missing fields (v1 → v2 upgrade) → `_apply_save_data()` uses `.get(key, default)` on every field; any v1 save loads cleanly with money/high_score preserved and everything else defaulted.
 - `carry_weapon_levels` / `respawn_weapon_levels` — JSON parses numeric keys as strings, so `_to_int_key_dict()` converts `{"0": 3, "1": 2}` back to `{0: 3, 1: 2}` on load. Non-numeric keys dropped.
 
@@ -92,7 +94,8 @@ After this change lands, verify these end-to-end flows on a real mobile device (
 3. **Starbase shop purchase → quit from Starbase → relaunch Continue.** Money deducted persistently, upgrade applied to carry state.
 4. **Die → hit pause during death cinematic → quit → relaunch Continue.** Respawn slot preserved, arrives in same sector with 50% gear.
 5. **Finish sector 20 → game marks run complete → relaunch.** High score persisted, has_active_run=false so Continue is disabled, New Game starts fresh.
-6. **Skip intro → play until end → fresh install → New Game.** Intro plays once for a fresh player, never again.
+6. **New Game twice.** The intro plays on every New Game (SKIP works); Continue and respawns within the run never replay it.
+7. **Mid-sector home swipe → return.** PAUSED overlay is showing, gameplay stays frozen until RESUME; killing the app while backgrounded and relaunching Continue restores the snapshot.
 
 Bugs found during these tests go into a follow-up fix cycle — not part of this audit.
 
@@ -101,4 +104,4 @@ Bugs found during these tests go into a follow-up fix cycle — not part of this
 - **No cloud sync.** Local-only save. Reinstalling the app or switching devices loses progress.
 - **Single save slot.** No "save slot A/B/C" UI. One run at a time.
 - **No integrity check.** A malicious user can edit `savegame.dat` to give themselves infinite money. Acceptable for a premium single-player game.
-- **No periodic / timed auto-save.** Saves happen on state change only. A 10-minute session with no shop visit, no death, and no sector complete would lose its progress on a crash. Mitigation: saves fire on `_open_pause`, which covers the most common "user is about to quit" case.
+- **No periodic / timed auto-save.** Saves happen on state change only. A 10-minute session with no shop visit, no death, and no sector complete would lose its progress on a crash. Mitigation: saves fire on `_open_pause` and on app background / focus loss, which covers the most common "user is about to quit" case.
