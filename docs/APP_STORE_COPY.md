@@ -52,11 +52,11 @@ FEATURES
 
 • 20 HAND-CRAFTED SECTORS. From Earth orbit to a crystalline cathedral at the edge of known space.
 
-• THREE WEAPON SYSTEMS. Cycle between rapid-fire phasers, focused plasma beams, and homing missiles. Upgrade each independently at the starbase shop.
+• FOUR WEAPON SYSTEMS. Cycle between vulcan cannons, rapid-fire phasers, focused plasma beams, and homing missiles. Upgrade each independently at the starbase shop.
 
 • A GENUINE STORY. Six fully-painted cutscenes. A grandmother's last recording. An ending that actually matters.
 
-• BUILT FOR ONE HAND. Drag to fly. Tap to fire. Two big buttons for torpedoes and weapon switching. Works on the bus, in the bath, in the back of an Uber.
+• BUILT FOR ONE HAND. Drag to fly. Tap to fire. Two big buttons for torpedoes and weapon switching. Works on the bus, in the bath, in the back of a taxi.
 
 • FREE, NO STRINGS. No ads. No loot boxes. No energy meters. No in-app purchases. No data collection.
 
