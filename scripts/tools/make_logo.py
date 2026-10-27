@@ -162,10 +162,11 @@ def text_mask(size, text, center, target_w, weight="Black", tracking=0.06,
 
 
 def draw_wordmark(base, text, center, target_w, s, outline=7, max_h=None,
-                  glow_strength=1.0):
+                  glow_strength=1.0, tracking=0.06, rim=CYAN, return_mask=False,
+                  stops=None):
     """Chrome-gold beveled letters, dark outline, cyan rim glow, drop shadow."""
     size = base.size
-    m, bb = text_mask(size, text, center, target_w, max_h=max_h)
+    m, bb = text_mask(size, text, center, target_w, tracking=tracking, max_h=max_h)
     cap_h = bb[3] - bb[1]
     o = outline * s
     outer = grow(m, o)
@@ -174,12 +175,12 @@ def draw_wordmark(base, text, center, target_w, s, outline=7, max_h=None,
          shift(grow(m, o * 1.4), 0, cap_h * 0.08).filter(
              ImageFilter.GaussianBlur(cap_h * 0.06)))
     # cyan energy rim behind the outline
-    glow(base, grow(m, o * 1.6), CYAN, cap_h * 0.10, 0.9 * glow_strength)
+    glow(base, grow(m, o * 1.6), rim, cap_h * 0.10, 0.9 * glow_strength)
     # dark outline + thin amber outer pinline for a minted-coin edge
     fill(base, (120, 70, 10), grow(m, o * 1.25))
     fill(base, INK, outer)
     # gold body: chrome gradient with a dark "horizon" band
-    stops = [
+    stops = stops or [
         (0.00, (255, 226, 130)),
         (0.40, (255, 250, 222)),
         (0.47, (214, 140, 30)),
@@ -205,7 +206,7 @@ def draw_wordmark(base, text, center, target_w, s, outline=7, max_h=None,
     line = ImageChops.multiply(line, shrink(m, d * 0.6)).filter(
         ImageFilter.GaussianBlur(s * 0.6))
     fill(base, (255, 255, 255, 230), line)
-    return bb
+    return (bb, m) if return_mask else bb
 
 
 # ---------------------------------------------------------------- star
@@ -409,7 +410,15 @@ def make_logo(out_path, seed=7):
            avoid=lambda x, y: abs(x - 512 * s) < 210 * s)
     sparks(base, rng, (300 * s, (cy + 90) * s, 724 * s, (cy + 200) * s), 6, s,
            avoid=lambda x, y: abs(x - 512 * s) < 60 * s)
-    img = base.resize((1024, 1024), Image.LANCZOS)
+    # Fit the emblem to ~98% of the canvas width (vertically centred) so the
+    # HUD, which scales the whole square, shows as much emblem as possible.
+    bbox = base.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+    crop = base.crop(bbox)
+    tw = int(1024 * 0.98)
+    th = max(1, round(crop.height * tw / crop.width))
+    emb = crop.resize((tw, th), Image.LANCZOS)
+    img = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    img.alpha_composite(emb, ((1024 - tw) // 2, (1024 - th) // 2))
     img.save(out_path, optimize=True)
     return img
 
@@ -490,16 +499,126 @@ def make_adaptive(fg_path, bg_path):
     bg.convert("RGB").resize((432, 432), Image.LANCZOS).save(bg_path, optimize=True)
 
 
+# ---------------------------------------------------------------- hero patch
+HERO_SRC = os.path.join(os.path.dirname(ROOT), "Skybreaker-png-backup",
+                        "mainmenuphotoskybreaker_starbreaker.png")
+# saturated painted-gold chrome (the hero art is more yellow than the logo)
+HERO_STOPS = [
+    (0.00, (255, 232, 110)),
+    (0.38, (255, 226, 70)),
+    (0.47, (220, 146, 18)),
+    (0.53, (140, 74, 4)),
+    (0.60, (236, 166, 26)),
+    (0.85, (255, 206, 56)),
+    (1.00, (186, 106, 8)),
+]
+# Old STARBREAKER lettering on the painted badge (1x pixel coords)
+HERO_BAND = (96, 304, 930, 420)       # area that may be repainted
+HERO_TEXT_BOX = (110, 321, 912, 412)  # where the old letters sat
+
+
+def _gold_mask(img, box):
+    """Old painted gold letters inside box (L mask, full size)."""
+    m = Image.new("L", img.size, 0)
+    src, mp = img.load(), m.load()
+    x0, y0, x1, y1 = box
+    for y in range(y0, y1):
+        for x in range(x0, x1):
+            r, g, b = src[x, y]
+            if r > 120 and g > 90 and r - b > 60:
+                mp[x, y] = 255
+    return m
+
+
+def _inpaint(img, hole, iters=60):
+    """Diffusion fill: repeatedly blur and restore the known pixels."""
+    known = hole.point(lambda v: 255 - v)
+    cur = img.copy()
+    for i in range(iters):
+        r = max(1, 12 - i // 5)
+        cur = Image.composite(img, cur.filter(ImageFilter.GaussianBlur(r)), known)
+    return cur
+
+
+def make_hero(out_path, src_path=HERO_SRC):
+    src = Image.open(src_path).convert("RGB")
+    W, H = src.size
+    # 1) hole = the whole lettering channel (feathered) + any gold that
+    #    pokes out of it (tall R/B tops)
+    hole = Image.new("L", src.size, 0)
+    ImageDraw.Draw(hole).rectangle(HERO_TEXT_BOX, fill=255)
+    gm = _gold_mask(src, HERO_BAND)
+    hole = ImageChops.lighter(hole, grow(gm, 4).point(lambda v: 255 if v > 20 else 0))
+    band = Image.new("L", src.size, 0)
+    ImageDraw.Draw(band).rectangle(HERO_BAND, fill=255)
+    hole = ImageChops.multiply(hole, band)
+    # 2) plate fill: the channel's own dark tone (sampled from the dark
+    #    pixels of the plate strip above the letters) + its sparkle/paint
+    #    texture cloned from that strip, mirrored and staggered
+    strip = (140, 306, 470, 320)
+    tex_src = src.crop(strip)
+    darks = [p for p in tex_src.get_flattened_data() if sum(p) < 150]
+    base_col = tuple(sorted(c[i] for c in darks)[len(darks) // 2] for i in range(3))
+    tx0, ty0, tx1, ty1 = HERO_TEXT_BOX
+    fill_img_ = vgrad(src.size, (0, ty0 - 4, 0, ty1 + 4),
+                      [(0, lerp(base_col, (0, 0, 0), 0.25)), (0.5, base_col),
+                       (1, lerp(base_col, (20, 60, 110), 0.35))])
+    tex = Image.new("RGB", (W, H))
+    th = tex_src.height
+    flip = tex_src.transpose(Image.FLIP_TOP_BOTTOM)
+    for yi, y in enumerate(range(0, H, th)):
+        for x in range(-113, W, tex_src.width):
+            tex.paste(flip if yi % 2 else tex_src, (x + (yi * 97) % 113, y))
+    hp = ImageChops.subtract(tex, tex.filter(ImageFilter.GaussianBlur(3)), 1, 128)
+    grained = ImageChops.add(fill_img_, hp, 1, -128)
+    soft = hole.filter(ImageFilter.GaussianBlur(2.5))
+    patched = Image.composite(grained, src, soft)
+
+    # 3) new SKYBREAKER wordmark rendered at 4x on a band canvas
+    s = SS
+    bx0, by0, bx1, by1 = HERO_BAND
+    bx0, by0, bx1, by1 = bx0 - 20, by0 - 20, bx1 + 20, by1 + 20
+    bw, bh = bx1 - bx0, by1 - by0
+    canvas = Image.new("RGBA", (bw * s, bh * s), (0, 0, 0, 0))
+    tx0, ty0, tx1, ty1 = HERO_TEXT_BOX
+    cx = ((tx0 + tx1) / 2 - bx0) * s
+    cy = ((ty0 + ty1) / 2 - by0) * s
+    (bb, tm) = draw_wordmark(canvas, "SKYBREAKER", (cx, cy), (tx1 - tx0) * s, s,
+                             outline=4, max_h=(ty1 - ty0) * s * 0.92,
+                             tracking=0.035, rim=(255, 170, 50),
+                             glow_strength=0.18, return_mask=True,
+                             stops=HERO_STOPS)
+    word = canvas.resize((bw, bh), Image.LANCZOS)
+    tmask = tm.resize((bw, bh), Image.LANCZOS)
+    # 4) borrow the painting's own gold grain so the letters look painted
+    #    (seeded noise, not the old pixels, so no STARBREAKER ghost shows)
+    rng = random.Random(21)
+    noise = Image.new("L", (bw, bh))
+    noise.putdata([max(0, min(255, int(rng.gauss(128, 14)))) for _ in range(bw * bh)])
+    grain = noise.filter(ImageFilter.GaussianBlur(0.6))
+    gr = Image.merge("RGB", (grain, grain, grain))
+    wr = word.convert("RGB")
+    wr = ImageChops.add(wr, gr, 1, -128)
+    word = Image.merge("RGBA", (*Image.composite(wr, word.convert("RGB"), tmask).split(),
+                                 word.getchannel("A")))
+    out = patched.convert("RGBA")
+    out.alpha_composite(word, (bx0, by0))
+    out.convert("RGB").save(out_path, optimize=True)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(ROOT, "assets", "sprites", "ui"))
-    ap.add_argument("--only", choices=["logo", "icon", "adaptive"], default=None)
+    ap.add_argument("--only", choices=["logo", "icon", "adaptive", "hero"], default=None)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     if a.only in (None, "logo"):
         make_logo(os.path.join(a.out, "gamelogo.png"))
     if a.only in (None, "icon"):
         make_icon(os.path.join(a.out, "app_icon_1024.png"))
+    if a.only == "hero":  # explicit only: it rewrites a painted asset
+        make_hero(os.path.join(a.out, "mainmenuphotoskybreaker.png"))
     if a.only in (None, "adaptive"):
         make_adaptive(os.path.join(a.out, "icon_fg_432.png"),
                       os.path.join(a.out, "icon_bg_432.png"))
