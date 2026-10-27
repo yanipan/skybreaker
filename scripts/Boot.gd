@@ -308,7 +308,8 @@ func _end_splash(fade: float) -> void:
 	var t := create_tween().set_parallel(true)
 	if _splash_root != null:
 		t.tween_property(_splash_root, "modulate:a", 0.0, fade)
-	t.tween_property(_loader_root, "modulate:a", 1.0, fade)
+	# Loader starts in the second half so the two layouts don't overlap.
+	t.tween_property(_loader_root, "modulate:a", 1.0, fade * 0.5).set_delay(fade * 0.5)
 	t.chain().tween_callback(_on_splash_faded)
 
 
