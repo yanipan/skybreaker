@@ -1,4 +1,6 @@
-# Skybreaker — Launch Checklist (live, May 2026)
+# Skybreaker — Launch Checklist (live, updated 27 Oct 2026)
+
+> 27 Oct 2026: launch run moved to the Mac (`~/Skybreaker`, Godot 4.6.3). Pricing decided: FREE. Keystore + password in `~/keys/` on the Mac (back up!). Pre-launch review fixes, Shimonster splash and generated SKYBREAKER logo/icon are committed. Builds: `builds/skybreaker.aab` (signed, 145 MB) and `builds/ios/skybreaker.xcodeproj` (compiles). Store icon is `assets/sprites/ui/app_icon_1024.png` (not store_icon_1024.png).
 
 Working checklist for shipping Skybreaker to App Store + Play Store. Owner: Yaniv.
 See `STORE_SUBMISSION.md` for deeper "why" context; this doc is the punch list.
@@ -8,39 +10,39 @@ See `STORE_SUBMISSION.md` for deeper "why" context; this doc is the punch list.
 ## Phase 0 — Foundation (machine setup)
 
 - [x] Git baseline committed (`2a98bc5`)
-- [ ] **GitHub repo created** at https://github.com/new — Owner `yanipan`, Name `skybreaker`, **Public**, no README/gitignore/license
-- [ ] Remote wired + pushed: `git remote add origin git@github.com:yanipan/skybreaker.git && git push -u origin master`
+- [x] **GitHub repo created** at https://github.com/new — Owner `yanipan`, Name `skybreaker`, **Public**, no README/gitignore/license
+- [x] Remote wired + pushed: `git remote add origin git@github.com:yanipan/skybreaker.git && git push -u origin master`
 - [ ] **JDK 17 installed** — https://adoptium.net/temurin/releases/?version=17 (Windows x64 MSI)
 - [ ] **Android Studio installed** + SDK downloaded — https://developer.android.com/studio
 - [ ] **Godot 4.6.2 already installed** ✅ at `C:\Users\User\OneDrive\Desktop\`
-- [ ] Godot export templates installed (see `scripts/build/2-install-export-templates.md`)
+- [x] Godot export templates installed (see `scripts/build/2-install-export-templates.md`)
 
 ## Phase 1 — Privacy policy hosting
 
 - [x] HTML version written at `docs/privacy.html`
-- [ ] **GitHub Pages enabled** on `yanipan/skybreaker`: Settings → Pages → Source = "Deploy from a branch" → Branch = `master` → Folder = `/docs` → Save
-- [ ] Verify live at: `https://yanipan.github.io/skybreaker/privacy.html`
-- [ ] Update `docs/APP_STORE_COPY.md` (line 88) privacy URL to point at the live GitHub Pages URL
+- [x] **GitHub Pages enabled** on `yanipan/skybreaker`: Settings → Pages → Source = "Deploy from a branch" → Branch = `master` → Folder = `/docs` → Save
+- [x] Verify live at: `https://yanipan.github.io/skybreaker/privacy.html`
+- [x] Update `docs/APP_STORE_COPY.md` (line 88) privacy URL to point at the live GitHub Pages URL
 
 ## Phase 2 — Store icon
 
 - [ ] Generate 1024×1024 via ChatGPT (prompt is in session history)
-- [ ] Save as `C:\Users\User\Skybreaker\assets\sprites\ui\store_icon_1024.png`
-- [ ] Verify: square, no transparency, no rounded corners, full bleed
+- [x] Save as `C:\Users\User\Skybreaker\assets\sprites\ui\store_icon_1024.png`
+- [x] Verify: square, no transparency, no rounded corners, full bleed
 
 ## Phase 3 — Android build path
 
-- [ ] Run `scripts/build/1-generate-keystore.ps1` — generate `C:\Users\User\keys\skybreaker-release.keystore` (BACK IT UP IMMEDIATELY — offline, password manager, USB)
+- [x] Run `scripts/build/1-generate-keystore.ps1` — generate `C:\Users\User\keys\skybreaker-release.keystore` (BACK IT UP IMMEDIATELY — offline, password manager, USB)
 - [ ] Open Skybreaker in Godot (first open takes 5–10 min for import cache)
 - [ ] Set Editor Settings → Export/Android paths (see `scripts/build/2-install-export-templates.md`)
-- [ ] Add Android Release preset (see `scripts/build/3-configure-export-presets.md`)
-- [ ] Add iOS Release preset (same doc)
-- [ ] Run `scripts/build/4-build-android.ps1` — produces `builds/skybreaker.aab`
+- [x] Add Android Release preset (see `scripts/build/3-configure-export-presets.md`)
+- [x] Add iOS Release preset (same doc)
+- [x] Run `scripts/build/4-build-android.ps1` — produces `builds/skybreaker.aab`
 - [ ] Optional: validate AAB with `bundletool validate --bundle=builds/skybreaker.aab`
 
 ## Phase 4 — iOS Xcode project export
 
-- [ ] Run `scripts/build/5-export-ios-xcodeproj.ps1` — produces `builds/ios/skybreaker.xcodeproj` + zip
+- [x] Run `scripts/build/5-export-ios-xcodeproj.ps1` — produces `builds/ios/skybreaker.xcodeproj` + zip
 - [ ] Transfer zip to Mac (USB or cloud)
 - [ ] Open in Xcode → Signing & Capabilities → set Team
 - [ ] Product → Archive → Distribute App → App Store Connect → Upload
