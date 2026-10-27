@@ -42,8 +42,10 @@ func _ready() -> void:
 	# Use whatever font the project default theme provides — falls back to
 	# Godot's built-in if Fonts autoload isn't loaded yet (e.g. during early
 	# scene startup before autoload bootstrap on a fresh project).
-	if Engine.has_singleton("Fonts"):
-		_font = Engine.get_singleton("Fonts").BODY
+	# Autoloads are nodes under /root, not Engine singletons.
+	var fonts_node: Node = get_node_or_null("/root/Fonts")
+	if fonts_node != null and "BODY" in fonts_node:
+		_font = fonts_node.BODY
 	set_process(true)
 
 

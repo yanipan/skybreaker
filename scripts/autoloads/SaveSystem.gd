@@ -21,6 +21,11 @@ extends Node
 ## saves with it.
 
 const SAVE_PATH: String = "user://savegame.dat"
+## Atomic-write staging file: written + closed, then renamed over SAVE_PATH,
+## so an OS kill mid-write can never truncate the real save.
+const TMP_PATH: String = "user://savegame.tmp"
+## Previous good save, kept as a fallback if SAVE_PATH is missing or corrupt.
+const BAK_PATH: String = "user://savegame.bak"
 const SAVE_VERSION: int = 2
 
 var _save_data: Dictionary = {}
@@ -70,30 +75,58 @@ func save_game() -> void:
 		"respawn_speed_tier": GameState.respawn_speed_tier,
 		"respawn_energy_cells": GameState.respawn_energy_cells,
 	}
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	# Write the staging file fully, close it, then swap it in. The real file
+	# is never opened for writing, so a kill mid-write leaves it intact.
+	var file := FileAccess.open(TMP_PATH, FileAccess.WRITE)
 	if file == null:
-		push_error("SaveSystem: failed to open save file for writing")
+		push_error("SaveSystem: failed to open temp save file for writing")
 		return
 	file.store_string(JSON.stringify(_save_data))
+	var write_err: Error = file.get_error()
 	file.close()
+	if write_err != OK:
+		push_error("SaveSystem: temp save write failed (%d) — keeping previous save" % write_err)
+		return
+	# Rotate the previous good save to .bak, then move the new one in. If we
+	# die between the two renames, load_game() falls back to .bak.
+	if FileAccess.file_exists(SAVE_PATH):
+		if FileAccess.file_exists(BAK_PATH):
+			DirAccess.remove_absolute(BAK_PATH)
+		DirAccess.rename_absolute(SAVE_PATH, BAK_PATH)
+	var err: Error = DirAccess.rename_absolute(TMP_PATH, SAVE_PATH)
+	if err != OK:
+		push_error("SaveSystem: failed to move temp save into place (%d)" % err)
 
 
 func load_game() -> void:
-	if not FileAccess.file_exists(SAVE_PATH):
-		return
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
-		push_error("SaveSystem: failed to open save file for reading")
-		return
-	var text := file.get_as_text()
-	file.close()
-
-	var parsed: Variant = JSON.parse_string(text)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("SaveSystem: save file malformed")
+	var parsed: Variant = _read_save_file(SAVE_PATH)
+	if parsed == null:
+		# Missing or corrupt main save — try the previous good one.
+		parsed = _read_save_file(BAK_PATH)
+		if parsed != null:
+			push_warning("SaveSystem: main save missing/corrupt, loaded backup")
+	if parsed == null:
 		return
 	_save_data = parsed as Dictionary
 	_apply_save_data()
+
+
+## Returns the parsed save Dictionary at `path`, or null if the file is
+## missing, unreadable, or not a JSON object.
+func _read_save_file(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		return null
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_error("SaveSystem: failed to open %s for reading" % path)
+		return null
+	var text := file.get_as_text()
+	file.close()
+	var parsed: Variant = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_error("SaveSystem: %s malformed" % path)
+		return null
+	return parsed
 
 
 ## Apply loaded dict to GameState. All fields use `.get(key, default)` so a
@@ -151,6 +184,7 @@ func _to_int_key_dict(raw: Variant) -> Dictionary:
 
 
 func delete_save() -> void:
-	if FileAccess.file_exists(SAVE_PATH):
-		DirAccess.remove_absolute(SAVE_PATH)
+	for path in [SAVE_PATH, TMP_PATH, BAK_PATH]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
 	_save_data.clear()

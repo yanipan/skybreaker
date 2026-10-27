@@ -139,6 +139,34 @@ func stash_respawn(p: Node) -> void:
 	respawn_energy_cells = int(p.energy_cells_bought) if "energy_cells_bought" in p else 0
 
 
+## No-penalty snapshot of the live player into the carry slot. Used by the
+## level-complete warp AND by every mid-level save (pause, shop purchase,
+## main menu, app focus-out). Player._ready consumes the carry/respawn slots
+## on spawn, so without this a mid-level save would serialise an empty slot
+## and Continue after an OS kill would boot with default gear.
+## Unlike stash_respawn, nothing is lost: hp/shield/weapon levels are kept as-is.
+func snapshot_player(p: Node) -> void:
+	if p == null or not is_instance_valid(p):
+		return
+	carry_active = true
+	carry_hp = int(p.hp) if "hp" in p else 0
+	carry_shield = float(p.shield) if "shield" in p else 0.0
+	carry_power_level = int(p.power_level) if "power_level" in p else 1
+	# Full per-weapon slot dict so all three weapons survive.
+	if "weapon_levels" in p and p.weapon_levels is Dictionary:
+		carry_weapon_levels = p.weapon_levels.duplicate()
+	else:
+		carry_weapon_levels = {}
+	carry_torpedo_count = int(p.torpedo_count) if "torpedo_count" in p else 0
+	carry_weapon_type = int(p.weapon_type) if "weapon_type" in p else 0
+	carry_max_shield = int(p.max_shield) if "max_shield" in p else 1
+	carry_max_torpedoes = int(p.max_torpedoes) if "max_torpedoes" in p else 2
+	carry_speed_tier = int(p.speed_tier) if "speed_tier" in p else 0
+	carry_energy_cells = int(p.energy_cells_bought) if "energy_cells_bought" in p else 0
+	# Sidekick (incl. one hired at the starbase) survives if currently in the field.
+	carry_sidekick = p.get_tree().get_first_node_in_group(&"sidekick") != null
+
+
 func reset_mission_stats() -> void:
 	mission_score = 0
 	mission_money = 0

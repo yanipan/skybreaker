@@ -75,6 +75,7 @@ const BANK_VELOCITY_THRESHOLD: float = 60.0
 var _target_position: Vector2
 var _is_dragging: bool = false  ## Touch only — true while finger is on screen
 var _is_firing: bool = false    ## True while fire button (mouse left or touch) is held
+var _touch_index: int = -1      ## Touch only — index of the finger steering the ship, -1 = none
 var _mouse_active: bool = false ## True once we've seen any mouse motion (desktop)
 var _screen_size: Vector2
 var _fire_cooldown: float = 0.0
@@ -184,9 +185,11 @@ func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group(&"enemies"):
 		var dmg2: int = area.contact_damage if "contact_damage" in area else 1
 		_take_damage(dmg2)
-		# Enemy also takes a chunk of damage from the collision
+		# Enemy also takes a chunk of damage from the collision. Bosses only
+		# take a fixed ram hit, otherwise one touch (shield up = 0 hull
+		# damage) would delete a 320 HP boss.
 		if area.has_method("take_damage"):
-			area.take_damage(999)
+			area.take_damage(25 if area.is_in_group(&"bosses") else 999)
 		return
 
 
@@ -645,14 +648,24 @@ func _build_collision() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	# --- Touch (mobile) ---
 	# On touch devices there's no hover, so finger-down = both move and fire.
+	# Only the first finger down steers; a stray second finger is ignored so
+	# it can neither hijack movement nor stop the ship when it lifts.
 	if event is InputEventScreenTouch:
-		_is_dragging = event.pressed
-		_is_firing = event.pressed
 		if event.pressed:
+			if _touch_index != -1 and event.index != _touch_index:
+				return
+			_touch_index = event.index
+			_is_dragging = true
+			_is_firing = true
 			_update_target(event.position)
+		elif event.index == _touch_index:
+			_touch_index = -1
+			_is_dragging = false
+			_is_firing = false
 		return
-	if event is InputEventScreenDrag and _is_dragging:
-		_update_target(event.position)
+	if event is InputEventScreenDrag:
+		if _is_dragging and event.index == _touch_index:
+			_update_target(event.position)
 		return
 
 	# --- Mouse (desktop) ---
@@ -671,6 +684,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			# own control later — for now desktop is the only switch path.
 			cycle_weapon()
 		return
+
+
+func _notification(what: int) -> void:
+	# A release that happens while paused or unfocused never reaches us, so
+	# drop the tracked finger instead of leaving the ship stuck on it.
+	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_touch_index = -1
+		_is_dragging = false
+		_is_firing = false
 
 
 func _update_target(finger_pos: Vector2) -> void:
@@ -758,8 +780,11 @@ func _handle_firing(delta: float) -> void:
 			var missile_fast: float = (fast_fire_rate * 0.30) + (power_level - 1) * (fire_rate_bonus_per_level * 0.22)
 			# Early-game boost threshold stretched L4 → L5 to proportionally
 			# match the new 25-level ladder (was ~20% of ladder; still ~20%).
-			if power_level <= 5:
-				missile_fast *= 1.35
+			# Boost ramps 1.35 -> 1.0 linearly over L5-L9 instead of a step at
+			# L6. A shorter L5-L7 ramp still dipped DPS at L6-L7; over four
+			# levels the per-missile damage growth outpaces the rate loss, so
+			# no missile pickup lowers DPS.
+			missile_fast *= lerpf(1.35, 1.0, clampf((power_level - 5) / 4.0, 0.0, 1.0))
 			rate = missile_fast if has_charge else (slow_fire_rate * 0.45)
 		else:
 			var effective_fast_rate: float = fast_fire_rate + (power_level - 1) * fire_rate_bonus_per_level
@@ -1059,8 +1084,10 @@ func _fire_bullet() -> void:
 		_spawn_bullet(Vector2(-20, -32), Vector2.UP)
 		_spawn_bullet(Vector2(20, -32), Vector2.UP)
 	elif power_level <= 8:
-		# L8 — angled 3-bullet spread introduces side coverage
-		_spawn_bullet(Vector2(0, -36), Vector2.UP)
+		# L8 — forward pair + angled pair introduces side coverage. Was 3
+		# bullets, which dropped volley damage below L6-7's 4.
+		_spawn_bullet(Vector2(-6, -36), Vector2.UP)
+		_spawn_bullet(Vector2(6, -36), Vector2.UP)
 		_spawn_bullet(Vector2(-18, -30), Vector2.UP.rotated(-0.18))
 		_spawn_bullet(Vector2(18, -30), Vector2.UP.rotated(0.18))
 	elif power_level <= 10:
@@ -1131,7 +1158,9 @@ func _bullet_tier_for_level(level: int) -> Dictionary:
 		# weapon-specific pickups. Doubles per-shot punch at the floor.
 		return {"color": Color(0.55, 0.95, 1.00), "damage": 2}    # cyan
 	elif level <= 10:
-		return {"color": Color(0.55, 1.00, 0.55), "damage": 1}    # green
+		# Green was 1 → 2: per-shot damage must never drop on a pickup
+		# (L5 3x2=6 per volley fell to L6 4x1=4).
+		return {"color": Color(0.55, 1.00, 0.55), "damage": 2}    # green
 	elif level <= 15:
 		return {"color": Color(1.00, 0.95, 0.35), "damage": 2}    # yellow
 	elif level <= 19:

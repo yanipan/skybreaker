@@ -14,6 +14,7 @@ const ExplosionScript := preload("res://scripts/Explosion.gd")
 
 var _viewport_size: Vector2
 var _time: float = 0.0
+var _detonated: bool = false  ## Guards against multiple area_entered detonations in one step
 
 
 func _ready() -> void:
@@ -92,6 +93,11 @@ func _on_area_entered(area: Area2D) -> void:
 
 
 func _detonate() -> void:
+	# area_entered fires once per enemy overlapped in the same physics step and
+	# queue_free doesn't stop them, so only the first call may detonate.
+	if _detonated:
+		return
+	_detonated = true
 	# Spawn the visual explosion
 	var explosion: Node2D = ExplosionScript.new()
 	explosion.position = position

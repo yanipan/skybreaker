@@ -51,6 +51,9 @@ func _ready() -> void:
 	_viewport_size = get_viewport_rect().size
 	# Make sure the tree isn't still paused from a prior session
 	get_tree().paused = false
+	# Backstop: a death cinematic interrupted by a scene change must never
+	# leave the menu (or the next run) in slow motion.
+	Engine.time_scale = 1.0
 	_spawn_starfield()
 	_build_ui()
 	set_process(true)

@@ -265,11 +265,11 @@ func _fire_beam_pulse() -> void:
 	b.position = Vector2(0, -ship_size * 0.5)
 	if "active" in b:
 		b.active = true
-	if "width" in b:
+	if "beam_width" in b:
 		# Beam width trimmed: was 6.0 + 0.8*L → 4.5 + 0.55*L. At L20 drops from
 		# 22 px wide to ~15.5 px wide so it reads as a support pulse, not a
 		# player-tier main beam.
-		b.width = 4.5 + 0.55 * power_level
+		b.beam_width = 4.5 + 0.55 * power_level
 	add_child(b)
 	_beam = b
 	# Auto-cancel after a short pulse so the sidekick beam reads as bursts.
@@ -350,8 +350,9 @@ func _on_area_entered(area: Area2D) -> void:
 	elif area.is_in_group(&"enemies"):
 		var dmg2: int = area.contact_damage if "contact_damage" in area else 1
 		take_damage(dmg2)
+		# Bosses take a fixed ram hit, not an instant kill.
 		if area.has_method("take_damage"):
-			area.take_damage(999)
+			area.take_damage(25 if area.is_in_group(&"bosses") else 999)
 
 
 # --- Draw — shield bubble + small power dots ---

@@ -24,6 +24,9 @@ var _death_time_left: float = 0.0
 const DEATH_DURATION: float = 2.4
 var _death_label: Label = null
 var _death_subtitle: Label = null
+## True when the current death used the last life. The run wipe + save happen
+## immediately in _on_player_died; _finish_death_sequence is visual only.
+var _game_over: bool = false
 
 # --- Pause overlay ---
 # Toggled with P. Pauses the tree and shows Resume / Main Menu / Quit.
@@ -362,7 +365,8 @@ func _refresh_hud() -> void:
 	if _lives_label != null:
 		# One heart glyph per remaining life — caps at MAX_LIVES.
 		var hearts := ""
-		for i in clamp(GameState.lives, 0, GameState.MAX_LIVES):
+		var shown_lives: int = 0 if _game_over else GameState.lives
+		for i in clamp(shown_lives, 0, GameState.MAX_LIVES):
 			hearts += "♥ "
 		_lives_label.text = hearts.strip_edges()
 
@@ -426,7 +430,7 @@ func _update_level_banner(delta: float) -> void:
 
 
 func _check_level_complete() -> void:
-	if _level_transitioning or _entry_active or _spawner == null or _cutscene_active:
+	if _level_transitioning or _entry_active or _spawner == null or _cutscene_active or _death_active:
 		return
 	if _spawner.get_mission_time() < _spawner.get_level_duration():
 		return
@@ -480,7 +484,7 @@ func _begin_cutscene(key: StringName, then_warp: bool) -> void:
 		# once they've been shown it, we don't subject them to it again.
 		if key == CutsceneData.INTRO_KEY and not GameState.intro_seen:
 			GameState.intro_seen = true
-			GameState.save_run_state()
+			_snapshot_and_save()
 		if is_ending:
 			# Ending: wipe the run and bounce to StartScreen. No warp.
 			GameState.has_active_run = false
@@ -600,24 +604,12 @@ func _update_warp(delta: float) -> void:
 ## Stashes carry state and reloads the scene to the next sector.
 func _finish_warp_transition() -> void:
 	_warp_active = false
+	# Backstop: never carry slow-mo into the next sector.
+	Engine.time_scale = 1.0
 	GameState.commit_high_score()
 	var player := get_tree().get_first_node_in_group(&"player")
 	if player != null:
-		GameState.carry_active = true
-		GameState.carry_hp = int(player.hp) if "hp" in player else 0
-		GameState.carry_shield = float(player.shield) if "shield" in player else 0.0
-		GameState.carry_power_level = int(player.power_level) if "power_level" in player else 1
-		# Snapshot the full per-weapon slot dict so all three weapons survive the warp.
-		if "weapon_levels" in player and player.weapon_levels is Dictionary:
-			GameState.carry_weapon_levels = player.weapon_levels.duplicate()
-		else:
-			GameState.carry_weapon_levels = {}
-		GameState.carry_torpedo_count = int(player.torpedo_count) if "torpedo_count" in player else 0
-		GameState.carry_weapon_type = int(player.weapon_type) if "weapon_type" in player else 0
-		GameState.carry_max_shield = int(player.max_shield) if "max_shield" in player else 1
-		GameState.carry_max_torpedoes = int(player.max_torpedoes) if "max_torpedoes" in player else 2
-		GameState.carry_speed_tier = int(player.speed_tier) if "speed_tier" in player else 0
-		GameState.carry_energy_cells = int(player.energy_cells_bought) if "energy_cells_bought" in player else 0
+		GameState.snapshot_player(player)
 	# Sidekick survives the jump if one is currently in the field.
 	GameState.carry_sidekick = get_tree().get_first_node_in_group(&"sidekick") != null
 	if GameState.current_level < GameState.MAX_LEVEL:
@@ -722,8 +714,16 @@ func _finish_entry_sequence() -> void:
 func _on_player_died() -> void:
 	if _death_active:
 		return
+	# Sector already cleared and warping out — the warp wins, ignore the death
+	# so we never stash respawn/carry from a dead player one sector ahead.
+	if _warp_active or _level_transitioning:
+		return
 	_death_active = true
 	_death_time_left = DEATH_DURATION
+	# Any mid-level carry snapshot (pause / shop / focus-out) is superseded
+	# by the respawn slot — drop it so its sidekick flag etc. can't leak
+	# into the respawned stage.
+	GameState.clear_carry()
 	# Stash respawn snapshot BEFORE decrementing — this captures their gear
 	# at the moment of death (50% rounded up).
 	var player := get_tree().get_first_node_in_group(&"player")
@@ -731,9 +731,28 @@ func _on_player_died() -> void:
 	if player != null and lives_after > 0:
 		GameState.stash_respawn(player)
 	GameState.lives = max(0, lives_after)
-	# Persist death + respawn slot immediately. If the OS kills the app
-	# during the death cinematic, the player's respawn gear is still there.
-	GameState.save_run_state()
+	_game_over = lives_after <= 0
+	if _game_over:
+		# Full game over — wipe the run and persist it NOW. If the OS kills
+		# the app during the death cinematic, relaunch must not offer
+		# Continue into a 0-life run with un-halved money.
+		# Cash penalty: losing the run burns 50% of the player's funds so the
+		# stakes don't feel weightless. Rounded down, floored at 0.
+		var lost: int = GameState.money / 2
+		GameState.money = max(0, GameState.money - lost)
+		print("GAME OVER — lost $%d (50%%)" % lost)
+		GameState.has_active_run = false
+		GameState.current_level = 1
+		GameState.lives = GameState.STARTING_LIVES
+		GameState.clear_carry()
+		GameState.clear_respawn()
+		# Saves unconditionally (mission_score still intact for the record).
+		GameState.commit_high_score()
+		EventBus.money_changed.emit(GameState.money)
+	else:
+		# Persist death + respawn slot immediately. If the OS kills the app
+		# during the death cinematic, the player's respawn gear is still there.
+		GameState.save_run_state()
 	_refresh_hud()
 	# Freeze new spawns and clear the field so the dramatic moment reads clean.
 	if _spawner != null:
@@ -757,7 +776,7 @@ func _on_player_died() -> void:
 	add_child(_death_label)
 	# Subtitle — either lives remaining or GAME OVER
 	_death_subtitle = Label.new()
-	if GameState.lives > 0:
+	if not _game_over:
 		_death_subtitle.text = "%d LIVES REMAINING" % GameState.lives
 		_death_subtitle.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
 	else:
@@ -794,18 +813,60 @@ func _update_death(delta: float) -> void:
 
 # --- Pause overlay ---
 
+## Single entry point for keyboard AND the mobile pause button, so the state
+## guard lives here. Closing is always allowed; opening is refused while
+## dying, warping, entering, in a cutscene, or while something else (the
+## starbase shop) already holds the tree paused.
 func _toggle_pause() -> void:
 	if _pause_layer != null:
 		_close_pause()
-	else:
+	elif _can_open_pause():
 		_open_pause()
+
+
+func _can_open_pause() -> bool:
+	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning:
+		return false
+	if get_tree().paused:
+		return false
+	return true
+
+
+## Snapshot the live player into the carry slot (no penalty) and save. Every
+## mid-level save must go through here — Player._ready already consumed the
+## carry/respawn slots, so a bare save would persist default gear.
+func _snapshot_and_save() -> void:
+	var player := get_tree().get_first_node_in_group(&"player")
+	if player != null:
+		GameState.snapshot_player(player)
+	GameState.save_run_state()
+
+
+## App backgrounded (home swipe, call, notification shade): open the pause
+## overlay, which snapshots + saves. Main only exists during gameplay, so this
+## never runs on StartScreen.
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_APPLICATION_PAUSED and what != NOTIFICATION_APPLICATION_FOCUS_OUT:
+		return
+	if not is_inside_tree() or not GameState.has_active_run:
+		return
+	if _pause_layer != null:
+		return
+	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning:
+		return
+	if get_tree().paused:
+		# Shop holds the tree paused — don't stack the pause overlay on it,
+		# just persist the current loadout.
+		_snapshot_and_save()
+		return
+	_open_pause()
 
 
 func _open_pause() -> void:
 	# Pause is the most common quit precursor on mobile (player swipes home
 	# or gets a call) — save the full run state before freezing so the app
 	# can die mid-pause without losing anything.
-	GameState.save_run_state()
+	_snapshot_and_save()
 	get_tree().paused = true
 	_pause_layer = CanvasLayer.new()
 	_pause_layer.layer = 110
@@ -870,11 +931,13 @@ func _close_pause() -> void:
 
 
 func _on_main_menu() -> void:
-	# Stash a respawn snapshot so Continue from the start screen restores the
-	# player's current loadout. has_active_run stays true so Continue is enabled.
+	Engine.time_scale = 1.0
+	# No-penalty carry snapshot so Continue from the start screen restores the
+	# player's current loadout exactly. has_active_run stays true so Continue
+	# is enabled. Never snapshot a finished (0-life) run.
 	var player := get_tree().get_first_node_in_group(&"player")
-	if player != null:
-		GameState.stash_respawn(player)
+	if player != null and GameState.lives > 0 and GameState.has_active_run:
+		GameState.snapshot_player(player)
 	GameState.commit_high_score()
 	# commit_high_score already saves — but this is an explicit quit-ish
 	# action, so the redundancy is cheap insurance against a store crash.
@@ -884,6 +947,7 @@ func _on_main_menu() -> void:
 
 
 func _on_quit_app() -> void:
+	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().quit()
 
@@ -892,23 +956,13 @@ func _finish_death_sequence() -> void:
 	_death_active = false
 	Engine.time_scale = 1.0
 	GameState.commit_high_score()
-	if GameState.lives > 0:
+	if not _game_over:
 		# Respawn slot already stashed in _on_player_died — just reload current stage.
 		print("Respawning at sector ", GameState.current_level)
 		get_tree().reload_current_scene()
 	else:
-		# Full game over — wipe run state and bounce to the start screen.
-		# Cash penalty: losing the run burns 50% of the player's funds so the
-		# stakes don't feel weightless. Previously money persisted forever, so
-		# there was zero sting to a game over. Rounded down, floored at 0.
-		var lost: int = GameState.money / 2
-		GameState.money = max(0, GameState.money - lost)
-		EventBus.money_changed.emit(GameState.money)
-		print("GAME OVER — lost $%d (50%%), returning to start screen" % lost)
-		GameState.has_active_run = false
-		GameState.current_level = 1
-		GameState.lives = GameState.STARTING_LIVES
-		GameState.clear_carry()
-		GameState.clear_respawn()
+		# Game over — the run wipe and 50% money penalty were already applied
+		# and saved in _on_player_died. Visual only: bounce to the start screen.
+		print("GAME OVER — returning to start screen")
 		GameState.reset_mission_stats()
 		get_tree().change_scene_to_file("res://scenes/main/StartScreen.tscn")

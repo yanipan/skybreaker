@@ -658,8 +658,10 @@ func _on_buy(kind: StringName) -> void:
 	_bounce_icon(kind)
 	_advance_alien()
 	# Persist immediately so a shop-then-quit sequence never loses the
-	# purchase. carry_* upgrades from _apply_purchase are already written
-	# to GameState above, so save_run_state captures them all.
+	# purchase. _apply_purchase only mutates the live Player (the carry slot
+	# was consumed on spawn), so snapshot it into carry_* before saving.
+	if player_ref != null and is_instance_valid(player_ref):
+		GameState.snapshot_player(player_ref)
 	GameState.save_run_state()
 	# Trader thank-you line, scaling with the (now-advanced) excitement stage
 	var stage_lines: Array = ALIEN_LINES_BUY[clamp(_alien_stage, 0, ALIEN_LINES_BUY.size() - 1)]
