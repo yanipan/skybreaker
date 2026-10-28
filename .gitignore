@@ -54,3 +54,4 @@ graphify-out/
 
 # raw gameplay masters for store shots (180 MB, regenerate with ShotDirector)
 assets/store/screenshots/master_gameplay/
+__pycache__/
