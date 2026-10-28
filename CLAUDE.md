@@ -101,19 +101,16 @@ assets/fonts/
 
 ## Weapons (Player)
 
-**Primary** — auto-fire, power levels 1–25, charge drain/recharge system:
-- Vulcan Cannon (`&"vulcan"`) — reliable narrow
-- Phaser (`&"phaser"`) — fast fire rate (6.9 base shots/sec, +0.49/level)
-- Plasma Beam (`&"beam"`) — continuous, boss killer
-- Homing Missiles (`&"missile"`) — lazy precision
+**Primary** — auto-fire, power levels 1–25 per weapon, charge drain/recharge system. Three types, cycled in flight (`Player.WeaponType`):
+- Phaser (`PHASER`) — bullets, baseline rate (6.9 base shots/sec, +0.49/level)
+- Plasma Beam (`BEAM`) — continuous laser, drains charge ~3x faster, boss killer
+- Homing Missiles (`MISSILE`) — slower fire, homing
+(`GameState.current_primary_weapon_id` still defaults to `&"vulcan"` and `current_secondary_weapon_id` to `&"bomb"`; both are legacy fields, there is no vulcan cannon, smart bomb, EMP, drone or nuke weapon in the game. Store copy must say THREE weapon systems plus torpedoes.)
 
-**Secondary** — limited ammo, tap to fire:
-- Smart Bomb, EMP, Shield Burst, Drones, Nuke
-
-**Torpedoes** — separate from secondary, max 2 base (upgradeable)
+**Torpedoes** — separate button, limited ammo, max 2 base (refill in shop)
 
 **Upgrades (Starbase Shop):**
-- Hull (max HP), Shield (regen buffer), Engine (speed tier 0–3), Cargo (money ×), Magnet (pickup radius), Energy Cells (extend charge pool, max 4)
+- Hull repair, Shield (regen buffer), Engine (speed tier 0–3), Cargo (money ×), Magnet (pickup radius), Energy Cells (extend charge pool, max 4), per-weapon power ups, torpedo refill, sidekick
 
 ## Balance Notes (current tuning)
 - Fast fire rate: 6.9 shots/sec base (raised from 5.4 → 6.4 → 6.9 for phaser feel)

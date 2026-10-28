@@ -10,6 +10,7 @@ extends Node
 ## Dev tool scripts to mount as children when available.
 const DEV_TOOL_SCRIPTS: Array = [
 	"res://scripts/tools/ScreenshotCapture.gd",
+	"res://scripts/tools/ShotDirector.gd",
 ]
 
 

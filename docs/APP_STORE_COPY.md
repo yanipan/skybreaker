@@ -52,7 +52,7 @@ FEATURES
 
 • 20 HAND-CRAFTED SECTORS. From Earth orbit to a crystalline cathedral at the edge of known space.
 
-• FOUR WEAPON SYSTEMS. Cycle between vulcan cannons, rapid-fire phasers, focused plasma beams, and homing missiles. Upgrade each independently at the starbase shop.
+• THREE WEAPON SYSTEMS. Cycle between rapid-fire phasers, focused plasma beams, and homing missiles. Upgrade each independently at the starbase shop.
 
 • A GENUINE STORY. Six fully-painted cutscenes. A grandmother's last recording. An ending that actually matters.
 
@@ -73,7 +73,7 @@ WHAT'S INSIDE
 ━━━━━━━━━━━━━━━━━━━
 
 • 20 sectors, 9 enemy types, 5 bosses, 1 final encounter
-• 4 primary weapons × 25 upgrade levels, plus bombs, EMP, drones and torpedoes
+• 3 primary weapons × 25 upgrade levels, plus torpedoes
 • A fully-stocked starbase between sectors with a shopkeeper who slowly warms up to you
 • A sidekick wing-drone you can buy (or lose in combat)
 • Procedural wave generation so no two runs play identically
@@ -100,7 +100,7 @@ Answer the signal. Fly alone. Come home different.
 Launch build.
 • 20 sectors, 6 cutscenes, full campaign playable start to finish
 • Mobile-first controls: drag to move, two-finger-free one-hand play
-• Four primary weapons with 25 upgrade tiers each
+• Three primary weapons with 25 upgrade tiers each
 • Starbase shop with upgrades, repairs, and a shopkeeper who remembers you
 • Free. No ads, no IAP, no data collection, just a game
 ```
