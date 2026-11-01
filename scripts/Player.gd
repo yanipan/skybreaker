@@ -76,6 +76,8 @@ var _target_position: Vector2
 var _is_dragging: bool = false  ## Touch only — true while finger is on screen
 var _is_firing: bool = false    ## True while fire button (mouse left or touch) is held
 var _touch_index: int = -1      ## Touch only — index of the finger steering the ship, -1 = none
+var _fire_touch_index: int = -1 ## Touch only — index of the second (fire-control) finger, -1 = none
+var _touch_play: bool = false   ## True on mobile or once any touch arrives — enables the touch fire scheme
 var _mouse_active: bool = false ## True once we've seen any mouse motion (desktop)
 var _screen_size: Vector2
 var _fire_cooldown: float = 0.0
@@ -163,6 +165,9 @@ func _ready() -> void:
 		torpedo_count = starting_torpedoes
 	add_to_group(&"player")
 	area_entered.connect(_on_area_entered)
+	if OS.has_feature("mobile"):
+		_touch_play = true
+		_refresh_touch_firing()
 	_build_collision()
 	_build_ship_sprite()
 	_last_x = position.x
@@ -662,21 +667,26 @@ func _build_collision() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# --- Touch (mobile) ---
-	# On touch devices there's no hover, so finger-down = both move and fire.
-	# Only the first finger down steers; a stray second finger is ignored so
-	# it can neither hijack movement nor stop the ship when it lifts.
+	# First finger down steers the ship. Firing is decoupled from steering
+	# (see GameState.FireMode): in AUTO the ship always fires and a held
+	# second finger ceases fire so the charge can refill; in HOLD the ship
+	# fires only while the second finger is held. A third finger is ignored.
 	if event is InputEventScreenTouch:
+		_touch_play = true
 		if event.pressed:
-			if _touch_index != -1 and event.index != _touch_index:
-				return
-			_touch_index = event.index
-			_is_dragging = true
-			_is_firing = true
-			_update_target(event.position)
-		elif event.index == _touch_index:
-			_touch_index = -1
-			_is_dragging = false
-			_is_firing = false
+			if _touch_index == -1:
+				_touch_index = event.index
+				_is_dragging = true
+				_update_target(event.position)
+			elif _fire_touch_index == -1 and event.index != _touch_index:
+				_fire_touch_index = event.index
+		else:
+			if event.index == _touch_index:
+				_touch_index = -1
+				_is_dragging = false
+			elif event.index == _fire_touch_index:
+				_fire_touch_index = -1
+		_refresh_touch_firing()
 		return
 	if event is InputEventScreenDrag:
 		if _is_dragging and event.index == _touch_index:
@@ -706,8 +716,22 @@ func _notification(what: int) -> void:
 	# drop the tracked finger instead of leaving the ship stuck on it.
 	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_touch_index = -1
+		_fire_touch_index = -1
 		_is_dragging = false
 		_is_firing = false
+		if _touch_play:
+			_refresh_touch_firing()
+
+
+## Derive _is_firing from the touch state and the player's fire-mode setting.
+## Only used for touch play; desktop keeps mouse-button firing.
+func _refresh_touch_firing() -> void:
+	if not _touch_play:
+		return
+	if GameState.fire_mode == GameState.FireMode.HOLD:
+		_is_firing = _fire_touch_index != -1
+	else:
+		_is_firing = _fire_touch_index == -1
 
 
 func _update_target(finger_pos: Vector2) -> void:

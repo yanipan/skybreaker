@@ -265,8 +265,12 @@ func _spawn_title() -> void:
 	var src: Vector2 = logo.get_size()
 	if src.y > 0:
 		var s: float = target_h / src.y
-		# Cap so the logo never reaches the score column on the right.
+		# Cap so the logo never reaches the score column on the right. On
+		# mobile the score block is 260 px wide + 112 px pause-button inset
+		# + margins, so leave the right 420 px of the canvas to it.
 		var max_w: float = _viewport_size.x * 0.55
+		if OS.has_feature("mobile"):
+			max_w = min(max_w, _viewport_size.x - 420.0)
 		if src.x * s > max_w:
 			s = max_w / src.x
 		sprite.scale = Vector2(s, s)

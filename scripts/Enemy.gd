@@ -531,7 +531,10 @@ func _brooder_death_spawn() -> void:
 		bullet.damage = 4
 		bullet.style = EnemyBullet.Style.SPARK
 		bullet.speed = 320.0
-		get_parent().add_child(bullet)
+		# take_damage() runs inside a physics callback; adding an Area2D to
+		# the tree there trips "Can't change this state while flushing
+		# queries", so the add is deferred to the end of the frame.
+		get_parent().add_child.call_deferred(bullet)
 
 
 func _spawn_enemy_bullet(dir: Vector2, dmg: int) -> void:

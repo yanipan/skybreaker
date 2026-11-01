@@ -35,6 +35,7 @@ const COL_PANEL_BG := Color(0.04, 0.06, 0.12, 0.78)
 var _viewport_size: Vector2
 var _starfield: Node2D
 var _continue_btn: Button
+var _fire_mode_btn: Button
 var _hero_sprite: Sprite2D
 var _hero_base_pos: Vector2
 var _time: float = 0.0
@@ -162,7 +163,9 @@ func _build_ui() -> void:
 	# Anchor the button column to the bottom of the panel (above the footer
 	# band) so all three buttons are guaranteed visible.
 	var footer_h: float = panel_h * 0.06
-	var col_y: float = panel_y + panel_h - footer_h - (btn_h * 3 + gap * 2) - 10
+	# Fourth, slimmer row under EXIT: the touch fire-mode toggle.
+	var opt_h: float = btn_h * 0.68
+	var col_y: float = panel_y + panel_h - footer_h - (btn_h * 3 + gap * 3 + opt_h) - 10
 	var btn_font: int = int(clamp(btn_h * 0.42, 22, 36))
 
 	var new_btn := _make_button("NEW GAME", btn_w, btn_h, COL_GREEN, btn_font)
@@ -182,6 +185,12 @@ func _build_ui() -> void:
 	exit_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 2)
 	exit_btn.pressed.connect(_on_exit)
 	layer.add_child(exit_btn)
+
+	var opt_font: int = int(clamp(opt_h * 0.40, 16, 26))
+	_fire_mode_btn = _make_button(_fire_mode_text(), btn_w, opt_h, COL_GOLD, opt_font)
+	_fire_mode_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 3)
+	_fire_mode_btn.pressed.connect(_on_fire_mode)
+	layer.add_child(_fire_mode_btn)
 
 	# Footer high score
 	if GameState.high_score > 0:
@@ -366,6 +375,20 @@ func _animate_menu_out() -> void:
 	tween.tween_callback(func() -> void:
 		get_tree().change_scene_to_packed(MAIN_SCENE)
 	)
+
+
+func _fire_mode_text() -> String:
+	if GameState.fire_mode == GameState.FireMode.HOLD:
+		return "FIRE: HOLD 2ND FINGER"
+	return "FIRE: AUTO  (2ND FINGER PAUSES)"
+
+
+func _on_fire_mode() -> void:
+	if _transitioning:
+		return
+	var next: int = GameState.FireMode.HOLD if GameState.fire_mode == GameState.FireMode.AUTO else GameState.FireMode.AUTO
+	GameState.set_fire_mode(next)
+	_fire_mode_btn.text = _fire_mode_text()
 
 
 func _on_exit() -> void:

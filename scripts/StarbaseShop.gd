@@ -213,7 +213,9 @@ func _build_ui() -> void:
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	# Dim background
 	_root = ColorRect.new()
-	_root.color = Color(0, 0, 0, 0.78)
+	# Opaque enough that the gameplay HUD (score / funds / hearts on the
+	# world layer underneath) no longer bleeds through the shop panel.
+	_root.color = Color(0, 0, 0, 0.94)
 	_root.size = vp
 	_root.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_root)

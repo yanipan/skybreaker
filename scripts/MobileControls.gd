@@ -69,6 +69,7 @@ var _torpedo_count_label: Label
 var _finger_ring: Node2D
 var _ring_pos: Vector2 = Vector2.ZERO
 var _ring_alpha: float = 0.0
+var _ring_index: int = -1   ## Finger the ring follows (the first one down); a second finger never moves it
 var _ring_pulse: float = 0.0
 var _time: float = 0.0
 ## Re-resolved every frame from the player so the ammo readout / weapon
@@ -135,12 +136,18 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventScreenTouch:
 		if event.pressed:
+			if _ring_index != -1 and event.index != _ring_index:
+				return
+			_ring_index = event.index
 			_ring_pos = event.position
 			_ring_alpha = 1.0
-		else:
+		elif event.index == _ring_index:
+			_ring_index = -1
 			# Don't snap to 0 — let _process fade it out smoothly.
 			_ring_alpha = max(_ring_alpha, 0.6)
 	elif event is InputEventScreenDrag:
+		if event.index != _ring_index:
+			return
 		_ring_pos = event.position
 		_ring_alpha = 1.0
 	# Desktop testing: mirror with mouse so force_visible mode is usable

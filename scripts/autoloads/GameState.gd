@@ -6,6 +6,40 @@ extends Node
 # True once the player has started a run from the start screen. Powers the
 # Continue button — if false, the start screen disables it.
 var has_active_run: bool = false
+
+# --- Player settings ---
+# Kept in their own file (not the run save) so NEW GAME / delete_save never
+# resets them. Loaded once at autoload time.
+const SETTINGS_PATH: String = "user://settings.cfg"
+## Touch fire scheme. AUTO: the ship fires on its own; holding a second
+## finger anywhere ceases fire (lets the charge refill). HOLD: the ship only
+## fires while a second finger is held down. Desktop mouse play is unaffected.
+enum FireMode { AUTO, HOLD }
+var fire_mode: int = FireMode.AUTO
+
+
+func _ready() -> void:
+	load_settings()
+
+
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) != OK:
+		return
+	fire_mode = clampi(int(cfg.get_value("controls", "fire_mode", FireMode.AUTO)), FireMode.AUTO, FireMode.HOLD)
+
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("controls", "fire_mode", fire_mode)
+	var err: int = cfg.save(SETTINGS_PATH)
+	if err != OK:
+		push_warning("GameState: settings save failed (%d)" % err)
+
+
+func set_fire_mode(mode: int) -> void:
+	fire_mode = clampi(mode, FireMode.AUTO, FireMode.HOLD)
+	save_settings()
 ## True for one frame after a warp transition completes — Main reads this
 ## on _ready to play the "drop in from below" entry sequence with lingering
 ## warp streaks, then clears it.
