@@ -76,6 +76,10 @@ var _entry_player_start_y: float = 0.0
 # emits `finished` when dismissed and Main either starts the warp
 # transition (mid-game triggers) or bounces to StartScreen (ending).
 var _cutscene_active: bool = false
+# Resume countdown (CONTINUE from the start screen) — tree is paused under a
+# 3-2-1-GO overlay so the player can get their thumb in place.
+var _resume_countdown_active: bool = false
+var _focus_lost_in_countdown: bool = false
 
 # --- Screen shake ---
 var _camera: Camera2D
@@ -112,6 +116,7 @@ func _ready() -> void:
 	# If we just warped here from the previous sector, kick off the entry
 	# cinematic — the player arrives from below the screen and the warp
 	# streaks linger for a moment before settling into normal scrolling.
+	var warped_in: bool = GameState.pending_warp_entry
 	if GameState.pending_warp_entry:
 		GameState.pending_warp_entry = false
 		_begin_entry_sequence()
@@ -125,7 +130,15 @@ func _ready() -> void:
 	# Intro cutscene — plays once on first-ever entry to sector 1, then
 	# `intro_seen` is persisted so a returning player skips it. Deferred one
 	# frame so every _ready finishes before the cutscene pauses the tree.
-	if GameState.current_level == 1 and not GameState.intro_seen and not GameState.pending_warp_entry:
+	if GameState.resume_pending:
+		# CONTINUE from the start screen: never replay the intro (even if the
+		# run was saved before it finished), count the player back in instead.
+		# A warp entry is already a safe fly-in, so no countdown on top of it.
+		GameState.resume_pending = false
+		GameState.intro_seen = true
+		if not warped_in:
+			call_deferred("_begin_resume_countdown")
+	elif GameState.current_level == 1 and not GameState.intro_seen and not warped_in:
 		call_deferred("_begin_cutscene", CutsceneData.INTRO_KEY, false)
 
 	queue_redraw()
@@ -144,7 +157,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Toggle pause overlay with P or Esc. Doesn't fire while dying, warping,
 	# entering, or during a story cutscene so the player can't pause out
 	# of a dramatic transition.
-	if _death_active or _warp_active or _entry_active or _cutscene_active:
+	if _death_active or _warp_active or _entry_active or _cutscene_active or _resume_countdown_active:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_P or event.keycode == KEY_ESCAPE:
@@ -828,6 +841,66 @@ func _update_death(delta: float) -> void:
 
 # --- Pause overlay ---
 
+## CONTINUE from the start screen: hold the tree paused under a dimmed
+## 3-2-1-GO overlay so the player can settle their thumb before the action
+## resumes. Timers run in process-always mode because the tree is paused.
+func _begin_resume_countdown() -> void:
+	if _resume_countdown_active or _cutscene_active:
+		return
+	_resume_countdown_active = true
+	_focus_lost_in_countdown = false
+	get_tree().paused = true
+	var layer := CanvasLayer.new()
+	layer.layer = 105
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.size = _viewport_size
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(dim)
+	var ready_lbl := Label.new()
+	ready_lbl.text = "GET READY"
+	ready_lbl.add_theme_font_override("font", Fonts.HEADLINE)
+	ready_lbl.add_theme_font_size_override("font_size", 44)
+	ready_lbl.add_theme_color_override("font_color", Color(0.65, 0.95, 1.0))
+	ready_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	ready_lbl.add_theme_constant_override("outline_size", 6)
+	ready_lbl.size = Vector2(_viewport_size.x, 60)
+	ready_lbl.position = Vector2(0, _viewport_size.y * 0.30)
+	ready_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	layer.add_child(ready_lbl)
+	var num := Label.new()
+	num.add_theme_font_override("font", Fonts.HEADLINE)
+	num.add_theme_font_size_override("font_size", 180)
+	num.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	num.add_theme_color_override("font_outline_color", Color.BLACK)
+	num.add_theme_constant_override("outline_size", 10)
+	num.size = Vector2(_viewport_size.x, 220)
+	num.position = Vector2(0, _viewport_size.y * 0.36)
+	num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	num.pivot_offset = num.size * 0.5
+	layer.add_child(num)
+	for step in ["3", "2", "1", "GO!"]:
+		num.text = step
+		num.scale = Vector2(1.5, 1.5)
+		num.modulate.a = 1.0
+		var tw := create_tween()
+		tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+		tw.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(num, "scale", Vector2.ONE, 0.35)
+		await get_tree().create_timer(0.55 if step == "GO!" else 0.85, true).timeout
+		if not is_inside_tree():
+			return
+	layer.queue_free()
+	_resume_countdown_active = false
+	get_tree().paused = false
+	if _focus_lost_in_countdown:
+		# The app went to the background mid-countdown: come back paused.
+		_focus_lost_in_countdown = false
+		_toggle_pause()
+
+
 ## Single entry point for keyboard AND the mobile pause button, so the state
 ## guard lives here. Closing is always allowed; opening is refused while
 ## dying, warping, entering, in a cutscene, or while something else (the
@@ -840,7 +913,7 @@ func _toggle_pause() -> void:
 
 
 func _can_open_pause() -> bool:
-	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning:
+	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning or _resume_countdown_active:
 		return false
 	if get_tree().paused:
 		return false
@@ -868,6 +941,12 @@ func _notification(what: int) -> void:
 	if _pause_layer != null or _pause_pending:
 		return
 	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning:
+		return
+	if _resume_countdown_active:
+		# Countdown holds the tree paused; persist now and let the countdown
+		# open the pause overlay instead of unpausing when it ends.
+		_focus_lost_in_countdown = true
+		_snapshot_and_save()
 		return
 	if get_tree().paused:
 		# Shop holds the tree paused — don't stack the pause overlay on it,

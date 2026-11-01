@@ -7,6 +7,10 @@ extends Node
 # Continue button — if false, the start screen disables it.
 var has_active_run: bool = false
 
+# Set by the start screen's CONTINUE button, consumed by Main._ready: skip
+# the intro cutscene and show a 3-2-1 countdown instead. Never persisted.
+var resume_pending: bool = false
+
 # --- Player settings ---
 # Kept in their own file (not the run save) so NEW GAME / delete_save never
 # resets them. Loaded once at autoload time.

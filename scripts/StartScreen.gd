@@ -347,6 +347,7 @@ func _on_continue() -> void:
 	if not GameState.has_active_run:
 		return
 	_transitioning = true
+	GameState.resume_pending = true
 	_animate_menu_out()
 
 
