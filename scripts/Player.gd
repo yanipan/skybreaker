@@ -75,6 +75,10 @@ const BANK_VELOCITY_THRESHOLD: float = 60.0
 var _target_position: Vector2
 var _is_dragging: bool = false  ## Touch only — true while finger is on screen
 var _is_firing: bool = false    ## True while fire button (mouse left or touch) is held
+const MISSILE_TURN_RATE_MIN: float = 1.2    ## Radians/sec at weapon level 1
+const MISSILE_TURN_RATE_MAX: float = 6.0    ## Radians/sec at weapon level 25
+const MISSILE_REACQUIRE_MIN: float = 120.0  ## Re-lock range at weapon level 1
+const MISSILE_REACQUIRE_MAX: float = 260.0  ## Re-lock range at weapon level 25
 var _touch_index: int = -1      ## Touch only — index of the finger steering the ship, -1 = none
 var _fire_touch_index: int = -1 ## Touch only — index of the second (fire-control) finger, -1 = none
 var _touch_play: bool = false   ## True on mobile or once any touch arrives — enables the touch fire scheme
@@ -1024,6 +1028,11 @@ func _spawn_missile(local_offset: Vector2, dir: Vector2, dmg: int) -> void:
 	m.position = global_position + local_offset
 	m.direction = dir
 	m.damage = dmg
+	# Homing is earned: low-level missiles only drift toward a target, and
+	# the turn rate and re-lock range grow up the 25-level ladder.
+	var homing_t: float = clampf(float(power_level - 1) / 24.0, 0.0, 1.0)
+	m.turn_rate = lerpf(MISSILE_TURN_RATE_MIN, MISSILE_TURN_RATE_MAX, homing_t)
+	m.reacquire_radius = lerpf(MISSILE_REACQUIRE_MIN, MISSILE_REACQUIRE_MAX, homing_t)
 	get_parent().add_child(m)
 
 

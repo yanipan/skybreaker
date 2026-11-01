@@ -33,6 +33,8 @@ var primary_color: Color = Color(0.85, 0.20, 0.25)
 var accent_color: Color = Color(1.0, 0.85, 0.30)
 var armor: int = 1   ## Subtracted from incoming damage (min 1 dmg always lands)
 var contact_damage: int = 12
+var fire_cd_mul: float = 1.0   ## Multiplies the fire interval; above 1 fires slower
+var bullet_dmg_mul: float = 1.0  ## Multiplies bullet damage (min 1)
 var reward: int = 500
 var boss_name: String = "Boss"
 
@@ -118,6 +120,9 @@ func _configure() -> void:
 			accent_color = Color(1.0, 0.95, 0.40)
 			armor = 2
 			contact_damage = 14
+			# First boss of the game: a teaching fight, not a wall.
+			fire_cd_mul = 1.7
+			bullet_dmg_mul = 0.6
 			reward = 400
 			_drift_speed = 140.0
 		Type.BOSS2:
@@ -277,11 +282,11 @@ func _update_firing(delta: float) -> void:
 		base_cd = 0.55
 	elif _phase == 2:
 		base_cd = 0.35
-	_fire_timer = base_cd
+	_fire_timer = base_cd * fire_cd_mul
 	_pattern_idx = (_pattern_idx + 1) % 3
 	match type:
 		Type.BOSS1:
-			_pattern_aimed_burst() if _pattern_idx == 0 else _pattern_spread()
+			_pattern_aimed_burst() if _pattern_idx == 0 else _pattern_light_spread()
 		Type.BOSS2:
 			_pattern_shell_volley() if _pattern_idx == 0 else _pattern_fan()
 		Type.BOSS3:
@@ -330,6 +335,11 @@ func _pattern_spread() -> void:
 		_spawn_bullet(Vector2.DOWN.rotated(off), 6, EnemyBullet.Style.SHELL)
 
 
+func _pattern_light_spread() -> void:
+	for off in [-0.40, 0.0, 0.40]:
+		_spawn_bullet(Vector2.DOWN.rotated(off), 6, EnemyBullet.Style.SHELL)
+
+
 func _pattern_shell_volley() -> void:
 	for off in [-0.30, -0.10, 0.10, 0.30]:
 		_spawn_bullet(Vector2.DOWN.rotated(off), 7, EnemyBullet.Style.SHELL)
@@ -359,7 +369,7 @@ func _spawn_bullet(dir: Vector2, dmg: int, style: int) -> void:
 	var bullet: EnemyBullet = EnemyBulletScript.new()
 	bullet.position = global_position + dir * (boss_size * 0.45)
 	bullet.direction = dir
-	bullet.damage = dmg
+	bullet.damage = maxi(1, int(round(float(dmg) * bullet_dmg_mul)))
 	bullet.style = style
 	bullet.from_boss = true   # Beam can't vaporize boss fire
 	get_parent().add_child(bullet)
