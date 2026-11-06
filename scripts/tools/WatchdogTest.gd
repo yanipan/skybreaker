@@ -39,7 +39,8 @@ func _ready() -> void:
 	_check(GameState.physics_stalls == 0, "5 s pause is not a stall")
 	# Kill overlap detection with the tree unpaused: the reported symptom.
 	PhysicsServer2D.set_active(false)
-	_check(not await _bullet_hits(), "server off: bullet passes through (symptom reproduced)")
+	var fb0: int = GameState.hit_fallbacks
+	_check(await _bullet_hits() and GameState.hit_fallbacks > fb0, "server off: HitCheck safety net still lands the bullet (was the reported pass-through)")
 	await get_tree().create_timer(5.0).timeout
 	_check(GameState.physics_stalls >= 1, "watchdog noticed the stall (%d)" % GameState.physics_stalls)
 	_check(await _bullet_hits(), "watchdog healed: bullet hits enemy again")

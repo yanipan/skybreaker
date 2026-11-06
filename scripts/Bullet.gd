@@ -74,9 +74,16 @@ func _build_collision() -> void:
 	add_child(shape)
 
 
+var _stuck: Array = []
+
 func _process(delta: float) -> void:
 	_time += delta
 	position += direction * speed * delta
+	# Physics safety net (HitCheck.gd)
+	var hit: Node2D = HitCheck.enemy_at(self, bullet_size * 0.5)
+	if HitCheck.stuck(hit != null, _stuck) and not is_queued_for_deletion():
+		HitCheck.note_fallback("bullet")
+		_on_area_entered(hit)
 	queue_redraw()
 	# Despawn when fully off any edge (with a small margin)
 	var m: float = 64.0

@@ -13,9 +13,12 @@ const SPEED_TIER_MAX: int = 3
 @export var screen_padding: float = 40.0     ## Keep the ship this far from screen edges
 ## On-screen joystick (6/11): knob offset 0..1 maps to speed through a dead
 ## zone and a gentle curve, so a small push nudges and a full push darts.
-const JOY_DEADZONE: float = 0.12
-const JOY_CURVE: float = 1.35
-const JOY_MAX_SPEED: float = 820.0        ## px/s at full deflection, speed tier 0
+## 6/11 playtest: "react faster": linear response, full speed at 70% of the
+## ring (was the very edge, curve 1.35), smaller dead zone, faster top speed.
+const JOY_DEADZONE: float = 0.08
+const JOY_CURVE: float = 1.0
+const JOY_FULL_AT: float = 0.70           ## deflection that already gives full speed
+const JOY_MAX_SPEED: float = 980.0        ## px/s at full speed, speed tier 0
 const JOY_TIER_MUL: float = 1.25          ## per Starbase thruster tier
 var _joy_vec: Vector2 = Vector2.ZERO
 @export var ship_size: float = 74.0          ## Width/height of placeholder square (+15% over the original 64)
@@ -806,7 +809,7 @@ func set_joystick(v: Vector2) -> void:
 func joy_speed(mag: float) -> float:
 	if mag <= JOY_DEADZONE:
 		return 0.0
-	var t: float = clampf((mag - JOY_DEADZONE) / (1.0 - JOY_DEADZONE), 0.0, 1.0)
+	var t: float = clampf((mag - JOY_DEADZONE) / (JOY_FULL_AT - JOY_DEADZONE), 0.0, 1.0)
 	return pow(t, JOY_CURVE) * JOY_MAX_SPEED * pow(JOY_TIER_MUL, float(speed_tier))
 
 

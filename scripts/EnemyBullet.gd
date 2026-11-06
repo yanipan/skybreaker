@@ -262,7 +262,26 @@ func _build_collision() -> void:
 	add_child(shape)
 
 
+var _stuck: Array = []
+
 func _process(delta: float) -> void:
+	_check_player_fallback()
+	_process_motion(delta)
+
+
+## Physics safety net for hits on the ship (HitCheck.gd).
+func _check_player_fallback() -> void:
+	var p: Node2D = get_tree().get_first_node_in_group(&"player") as Node2D
+	if p == null or is_queued_for_deletion() or not p.monitoring:
+		_stuck.clear()
+		return
+	var r: float = max(bullet_radius, 6.0)
+	if HitCheck.stuck(HitCheck.overlap(global_position, Vector2(r, r), p), _stuck) and p.has_method("_on_area_entered"):
+		HitCheck.note_fallback("enemy_bullet")
+		p._on_area_entered(self)
+
+
+func _process_motion(delta: float) -> void:
 	_time += delta
 	position += direction * speed * delta
 

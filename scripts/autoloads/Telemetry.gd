@@ -139,6 +139,9 @@ func snapshot(player: Node) -> Dictionary:
 		"kills": GameState.mission_kills,
 		"dmg": GameState.mission_damage_taken,
 		"earned": GameState.mission_money,
+		"fb": GameState.hit_fallbacks,
+		"stalls": GameState.physics_stalls,
+		"fps": Engine.get_frames_per_second(),
 	}
 	if player != null and is_instance_valid(player):
 		var wl: Dictionary = player.weapon_levels if "weapon_levels" in player else {}

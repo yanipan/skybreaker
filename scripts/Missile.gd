@@ -94,8 +94,15 @@ func _build_collision() -> void:
 	add_child(shape)
 
 
+var _stuck: Array = []
+
 func _process(delta: float) -> void:
 	_time += delta
+	var hit: Node2D = HitCheck.enemy_at(self, Vector2(8, 14))
+	if HitCheck.stuck(hit != null, _stuck) and not is_queued_for_deletion():
+		HitCheck.note_fallback("missile")
+		_on_area_entered(hit)
+		return
 	# --- Steer toward the current target while it's alive. If it dies, scan
 	# for a NEW target within reacquire_radius (throttled). If nothing nearby
 	# qualifies, the missile keeps its current heading and flies straight. ---

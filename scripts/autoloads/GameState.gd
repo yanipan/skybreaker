@@ -28,6 +28,8 @@ var controls_side: int = ControlsSide.LEFT
 var joystick_enabled: bool = true
 ## Session counters for PhysicsWatchdog; survive scene reloads, not relaunch.
 var physics_stalls: int = 0
+## Hits the physics engine missed and HitCheck applied (see HitCheck.gd).
+var hit_fallbacks: int = 0
 var physics_reloads: int = 0
 
 

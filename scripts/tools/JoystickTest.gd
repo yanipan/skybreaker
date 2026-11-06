@@ -13,7 +13,9 @@ func _ready() -> void:
 	add_child(p)
 	await get_tree().process_frame
 	_check(p.joy_speed(0.05) == 0.0, "dead zone: tiny push does not move")
-	_check(p.joy_speed(0.5) > 0.0 and p.joy_speed(0.5) < p.joy_speed(1.0) * 0.6, "half push is well under half of full speed (%.0f vs %.0f)" % [p.joy_speed(0.5), p.joy_speed(1.0)])
+	_check(p.joy_speed(0.5) > p.joy_speed(1.0) * 0.6, "half push is already most of full speed (%.0f vs %.0f)" % [p.joy_speed(0.5), p.joy_speed(1.0)])
+	_check(is_equal_approx(p.joy_speed(0.7), p.joy_speed(1.0)), "full speed reached at 70%% of the ring")
+	_check(p.joy_speed(0.1) > 0.0, "small push (10%%) already moves the ship")
 	_check(is_equal_approx(p.joy_speed(1.0), p.JOY_MAX_SPEED), "full push = max speed at tier 0")
 	p.speed_tier = 2
 	_check(p.joy_speed(1.0) > p.JOY_MAX_SPEED * 1.5, "thruster tier speeds up the stick")
