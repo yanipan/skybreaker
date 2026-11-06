@@ -3,8 +3,6 @@ class_name Player
 ## Player ship. Drag-to-move with thumb offset so the finger doesn't cover the ship.
 ## Self-constructs its visual + collision shape on _ready (no .tscn needed yet).
 
-const DOUBLE_TAP_MS: int = 300      ## Max gap (ms) between taps to count as a weapon switch
-const DOUBLE_TAP_PX: float = 120.0  ## Max distance between taps to count as a weapon switch
 
 @export var follow_speed: float = 16.0       ## How quickly the ship catches up to the target (higher = snappier)
 ## Movement speed tier — 0..3. Each tier scales follow_speed by 1.35x, bought at the Starbase shop.
@@ -41,10 +39,13 @@ const SPEED_TIER_MAX: int = 3
 ## L20 ceiling lifts a touch (~17.7 shots/sec) and mid-tier phaser feels punchier.
 @export var fire_rate_bonus_per_level: float = 0.49  ## Was 0.62 for 20-level ladder — dropped to 0.49 so L25 fire rate ≈ old L20 (~18.68 shots/sec)
 @export var max_charge: float = 100.0        ## Total charge pool (base, before energy cells)
-## Energy cells purchased from the shop. Each cell adds +50% to base max_charge.
-## Hard cap at 4 cells = base x 3.0 (300 max_charge from 100 baseline).
-const ENERGY_CELL_MAX: int = 4
-const ENERGY_CELL_BONUS_PCT: float = 0.5
+## Energy cells purchased from the shop. Each cell adds +40% to base max_charge
+## and +15% to energy regen. Cap 6 cells = 3.4x capacity, 1.9x regen.
+const ENERGY_CELL_MAX: int = 6
+const ENERGY_CELL_BONUS_PCT: float = 0.4
+const ENERGY_CELL_REGEN_PCT: float = 0.15
+## Torpedo bay hard cap (base 2 + 6 bays from the shop).
+const TORPEDO_CAP: int = 8
 var energy_cells_bought: int = 0
 var _base_max_charge: float = 100.0   ## Snapshot of original max_charge for cell math
 @export var charge_drain_per_second: float = 50.0   ## How fast charge drains while fast-firing (~2s of fast fire)
@@ -86,8 +87,6 @@ const MISSILE_REACQUIRE_MIN: float = 120.0  ## Re-lock range at weapon level 1
 const MISSILE_REACQUIRE_MAX: float = 260.0  ## Re-lock range at weapon level 25
 var _touch_index: int = -1      ## Touch only — index of the finger steering the ship, -1 = none
 var _fire_button_held: bool = false ## Touch only — FIRE overlay button currently held
-var _last_tap_ms: int = -100000 ## Timestamp of the last screen tap (weapon double-tap)
-var _last_tap_pos: Vector2 = Vector2.ZERO ## Position of the last screen tap (weapon double-tap)
 var _touch_play: bool = false   ## True on mobile or once any touch arrives — enables the touch fire scheme
 var _mouse_active: bool = false ## True once we've seen any mouse motion (desktop)
 var _screen_size: Vector2
@@ -279,6 +278,11 @@ func _die() -> void:
 ## (or a respawn) leaves _current_charge pinned at the base 100 even though
 ## max_charge has grown to 150/200/250/300, so the bar reads as partially
 ## empty even though the player bought the upgrade.
+## Charge regen multiplier from purchased energy cells.
+func regen_mul() -> float:
+	return 1.0 + float(energy_cells_bought) * ENERGY_CELL_REGEN_PCT
+
+
 func _apply_energy_cells() -> void:
 	var bonus: float = 1.0 + float(energy_cells_bought) * ENERGY_CELL_BONUS_PCT
 	max_charge = _base_max_charge * bonus
@@ -535,13 +539,14 @@ func _draw_power_indicator() -> void:
 func _draw_torpedo_indicator() -> void:
 	# One slot per max torpedo, stacked vertically to the right of the ship.
 	# Filled = ammo available, dim outline = empty.
-	var icon_size: float = 14.0
-	var spacing: float = 4.0
-	var x: float = (ship_size * 0.5) + 14.0
-	var total_h: float = max_torpedoes * icon_size + (max_torpedoes - 1) * spacing
+	var icon_size: float = 14.0 if max_torpedoes <= 4 else 11.0
+	var spacing: float = 4.0 if max_torpedoes <= 4 else 3.0
+	var rows: int = mini(max_torpedoes, 4)
+	var total_h: float = rows * icon_size + (rows - 1) * spacing
 	var start_y: float = -total_h * 0.5
 	for i in max_torpedoes:
-		var y: float = start_y + i * (icon_size + spacing)
+		var x: float = (ship_size * 0.5) + 14.0 + float(i / 4) * (icon_size + spacing)
+		var y: float = start_y + (i % 4) * (icon_size + spacing)
 		var slot := Rect2(x, y, icon_size, icon_size)
 		draw_rect(slot, Color(0, 0, 0, 0.5), true)
 		draw_rect(slot, Color(1, 1, 1, 0.4), false, 1.0)
@@ -679,19 +684,12 @@ func _build_collision() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	# --- Touch (mobile) ---
 	# First finger down steers the ship. Extra fingers never steal steering.
-	# Firing is the on-screen FIRE button (see set_fire_button). Double-tap
-	# anywhere (button taps never reach here — Controls consume them) cycles
-	# weapon. Touch-emulated mouse is ignored in the mouse branches below.
+	# Firing and weapon choice are the on-screen weapon buttons (see
+	# set_weapon_button; one per weapon, button taps never reach here).
+	# Touch-emulated mouse is ignored in the mouse branches below.
 	if event is InputEventScreenTouch:
 		_touch_play = true
 		if event.pressed:
-			var now_ms: int = Time.get_ticks_msec()
-			if now_ms - _last_tap_ms <= DOUBLE_TAP_MS and event.position.distance_to(_last_tap_pos) <= DOUBLE_TAP_PX:
-				cycle_weapon()
-				_last_tap_ms = -100000
-			else:
-				_last_tap_ms = now_ms
-				_last_tap_pos = event.position
 			if _touch_index == -1:
 				_touch_index = event.index
 				_is_dragging = true
@@ -725,9 +723,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_try_fire_torpedo()
 		elif event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
-			# Scroll-wheel CLICK cycles to the next weapon. Mobile double-
-			# tap is the matching switch path.
+			# Scroll-wheel CLICK cycles to the next weapon.
 			cycle_weapon()
+		return
+	# Desktop: 1 / 2 / 3 pick phaser / beam / missile directly.
+	if event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1: select_weapon(WeaponType.PHASER)
+			KEY_2: select_weapon(WeaponType.BEAM)
+			KEY_3: select_weapon(WeaponType.MISSILE)
 		return
 
 
@@ -737,10 +741,25 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_touch_index = -1
 		_fire_button_held = false
+		_weapon_buttons_down.clear()
 		_is_dragging = false
 		_is_firing = false
 		if _touch_play:
 			_refresh_touch_firing()
+
+
+## Overlay weapon buttons: one per weapon. Pressing one selects that weapon
+## and acts as the FIRE button (HOLD fires while held, AUTO pauses while held).
+## Several may be down at once; the last one pressed wins the weapon slot.
+var _weapon_buttons_down: Dictionary = {}
+
+func set_weapon_button(wt: int, held: bool) -> void:
+	if held:
+		_weapon_buttons_down[wt] = true
+		select_weapon(wt)
+	else:
+		_weapon_buttons_down.erase(wt)
+	set_fire_button(not _weapon_buttons_down.is_empty())
 
 
 ## Overlay FIRE button. Marks this as touch play so AUTO/HOLD apply.
@@ -892,7 +911,7 @@ func _handle_firing(delta: float) -> void:
 			_current_charge = max(0.0, _current_charge - charge_drain_per_second * drain_mul * delta)
 	else:
 		# Missile recharges slower so its homing advantage costs more downtime
-		var regen: float = recharge_per_second
+		var regen: float = recharge_per_second * regen_mul()
 		if weapon_type == WeaponType.MISSILE:
 			regen *= 0.65
 		_current_charge = min(max_charge, _current_charge + regen * delta)
@@ -977,7 +996,7 @@ func _handle_beam_firing(delta: float) -> void:
 		# Regen restored to parity (was 0.85× of phaser) so committing to beam
 		# doesn't punish you on the recovery side too — the drain rate already
 		# carries the cost.
-		_current_charge = min(max_charge, _current_charge + recharge_per_second * 1.0 * delta)
+		_current_charge = min(max_charge, _current_charge + recharge_per_second * regen_mul() * delta)
 
 
 ## Phaser-style ramp: 1 beam → 5 beams across the power ladder.
@@ -1089,6 +1108,16 @@ func _grant_sidekick() -> void:
 
 ## Cycle to the next weapon type. Called by middle-mouse-button click on
 ## desktop (see _unhandled_input). Mobile control TBD.
+## Switch straight to a weapon (per-weapon buttons, keys 1-3). No-op if it
+## is already active so holding the same button never re-triggers the SFX.
+func select_weapon(wt: int) -> void:
+	wt = clampi(wt, 0, 2)
+	if wt == weapon_type:
+		return
+	weapon_type = (wt + 2) % 3
+	cycle_weapon()
+
+
 func cycle_weapon() -> void:
 	# Cancel any active beams so the visual doesn't linger after we switch
 	for b in _beams:

@@ -410,12 +410,15 @@ func _die() -> void:
 	# currently using. WEAPON_CHANGE pickup is gone (player switches manually
 	# now via middle mouse button).
 	_drop(Pickup.Type.HEALTH_FULL, Vector2(-60, 20))
-	_drop(Pickup.Type.POWER_PHASER, Vector2(-20, 20))
-	_drop(Pickup.Type.POWER_BEAM, Vector2(20, 20))
-	_drop(Pickup.Type.POWER_MISSILE, Vector2(40, -10))
+	# 6/11: one power-up for the weakest weapon (was one of each); the
+	# difference is paid in money so the starbase shop matters.
+	var bp: int = Pickup.boss_power_drop(get_tree())
+	if bp >= 0:
+		_drop(bp, Vector2(0, 20))
 	_drop(Pickup.Type.TORPEDO, Vector2(60, 20))
-	_drop_money(120, Vector2(20, 40))
-	_drop_money(120, Vector2(-40, 40))
+	_drop_money(200, Vector2(20, 40))
+	_drop_money(200, Vector2(-40, 40))
+	_drop_money(200, Vector2(-20, -10))
 	EventBus.screen_shake_requested.emit(18.0, 0.8)
 	# Cleanup HUD bits
 	if _hp_bar != null: _hp_bar.queue_free()

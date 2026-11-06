@@ -40,6 +40,54 @@ var _color: Color = Color.WHITE
 var _accent: Color = Color.WHITE
 
 
+## --- Power drop economy (6/11 playtest: everything maxed too fast, shop
+## felt optional) ---
+## Base drop chances are multiplied by these, and a weapon at or above the
+## sector soft cap (3 + sector) gets money instead of a power-up, so levels
+## past the curve have to be bought at the starbase.
+const ENEMY_POWER_DROP_SCALE: float = 0.6
+const ASTEROID_POWER_DROP_SCALE: float = 0.4
+const SOFT_CAP_BASE: int = 3
+
+static func power_soft_cap(sector: int) -> int:
+	return SOFT_CAP_BASE + sector
+
+
+static func power_type_for(wt: int) -> int:
+	match wt:
+		0: return Type.POWER_PHASER
+		1: return Type.POWER_BEAM
+		_: return Type.POWER_MISSILE
+
+
+## Roll which power-up to drop. Returns -1 when the rolled weapon is already
+## at the sector soft cap (caller drops money instead).
+static func roll_power_drop(tree: SceneTree) -> int:
+	var wt: int = randi() % 3
+	var player: Node = tree.get_first_node_in_group(&"player") if tree != null else null
+	if player != null and "weapon_levels" in player:
+		var lvl: int = int(player.weapon_levels.get(wt, 1))
+		if lvl >= power_soft_cap(GameState.current_level):
+			return -1
+	return power_type_for(wt)
+
+
+## Boss reward: one power-up for the weakest weapon still under the cap
+## (was one of each). -1 when all three are capped.
+static func boss_power_drop(tree: SceneTree) -> int:
+	var player: Node = tree.get_first_node_in_group(&"player") if tree != null else null
+	if player == null or not "weapon_levels" in player:
+		return Type.POWER_PHASER
+	var best: int = -1
+	var best_lvl: int = 1 << 20
+	for wt in 3:
+		var lvl: int = int(player.weapon_levels.get(wt, 1))
+		if lvl < power_soft_cap(GameState.current_level) and lvl < best_lvl:
+			best = wt
+			best_lvl = lvl
+	return -1 if best < 0 else power_type_for(best)
+
+
 func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
 	add_to_group(&"pickups")

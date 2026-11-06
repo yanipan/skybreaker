@@ -13,7 +13,7 @@ class_name StarbaseShop
 ##   - Stronger Shield    — +1 max_shield, max 5       100 / 200 / 350 / 500
 ##   - Weapon Power Up    — +1 power_level             80 → 140 → 220 → 320 → 450 → ...
 ##   - Torpedo Refill     — refill torpedoes to max    flat 60
-##   - Torpedo Bay        — +1 max_torpedoes, max 5    150 / 250 / 380
+##   - Torpedo Bay        — +1 max_torpedoes, max 8    320 .. 1800
 ##   - Speed Boost        — +1 speed_tier, max 3       180 / 280 / 420
 ##   - Energy Cell        — +20 max_charge             120 (repeatable, raises ceiling)
 ##   - Switch Weapon      — cycle Phaser/Beam/Missile  40
@@ -374,7 +374,7 @@ func _build_ui() -> void:
 	_add_item("TORPEDO REFILL", "Top up your torpedo bay.", &"torp_refill", TEX_TORP)
 	_add_item("TORPEDO BAY", "Add one torpedo slot (+1 capacity).", &"torp_bay", TEX_TORP_BAY)
 	_add_item("THRUSTER UPGRADE", "Move faster — one of three tiers.", &"speed", TEX_SPEED)
-	_add_item("ENERGY CELL", "Adds +50% to your weapon energy capacity. Up to 4 cells.", &"charge", TEX_ENERGY)
+	_add_item("ENERGY CELL", "+40% weapon energy and +15% faster recharge. Up to 6 cells.", &"charge", TEX_ENERGY)
 	_add_item("SIDEKICK", "Hire a wingmate ship. One at a time.", &"sidekick", TEX_SIDEKICK)
 
 	# Status / message line
@@ -525,9 +525,9 @@ func _price_for(kind: StringName) -> int:
 		&"torp_refill":
 			return 140
 		&"torp_bay":
-			# Cap at +3 over baseline (max 5)
+			# Cap at Player.TORPEDO_CAP (base 2 + 6 bays)
 			var t_cap: int = (p.max_torpedoes - 2) if p != null else 0
-			var t_ladder: Array = [320, 520, 780]
+			var t_ladder: Array = [320, 520, 780, 1050, 1400, 1800]
 			if t_cap >= t_ladder.size():
 				return -1
 			return int(t_ladder[t_cap])
@@ -542,7 +542,7 @@ func _price_for(kind: StringName) -> int:
 			# Cap at Player.ENERGY_CELL_MAX cells; price ramps so each cell
 			# is meaningfully more expensive than the last.
 			var cells: int = p.energy_cells_bought if p != null else 0
-			var c_ladder: Array = [300, 520, 800, 1200]
+			var c_ladder: Array = [300, 520, 800, 1200, 1650, 2200]
 			if cells >= c_ladder.size():
 				return -1
 			return int(c_ladder[cells])
@@ -613,11 +613,11 @@ func _refresh_all() -> void:
 				&"power_missile":
 					suffix = "  [LVL %d/%d]" % [_weapon_level(p, 2), p.max_power_level]
 				&"torp_bay":
-					suffix = "  [%d/5]" % p.max_torpedoes
+					suffix = "  [%d/%d]" % [p.max_torpedoes, Player.TORPEDO_CAP]
 				&"speed":
 					suffix = "  [TIER %d/3]" % p.speed_tier
 				&"charge":
-					suffix = "  [%d/4]" % p.energy_cells_bought
+					suffix = "  [%d/%d]" % [p.energy_cells_bought, Player.ENERGY_CELL_MAX]
 		var base_text := name_label.text.split("  [")[0]
 		name_label.text = base_text + suffix
 		_fit_item_name(name_label)
@@ -780,6 +780,8 @@ func _apply_purchase(kind: StringName) -> bool:
 		&"torp_refill":
 			p.torpedo_count = p.max_torpedoes
 		&"torp_bay":
+			if p.max_torpedoes >= Player.TORPEDO_CAP:
+				return false
 			p.max_torpedoes += 1
 			p.torpedo_count = p.max_torpedoes
 		&"speed":

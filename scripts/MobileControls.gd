@@ -7,6 +7,11 @@ class_name MobileControls
 ## to left-click and torpedoes to right-click; this overlay adds the mobile
 ## equivalents:
 ##
+##   * (6/11) The FIRE button + double-tap switch is replaced by ONE BUTTON
+##     PER WEAPON (P / B / M) plus the torpedo, all clustered in one bottom
+##     corner (GameState.controls_side, set on the Settings page). Pressing
+##     a weapon button selects it and fires (HOLD) or pauses fire (AUTO).
+##     Buttons are ~30% smaller than before. Notes below predate this.
 ##   * BIG TORPEDO BUTTON in the bottom-right safe area — large circular
 ##     hitbox so it's hittable with the right thumb without looking. Glows
 ##     when a torpedo is ready, dims + shows a cooldown ring when empty,
@@ -46,7 +51,7 @@ class_name MobileControls
 ## Diameter of the action buttons in pixels at the design viewport size.
 ## Scaled by viewport width at runtime so the buttons feel the same size
 ## on a 5" phone and a 6.7" phone.
-const BUTTON_BASE_SIZE: float = 170.0
+const BUTTON_BASE_SIZE: float = 118.0
 
 ## Distance from the safe-area corner to the center of each button.
 const BUTTON_INSET: float = 110.0
@@ -65,13 +70,12 @@ const COL_BORDER_DIM := Color(0.55, 0.95, 1.00, 0.45)
 var _viewport_size: Vector2
 var _player: Node = null
 var _torpedo_btn: Control
-var _fire_btn: Control
+var _weapon_btns: Array = []        ## Index = Player.WeaponType
+var _weapon_lvl_labels: Array = []
+var _weapon_held: Dictionary = {}
 var _pause_btn: Control
 var _torpedo_label: Label
-var _fire_label: Label
-var _weapon_label: Label
 var _torpedo_count_label: Label
-var _fire_held: bool = false
 var _finger_ring: Node2D
 var _ring_pos: Vector2 = Vector2.ZERO
 var _ring_alpha: float = 0.0
@@ -105,7 +109,7 @@ func _ready() -> void:
 	_resolve_player()
 	_build_finger_ring()
 	_build_torpedo_button()
-	_build_fire_button()
+	_build_weapon_buttons()
 	_build_pause_button()
 	EventBus.cutscene_started.connect(_on_cutscene_started)
 	EventBus.cutscene_finished.connect(_on_cutscene_finished)
@@ -172,12 +176,8 @@ func _input(event: InputEvent) -> void:
 # --- Torpedo button (bottom-right) ---
 
 func _build_torpedo_button() -> void:
-	var safe := _safe_area()
 	var size: float = _button_size()
-	var center := Vector2(
-		safe.position.x + safe.size.x - BUTTON_INSET,
-		safe.position.y + safe.size.y - BUTTON_INSET
-	)
+	var center: Vector2 = cluster_centers(_safe_area(), size, GameState.controls_side)[3]
 	_torpedo_btn = _make_circle_button(center, size, &"TORPEDO")
 	_torpedo_btn.gui_input.connect(_on_torpedo_input)
 	add_child(_torpedo_btn)
@@ -232,67 +232,93 @@ func _fire_torpedo() -> void:
 			am.haptic_medium()
 
 
-# --- Fire button (bottom-left) ---
+# --- Weapon buttons (one per weapon, clustered with the torpedo) ---
 
-func _build_fire_button() -> void:
-	var safe := _safe_area()
-	var size: float = _button_size() * 1.2
-	var half: float = size * 0.5
-	var cx: float = safe.position.x + maxf(BUTTON_INSET, half)
-	var cy: float = safe.position.y + safe.size.y - maxf(BUTTON_INSET, half)
-	cx = clampf(cx, safe.position.x + half, safe.position.x + safe.size.x - half)
-	cy = clampf(cy, safe.position.y + half, safe.position.y + safe.size.y - half)
-	var center := Vector2(cx, cy)
-	_fire_btn = _make_circle_button(center, size, &"FIRE")
-	_fire_btn.gui_input.connect(_on_fire_input)
-	add_child(_fire_btn)
-
-	_fire_label = Label.new()
-	_fire_label.text = "FIRE"
-	_fire_label.add_theme_font_size_override("font_size", int(size * 0.20))
-	_fire_label.add_theme_color_override("font_color", COL_CYAN)
-	_fire_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_fire_label.add_theme_constant_override("outline_size", 4)
-	_fire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_fire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_fire_label.size = Vector2(size, size * 0.40)
-	_fire_label.position = Vector2(0, size * 0.16)
-	_fire_btn.add_child(_fire_label)
-
-	_weapon_label = Label.new()
-	_weapon_label.text = "P"
-	_weapon_label.add_theme_font_size_override("font_size", int(size * 0.28))
-	_weapon_label.add_theme_color_override("font_color", COL_CYAN)
-	_weapon_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_weapon_label.add_theme_constant_override("outline_size", 5)
-	_weapon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_weapon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_weapon_label.size = Vector2(size, size * 0.40)
-	_weapon_label.position = Vector2(0, size * 0.46)
-	_fire_btn.add_child(_weapon_label)
+const WEAPON_LETTERS: Array = ["P", "B", "M"]
 
 
-func _on_fire_input(event: InputEvent) -> void:
+## Button centers for the corner cluster: [phaser, beam, missile, torpedo].
+## The torpedo sits in the corner; the three weapons fan around it on a
+## quarter arc (straight up, diagonal, straight inward) so each is one
+## thumb-roll from the corner. Mirrored for the right side. Static so the
+## layout can be checked headless.
+static func cluster_centers(safe: Rect2, size: float, side: int) -> Array:
+	var margin: float = size * 0.5 + 18.0
+	var right: bool = side == 1
+	var corner := Vector2(
+		safe.position.x + safe.size.x - margin if right else safe.position.x + margin,
+		safe.position.y + safe.size.y - margin
+	)
+	var inward: float = -1.0 if right else 1.0
+	# Radius chosen so neighbours 45 deg apart don't overlap (chord >= size*1.08).
+	var r: float = size * 1.42
+	var out: Array = []
+	for ang in [90.0, 45.0, 0.0]:   # P up, B diagonal, M inward
+		var a: float = deg_to_rad(ang)
+		out.append(corner + Vector2(cos(a) * r * inward, -sin(a) * r))
+	out.append(corner)
+	return out
+
+
+func _build_weapon_buttons() -> void:
+	var size: float = _button_size()
+	var centers: Array = cluster_centers(_safe_area(), size, GameState.controls_side)
+	for wt in 3:
+		var b: Control = _make_circle_button(centers[wt], size, StringName("WEAPON_%d" % wt))
+		b.gui_input.connect(_on_weapon_input.bind(wt))
+		add_child(b)
+		var col: Color = _color_for_weapon(wt)
+		b.set_meta("col_glow", col)
+		var letter := Label.new()
+		letter.text = WEAPON_LETTERS[wt]
+		letter.add_theme_font_size_override("font_size", int(size * 0.40))
+		letter.add_theme_color_override("font_color", col)
+		letter.add_theme_color_override("font_outline_color", Color.BLACK)
+		letter.add_theme_constant_override("outline_size", 5)
+		letter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		letter.size = Vector2(size, size * 0.55)
+		letter.position = Vector2(0, size * 0.10)
+		letter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(letter)
+		var lvl := Label.new()
+		lvl.text = "L1"
+		lvl.add_theme_font_size_override("font_size", int(size * 0.20))
+		lvl.add_theme_color_override("font_color", Color.WHITE)
+		lvl.add_theme_color_override("font_outline_color", Color.BLACK)
+		lvl.add_theme_constant_override("outline_size", 4)
+		lvl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lvl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lvl.size = Vector2(size, size * 0.30)
+		lvl.position = Vector2(0, size * 0.60)
+		lvl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(lvl)
+		_weapon_btns.append(b)
+		_weapon_lvl_labels.append(lvl)
+
+
+func _on_weapon_input(event: InputEvent, wt: int) -> void:
 	if event is InputEventScreenTouch:
-		_set_fire(event.pressed)
+		_set_weapon(wt, event.pressed)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.device != InputEvent.DEVICE_ID_EMULATION:
-		_set_fire(event.pressed)
+		_set_weapon(wt, event.pressed)
 		get_viewport().set_input_as_handled()
 
 
-func _set_fire(held: bool) -> void:
-	_fire_held = held
-	_resolve_player()
-	if _player != null and is_instance_valid(_player) and _player.has_method("set_fire_button"):
-		_player.set_fire_button(held)
+func _set_weapon(wt: int, held: bool) -> void:
 	if held:
-		_pop(_fire_btn)
+		_weapon_held[wt] = true
+	else:
+		_weapon_held.erase(wt)
+	_resolve_player()
+	if _player != null and is_instance_valid(_player) and _player.has_method("set_weapon_button"):
+		_player.set_weapon_button(wt, held)
+	if held:
+		_pop(_weapon_btns[wt])
 		var am: Node = get_node_or_null("/root/AudioManager")
 		if am != null and am.has_method("haptic_light"):
 			am.haptic_light()
-	if _fire_btn != null:
-		_fire_btn.set_meta("pulse", 1.0 if held else _ring_pulse * 0.5)
 
 
 # --- Pause button (top-right safe corner) ---
@@ -304,7 +330,7 @@ func _set_fire(held: bool) -> void:
 
 func _build_pause_button() -> void:
 	var safe := _safe_area()
-	var size: float = _button_size() * 0.55  # Smaller than the action buttons
+	var size: float = _button_size() * 0.80  # Same physical size as before the 6/11 shrink
 	# Top edge 12 px below the notch / Dynamic Island inset.
 	var center := Vector2(
 		safe.position.x + safe.size.x - BUTTON_INSET * 0.55,
@@ -388,6 +414,8 @@ func _make_circle_button(center: Vector2, size: float, name: StringName) -> Cont
 	c.set_meta("col_panel", COL_PANEL)
 	c.set_meta("col_border", COL_BORDER_DIM)
 	c.set_meta("col_glow", COL_CYAN)
+	# Round hit area so the corners of neighbouring buttons don't steal taps.
+	c.set_meta("round_hit", true)
 	return c
 
 
@@ -438,14 +466,16 @@ func _process(delta: float) -> void:
 					)
 		if wt != _last_weapon_type:
 			_last_weapon_type = wt
-			var wcol: Color = _color_for_weapon(wt)
-			if _weapon_label != null:
-				_weapon_label.text = ["P", "B", "M"][clamp(wt, 0, 2)]
-				_weapon_label.add_theme_color_override("font_color", wcol)
-			if _fire_label != null:
-				_fire_label.add_theme_color_override("font_color", wcol)
-		if _fire_label != null:
-			_fire_label.text = "STOP" if GameState.fire_mode == GameState.FireMode.AUTO else "FIRE"
+		var levels: Dictionary = _player.get("weapon_levels") if "weapon_levels" in _player else {}
+		for i in _weapon_btns.size():
+			var wb: Control = _weapon_btns[i]
+			var active: bool = i == wt
+			wb.set_meta("ready", true)
+			wb.set_meta("col_border", Color(_color_for_weapon(i), 0.95) if active else COL_BORDER_DIM)
+			wb.set_meta("pulse", 1.0 if _weapon_held.has(i) else (_ring_pulse if active else 0.0))
+			wb.modulate = Color(1, 1, 1, 1.0) if active else Color(1, 1, 1, 0.62)
+			wb.queue_redraw()
+			_weapon_lvl_labels[i].text = "L%d" % int(levels.get(i, 1))
 
 		# Pulse + glow color depends on mode:
 		#  * DETONATE — fast red pulse, always "ready"
@@ -465,10 +495,6 @@ func _process(delta: float) -> void:
 				_torpedo_btn.set_meta("col_glow", COL_CYAN)
 				_torpedo_btn.set_meta("col_border", COL_BORDER_DIM)
 			_torpedo_btn.queue_redraw()
-		if _fire_btn != null:
-			_fire_btn.set_meta("ready", true)
-			_fire_btn.set_meta("pulse", 1.0 if _fire_held else _ring_pulse * 0.5)
-			_fire_btn.queue_redraw()
 
 
 ## True if any player torpedo is currently airborne. Drives the torpedo

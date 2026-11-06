@@ -20,6 +20,10 @@ const SETTINGS_PATH: String = "user://settings.cfg"
 ## fires while the FIRE button is held. Desktop mouse play is unaffected.
 enum FireMode { AUTO, HOLD }
 var fire_mode: int = FireMode.HOLD
+## Which bottom corner holds the weapon + torpedo buttons. The other thumb
+## steers. Default LEFT matches where the old FIRE button sat.
+enum ControlsSide { LEFT, RIGHT }
+var controls_side: int = ControlsSide.LEFT
 ## Session counters for PhysicsWatchdog; survive scene reloads, not relaunch.
 var physics_stalls: int = 0
 var physics_reloads: int = 0
@@ -34,14 +38,21 @@ func load_settings() -> void:
 	if cfg.load(SETTINGS_PATH) != OK:
 		return
 	fire_mode = clampi(int(cfg.get_value("controls", "fire_mode_v2", FireMode.HOLD)), FireMode.AUTO, FireMode.HOLD)
+	controls_side = clampi(int(cfg.get_value("controls", "side", ControlsSide.LEFT)), ControlsSide.LEFT, ControlsSide.RIGHT)
 
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("controls", "fire_mode_v2", fire_mode)
+	cfg.set_value("controls", "side", controls_side)
 	var err: int = cfg.save(SETTINGS_PATH)
 	if err != OK:
 		push_warning("GameState: settings save failed (%d)" % err)
+
+
+func set_controls_side(side: int) -> void:
+	controls_side = clampi(side, ControlsSide.LEFT, ControlsSide.RIGHT)
+	save_settings()
 
 
 func set_fire_mode(mode: int) -> void:

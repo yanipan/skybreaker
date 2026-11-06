@@ -81,6 +81,29 @@ func _ready() -> void:
 	_check(g1._light_volley(), "sector 1 uses light volleys")
 	GameState.current_level = 5
 	_check(not g1._light_volley(), "sector 5 back to full volleys")
+	# --- Drop economy + shop caps (6/11) ---
+	GameState.current_level = 1
+	p.weapon_levels = {0: 4, 1: 4, 2: 4}
+	var capped := 0
+	for i in 60:
+		if Pickup.roll_power_drop(get_tree()) < 0:
+			capped += 1
+	_check(capped == 60, "sector 1: weapons at L4 get money, not power (%d/60)" % capped)
+	p.weapon_levels = {0: 1, 1: 3, 2: 2}
+	_check(Pickup.boss_power_drop(get_tree()) == Pickup.Type.POWER_PHASER, "boss drops power for the weakest weapon")
+	p.weapon_levels = {0: 4, 1: 4, 2: 4}
+	_check(Pickup.boss_power_drop(get_tree()) == -1, "boss drops no power when all are capped")
+	GameState.current_level = 20
+	_check(Pickup.roll_power_drop(get_tree()) >= 0, "sector 20 under cap still drops power")
+	_check(Pickup.ENEMY_POWER_DROP_SCALE < 1.0 and Pickup.ASTEROID_POWER_DROP_SCALE < 1.0, "power drop rates scaled down")
+	p.energy_cells_bought = 0
+	var r0: float = p.regen_mul()
+	for i in 6:
+		_check(p.buy_energy_cell(), "energy cell %d buyable" % (i + 1))
+	_check(not p.buy_energy_cell(), "7th energy cell refused")
+	_check(p.regen_mul() > r0 + 0.8, "6 cells regen x%.2f" % p.regen_mul())
+	_check(is_equal_approx(p.max_charge, 100.0 * 3.4), "6 cells capacity %.0f" % p.max_charge)
+	_check(Player.TORPEDO_CAP == 8, "torpedo cap is 8")
 	GameState.current_level = saved_lvl
 	print("BALANCE TEST DONE fails=%d" % _fails)
 	get_tree().quit(_fails)

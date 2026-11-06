@@ -80,11 +80,30 @@ func _ready() -> void:
 	p.notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
 	await _expect(p, true, "AUTO focus-out resets to firing")
 
-	# --- Double tap cycles weapon ---
+	# --- Per-weapon buttons (6/11): select + fire, no double-tap switch ---
 	GameState.fire_mode = GameState.FireMode.HOLD
 	p.set_fire_button(false)
 	p.weapon_type = 0
-	p._last_tap_ms = -100000
+	p._refresh_derived_power()
+	p.set_weapon_button(2, true)
+	await _expect(p, true, "HOLD missile button fires")
+	_check(p.weapon_type == 2, "missile button selects missile (wt=%s)" % p.weapon_type)
+	p.set_weapon_button(1, true)
+	_check(p.weapon_type == 1, "second button pressed wins the slot (wt=%s)" % p.weapon_type)
+	p.set_weapon_button(2, false)
+	await _expect(p, true, "still firing while beam button is down")
+	p.set_weapon_button(1, false)
+	await _expect(p, false, "all weapon buttons up stops fire")
+	GameState.fire_mode = GameState.FireMode.AUTO
+	p._refresh_touch_firing()
+	p.set_weapon_button(0, true)
+	await _expect(p, false, "AUTO weapon button held pauses fire")
+	_check(p.weapon_type == 0, "AUTO tap selects phaser")
+	p.set_weapon_button(0, false)
+	await _expect(p, true, "AUTO release resumes fire")
+	GameState.fire_mode = GameState.FireMode.HOLD
+	p._refresh_touch_firing()
+	p.weapon_type = 0
 	p._touch_index = -1
 	p._is_dragging = false
 	var tap := Vector2(300, 900)
@@ -92,24 +111,27 @@ func _ready() -> void:
 	_touch(1, true, tap)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(p.weapon_type == 1, "double tap within 300ms/120px switches once (wt=%s)" % p.weapon_type)
+	_check(p.weapon_type == 0, "double tap on the field no longer switches (wt=%s)" % p.weapon_type)
 	_touch(1, false, tap)
 	_touch(0, false, tap)
+	# Cluster layout: no overlaps, inside the safe area, mirrored by side
+	var safe := Rect2(0, 0, 720, 1560)
+	var MC = load("res://scripts/MobileControls.gd")
+	for side in [0, 1]:
+		var cs: Array = MC.cluster_centers(safe, 106.0, side)
+		var ok_gap := true
+		var inside := true
+		for a in cs.size():
+			if not safe.grow(-53.0).has_point(cs[a]):
+				inside = false
+			for b in range(a + 1, cs.size()):
+				if cs[a].distance_to(cs[b]) < 106.0 * 1.05:
+					ok_gap = false
+		_check(ok_gap, "side %d: buttons do not overlap" % side)
+		_check(inside, "side %d: buttons fully on screen" % side)
+		_check((cs[3].x < 360.0) == (side == 0), "side %d: cluster on the chosen side" % side)
 
 	p.weapon_type = 0
-	p._last_tap_ms = -100000
-	p._touch_index = -1
-	p._is_dragging = false
-	_touch(0, true, Vector2(300, 900))
-	_touch(1, true, Vector2(500, 900))
-	await get_tree().process_frame
-	await get_tree().process_frame
-	_check(p.weapon_type == 0, "two presses 200px apart do not switch (wt=%s)" % p.weapon_type)
-	_touch(1, false, Vector2(500, 900))
-	_touch(0, false, Vector2(300, 900))
-
-	p.weapon_type = 0
-	p._last_tap_ms = -100000
 	p._touch_index = -1
 	p._is_dragging = false
 	_touch(0, true, tap)
@@ -122,7 +144,6 @@ func _ready() -> void:
 	_check(p.weapon_type == 0, "two presses 400ms apart do not switch (wt=%s)" % p.weapon_type)
 
 	p.weapon_type = 0
-	p._last_tap_ms = -100000
 	p._touch_index = -1
 	p._is_dragging = false
 	_touch(0, true, tap)
@@ -130,7 +151,7 @@ func _ready() -> void:
 	_touch(2, true, tap)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_check(p.weapon_type == 1, "triple tap = one switch (wt=%s)" % p.weapon_type)
+	_check(p.weapon_type == 0, "triple tap on the field does not switch (wt=%s)" % p.weapon_type)
 	_touch(2, false, tap)
 	_touch(1, false, tap)
 	_touch(0, false, tap)

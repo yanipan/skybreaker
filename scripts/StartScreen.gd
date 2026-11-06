@@ -36,6 +36,8 @@ var _viewport_size: Vector2
 var _starfield: Node2D
 var _continue_btn: Button
 var _fire_mode_btn: Button
+var _side_btn: Button
+var _settings_layer: CanvasLayer
 var _hero_sprite: Sprite2D
 var _hero_base_pos: Vector2
 var _time: float = 0.0
@@ -187,10 +189,10 @@ func _build_ui() -> void:
 	layer.add_child(exit_btn)
 
 	var opt_font: int = int(clamp(opt_h * 0.40, 16, 26))
-	_fire_mode_btn = _make_button(_fire_mode_text(), btn_w, opt_h, COL_GOLD, opt_font)
-	_fire_mode_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 3)
-	_fire_mode_btn.pressed.connect(_on_fire_mode)
-	layer.add_child(_fire_mode_btn)
+	var settings_btn := _make_button("SETTINGS", btn_w, opt_h, COL_GOLD, opt_font)
+	settings_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 3)
+	settings_btn.pressed.connect(_open_settings)
+	layer.add_child(settings_btn)
 
 	# Footer high score
 	if GameState.high_score > 0:
@@ -378,6 +380,72 @@ func _animate_menu_out() -> void:
 	)
 
 
+# --- Settings page ---
+# Full-screen overlay above the menu: weapon-button side + fire mode.
+
+func _open_settings() -> void:
+	if _transitioning or _settings_layer != null:
+		return
+	var vw: float = _viewport_size.x
+	var vh: float = _viewport_size.y
+	_settings_layer = CanvasLayer.new()
+	_settings_layer.layer = 20
+	add_child(_settings_layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.82)
+	dim.size = Vector2(vw, vh)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_settings_layer.add_child(dim)
+	var pw: float = vw * 0.86
+	var bh: float = clamp(vh * 0.07, 54, 86)
+	var gap: float = clamp(vh * 0.02, 12, 24)
+	var font: int = int(clamp(bh * 0.36, 18, 30))
+	var title := Label.new()
+	title.text = "SETTINGS"
+	title.add_theme_font_override("font", Fonts.HEADLINE)
+	title.add_theme_font_size_override("font_size", int(font * 1.6))
+	title.add_theme_color_override("font_color", COL_CYAN)
+	title.add_theme_color_override("font_outline_color", Color.BLACK)
+	title.add_theme_constant_override("outline_size", 6)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size = Vector2(vw, font * 2.2)
+	var top: float = vh * 0.5 - (bh * 3 + gap * 2) * 0.5
+	title.position = Vector2(0, top - font * 3.0)
+	_settings_layer.add_child(title)
+	var x: float = (vw - pw) * 0.5
+	_side_btn = _make_button(_side_text(), pw, bh, COL_GOLD, font)
+	_side_btn.position = Vector2(x, top)
+	_side_btn.pressed.connect(_on_side)
+	_settings_layer.add_child(_side_btn)
+	_fire_mode_btn = _make_button(_fire_mode_text(), pw, bh, COL_GOLD, font)
+	_fire_mode_btn.position = Vector2(x, top + bh + gap)
+	_fire_mode_btn.pressed.connect(_on_fire_mode)
+	_settings_layer.add_child(_fire_mode_btn)
+	var back := _make_button("BACK", pw, bh, COL_CYAN, font)
+	back.position = Vector2(x, top + (bh + gap) * 2)
+	back.pressed.connect(_close_settings)
+	_settings_layer.add_child(back)
+
+
+func _close_settings() -> void:
+	if _settings_layer != null:
+		_settings_layer.queue_free()
+		_settings_layer = null
+		_side_btn = null
+		_fire_mode_btn = null
+
+
+func _side_text() -> String:
+	return "WEAPON BUTTONS: LEFT SIDE" if GameState.controls_side == GameState.ControlsSide.LEFT else "WEAPON BUTTONS: RIGHT SIDE"
+
+
+func _on_side() -> void:
+	var next: int = GameState.ControlsSide.RIGHT if GameState.controls_side == GameState.ControlsSide.LEFT else GameState.ControlsSide.LEFT
+	GameState.set_controls_side(next)
+	if _side_btn != null:
+		_side_btn.text = _side_text()
+
+
 func _fire_mode_text() -> String:
 	if GameState.fire_mode == GameState.FireMode.HOLD:
 		return "FIRE: HOLD BUTTON"
@@ -389,7 +457,8 @@ func _on_fire_mode() -> void:
 		return
 	var next: int = GameState.FireMode.HOLD if GameState.fire_mode == GameState.FireMode.AUTO else GameState.FireMode.AUTO
 	GameState.set_fire_mode(next)
-	_fire_mode_btn.text = _fire_mode_text()
+	if _fire_mode_btn != null:
+		_fire_mode_btn.text = _fire_mode_text()
 
 
 func _on_exit() -> void:

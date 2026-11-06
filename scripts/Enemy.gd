@@ -620,13 +620,17 @@ func _maybe_drop_pickup() -> void:
 		else:
 			_drop_pickup(Pickup.Type.HEALTH_FULL)
 		return
-	if roll < health_drop_chance + power_drop_chance:
-		# Roll one of the three weapon-specific power variants. Each is
-		# equally likely so all three slots level over time regardless of
-		# which weapon the player is currently wielding.
-		_drop_pickup(_random_power_variant())
+	var pwr_chance: float = power_drop_chance * Pickup.ENEMY_POWER_DROP_SCALE
+	if roll < health_drop_chance + pwr_chance:
+		# Equal-weight weapon roll; a weapon already at the sector soft cap
+		# pays out money instead (see Pickup.roll_power_drop).
+		var pt: int = Pickup.roll_power_drop(get_tree())
+		if pt < 0:
+			_drop_money()
+		else:
+			_drop_pickup(pt)
 		return
-	if roll < health_drop_chance + power_drop_chance + torpedo_drop_chance:
+	if roll < health_drop_chance + pwr_chance + torpedo_drop_chance:
 		_drop_pickup(Pickup.Type.TORPEDO)
 
 
@@ -639,17 +643,6 @@ func _drop_pickup(t: int) -> void:
 	# (bullet / ram kill), where adding an Area2D trips "Can't change this
 	# state while flushing queries".
 	get_parent().add_child.call_deferred(pickup)
-
-
-## Equal-weight pick across the three per-weapon power variants. Used by
-## every enemy drop site so the slots level over time even if the player
-## sticks to one weapon.
-func _random_power_variant() -> int:
-	var roll: int = randi() % 3
-	match roll:
-		0: return Pickup.Type.POWER_PHASER
-		1: return Pickup.Type.POWER_BEAM
-		_: return Pickup.Type.POWER_MISSILE
 
 
 func _drop_money() -> void:

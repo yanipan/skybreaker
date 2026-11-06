@@ -186,16 +186,15 @@ func _maybe_drop_pickup() -> void:
 	if randf() < money_drop_chance:
 		_drop(Pickup.Type.MONEY, money_value)
 	var roll: float = randf()
-	if roll < power_drop_chance:
-		# Randomized weapon-specific power — same equal-weight roll as enemies
-		var v: int = randi() % 3
-		var pwr: int = Pickup.Type.POWER_PHASER
-		if v == 1:
-			pwr = Pickup.Type.POWER_BEAM
-		elif v == 2:
-			pwr = Pickup.Type.POWER_MISSILE
-		_drop(pwr, 0)
-	elif roll < power_drop_chance + health_drop_chance:
+	var pwr_chance: float = power_drop_chance * Pickup.ASTEROID_POWER_DROP_SCALE
+	if roll < pwr_chance:
+		# Same roll as enemies: capped weapon -> money instead
+		var pwr: int = Pickup.roll_power_drop(get_tree())
+		if pwr < 0:
+			_drop(Pickup.Type.MONEY, money_value)
+		else:
+			_drop(pwr, 0)
+	elif roll < pwr_chance + health_drop_chance:
 		_drop(Pickup.Type.HEALTH_SMALL, 0)
 
 
