@@ -62,52 +62,56 @@
 <body>
 <main>
   <h1>Privacy Policy <span class="sub">— Skybreaker</span></h1>
-  <p class="meta">Last updated: April 18, 2026 · Applies to: Skybreaker mobile game (iOS App Store, Google Play Store) · Developer: Origami Solutions · <a href="mailto:yaniv@origami.ms">yaniv@origami.ms</a></p>
+  <p class="meta">Last updated: November 6, 2026 · Applies to: Skybreaker mobile game (iOS App Store, Google Play Store) · Developer: Origami Solutions · <a href="mailto:yaniv@origami.ms">yaniv@origami.ms</a></p>
 
   <h2>Summary</h2>
-  <p>Skybreaker does not collect, store, or transmit any personal data about you. The game runs entirely on your device. There are no analytics, no advertising, no accounts, no cloud sync, and no third-party SDKs that phone home.</p>
+  <p>Skybreaker does not collect any personal data. There are no accounts, no ads and no third-party SDKs. Starting with version 1.0.1 the game sends <strong>anonymous gameplay statistics</strong> to our own server so we can balance the game (for example, which sector is too hard). You can switch this off at any time in <strong>Settings &gt; Play stats</strong>.</p>
 
-  <h2>What data the app stores</h2>
-  <p>Skybreaker saves your progress (sector, weapon upgrades, money, high score, story-cutscene-seen flag, and similar gameplay state) in a single JSON file on your device at the OS-provided user data directory (<code>user://savegame.dat</code>). This file never leaves your device. We cannot read it; no server receives it. Deleting the app deletes the save.</p>
+  <h2>What data the app stores on your device</h2>
+  <p>Skybreaker saves your progress (sector, weapon upgrades, money, high score, settings and similar game state) in files in the app's private storage on your device. Deleting the app deletes them.</p>
 
-  <h2>What data the app collects about you</h2>
-  <p>None. The app does not:</p>
+  <h2>Anonymous gameplay statistics</h2>
+  <p>When play stats are on, the game sends small batches of game events to a server we operate (englishapp.shimonster.com). Each batch contains:</p>
   <ul>
-    <li>Request your name, email, phone number, or any account</li>
-    <li>Ask for contacts, photos, camera, microphone, location, health, or biometric data</li>
-    <li>Integrate any analytics SDK (no Firebase, Google Analytics, AppsFlyer, Amplitude, Mixpanel, or equivalent)</li>
-    <li>Integrate any advertising SDK (no AdMob, Unity Ads, ironSource, or equivalent)</li>
-    <li>Integrate any social-login SDK (no Facebook, Google, or Apple Sign-In)</li>
-    <li>Use third-party crash-reporting services</li>
-    <li>Connect to any server operated by us or by anyone else for any purpose</li>
+    <li>A <strong>random player ID</strong> created by the game on first launch. It is not derived from your device, your Apple or Google account, or any advertising identifier, and it is never combined with other data to identify you.</li>
+    <li><strong>Game events:</strong> game started, sector cleared, ship destroyed, game over, starbase purchase, app sent to the background, return to menu, settings changed.</li>
+    <li><strong>Game state at those moments:</strong> sector, score, in-game money, weapon levels, torpedoes, energy cells, shield and speed upgrades, how long each weapon was fired, time spent in the sector, lives, kills.</li>
+    <li><strong>Technical context:</strong> app version, platform (iOS or Android), OS version, device model name and the device language.</li>
+  </ul>
+  <p>We do <strong>not</strong> collect your name, email, phone number, contacts, location, photos, IP-based location, advertising identifiers, or any free text. The server does not store IP addresses with the statistics. The data is used only to understand how the game is played and to improve its balance. It is not sold, not shared with anyone, and not used for advertising or tracking across other apps or websites. It is kept for up to 24 months.</p>
+  <p>To stop sending statistics, open <strong>Settings</strong> on the start screen and set <strong>Play stats: OFF</strong>. Any statistics not yet sent are deleted from the device at that moment. To ask us to delete statistics already sent, email us the short player ID shown on the Settings page and we will delete everything stored under it.</p>
+
+  <h2>What the app does not do</h2>
+  <ul>
+    <li>No accounts, no sign-in, no social login</li>
+    <li>No advertising SDKs and no analytics SDKs from third parties (no Firebase, Google Analytics, AppsFlyer or similar)</li>
+    <li>No access to contacts, photos, camera, microphone, location, health or Bluetooth</li>
   </ul>
 
   <h2>Permissions the app requests</h2>
-  <p>The app declares only the default device permissions needed to run on iOS and Android:</p>
   <ul>
-    <li><strong>Network access</strong> — reserved but currently unused. No network requests are issued in version 1.0.0. A future update may add optional online features (e.g. leaderboards); if that happens this policy will be updated and the new data flows disclosed before the feature ships.</li>
-    <li><strong>Vibration / haptic feedback</strong> — so the action buttons and torpedo fire feel tactile. No data involved.</li>
+    <li><strong>Network access</strong>: used only to send the anonymous play statistics described above.</li>
+    <li><strong>Vibration / haptic feedback</strong>: so the buttons feel tactile. No data involved.</li>
   </ul>
-  <p>No camera, microphone, location, photo library, contacts, or Bluetooth permissions are requested.</p>
 
   <h2>Children</h2>
-  <p>Skybreaker is rated for players 9+ (mild cartoon violence, no language, no blood, no real-world imagery). The app is safe for children in the sense that no data about them is collected. Parents who want to restrict in-game time should use OS-level parental controls; the app itself has no time-gate, purchase, or external communication.</p>
+  <p>Skybreaker is rated 9+. It collects no personal data from anyone, including children; the anonymous statistics described above cannot identify a player.</p>
 
-  <h2>In-app purchases</h2>
-  <p>Skybreaker 1.0.0 is a paid one-time purchase with no in-app purchases and no subscription. Nothing is monetized after installation. Future updates may add optional cosmetic IAP; if that happens this policy will be updated.</p>
+  <h2>Price and purchases</h2>
+  <p>Skybreaker is free. It has no in-app purchases, no subscriptions and no ads. In-game money is earned only by playing.</p>
 
   <h2>Third parties</h2>
   <ul>
-    <li><strong>Apple / Google:</strong> the platform stores receive your purchase record and any payment details you provide to the store. Apple and Google have their own privacy policies that govern that data. Skybreaker does not receive any of it.</li>
-    <li><strong>No other third parties</strong> have access to any data related to your use of Skybreaker.</li>
+    <li><strong>Apple / Google</strong> handle the app download under their own privacy policies. Skybreaker receives none of that data.</li>
+    <li>Our statistics server is hosted by our web hosting provider (SiteGround), which processes the data only on our behalf.</li>
+    <li>No other third party receives any data related to your use of Skybreaker.</li>
   </ul>
 
   <h2>Your rights</h2>
-  <p>Because we do not collect personal data, there is no data to access, correct, delete, or export. You are always in complete control of every byte of data Skybreaker produces — it all lives on your device.</p>
-  <p>If you have questions about this policy, email <a href="mailto:yaniv@origami.ms">yaniv@origami.ms</a>.</p>
+  <p>You can switch statistics off at any time in Settings. For any question or deletion request, email <a href="mailto:yaniv@origami.ms">yaniv@origami.ms</a>.</p>
 
   <h2>Changes to this policy</h2>
-  <p>If we ever add network features, analytics, ads, or any other data flow, this policy will be updated and the change will be called out in the app's release notes before the feature goes live.</p>
+  <p>If we add any new data flow, this policy will be updated and the change will be noted in the release notes before it goes live.</p>
 
   <hr>
   <footer>© Origami Solutions · Skybreaker</footer>

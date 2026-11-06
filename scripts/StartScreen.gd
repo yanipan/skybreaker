@@ -38,6 +38,7 @@ var _continue_btn: Button
 var _fire_mode_btn: Button
 var _side_btn: Button
 var _settings_layer: CanvasLayer
+var _stats_btn: Button
 var _hero_sprite: Sprite2D
 var _hero_base_pos: Vector2
 var _time: float = 0.0
@@ -329,6 +330,7 @@ func _on_new_game() -> void:
 	GameState.lives = GameState.STARTING_LIVES
 	GameState.current_level = 1
 	GameState.clear_carry()
+	Telemetry.start_run("new")
 	GameState.clear_respawn()
 	GameState.reset_mission_stats()
 	# New Game means "new story from the beginning" — replay the intro
@@ -350,6 +352,7 @@ func _on_continue() -> void:
 		return
 	_transitioning = true
 	GameState.resume_pending = true
+	Telemetry.start_run("continue")
 	_animate_menu_out()
 
 
@@ -392,7 +395,7 @@ func _open_settings() -> void:
 	_settings_layer.layer = 20
 	add_child(_settings_layer)
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.82)
+	dim.color = Color(0.01, 0.02, 0.05, 0.96)
 	dim.size = Vector2(vw, vh)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	_settings_layer.add_child(dim)
@@ -409,7 +412,7 @@ func _open_settings() -> void:
 	title.add_theme_constant_override("outline_size", 6)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.size = Vector2(vw, font * 2.2)
-	var top: float = vh * 0.5 - (bh * 3 + gap * 2) * 0.5
+	var top: float = vh * 0.5 - (bh * 4 + gap * 3) * 0.5
 	title.position = Vector2(0, top - font * 3.0)
 	_settings_layer.add_child(title)
 	var x: float = (vw - pw) * 0.5
@@ -421,14 +424,44 @@ func _open_settings() -> void:
 	_fire_mode_btn.position = Vector2(x, top + bh + gap)
 	_fire_mode_btn.pressed.connect(_on_fire_mode)
 	_settings_layer.add_child(_fire_mode_btn)
+	_stats_btn = _make_button(_stats_text(), pw, bh, COL_GOLD, font)
+	_stats_btn.position = Vector2(x, top + (bh + gap) * 2)
+	_stats_btn.pressed.connect(_on_stats)
+	_settings_layer.add_child(_stats_btn)
+	var note := Label.new()
+	note.text = "Anonymous play stats help balance the game.\nNo name, no account, no ads.  ID %s" % Telemetry.player_id.substr(0, 8)
+	note.add_theme_font_size_override("font_size", int(font * 0.7))
+	note.add_theme_color_override("font_color", Color(0.78, 0.80, 0.92, 0.85))
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	note.size = Vector2(vw, font * 2.4)
+	note.position = Vector2(0, top + (bh + gap) * 3 - gap * 0.5)
+	_settings_layer.add_child(note)
 	var back := _make_button("BACK", pw, bh, COL_CYAN, font)
-	back.position = Vector2(x, top + (bh + gap) * 2)
+	back.position = Vector2(x, top + (bh + gap) * 3 + font * 2.4)
 	back.pressed.connect(_close_settings)
 	_settings_layer.add_child(back)
 
 
+func _stats_text() -> String:
+	return "PLAY STATS: ON" if Telemetry.enabled else "PLAY STATS: OFF"
+
+
+func _on_stats() -> void:
+	if Telemetry.enabled:
+		Telemetry.track("settings_changed", {"stats": false})
+		Telemetry.flush()
+	Telemetry.set_enabled(not Telemetry.enabled)
+	if _stats_btn != null:
+		_stats_btn.text = _stats_text()
+
+
 func _close_settings() -> void:
 	if _settings_layer != null:
+		Telemetry.track("settings_changed", {
+			"side": "right" if GameState.controls_side == GameState.ControlsSide.RIGHT else "left",
+			"fire_mode": "auto" if GameState.fire_mode == GameState.FireMode.AUTO else "hold",
+		})
+		_stats_btn = null
 		_settings_layer.queue_free()
 		_settings_layer = null
 		_side_btn = null

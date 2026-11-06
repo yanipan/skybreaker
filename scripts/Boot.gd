@@ -44,6 +44,10 @@ var _switched: bool = false
 ## finishes instantly — prevents an ugly one-frame flash on fast desktops
 ## while still feeling snappy on phones.
 const MIN_HOLD_SECONDS: float = 0.45
+## The SKYBREAKER title card stays at least this long after the publisher
+## splash ends. Before (6/11 report) the load was always done by then, so
+## the card faded in and the menu replaced it within ~0.2 s: a flash.
+const TITLE_HOLD_SECONDS: float = 1.5
 
 # --- Publisher splash ---
 const MASCOT_PATH: String = "res://assets/sprites/brand/shimmy_mascot.png"
@@ -70,6 +74,7 @@ var _splash_time: float = 0.0
 var _splash_ending: bool = false
 ## True once the splash has fully faded out (or there was none). Gates the switch.
 var _splash_done: bool = false
+var _splash_done_at: float = 0.0
 
 
 func _ready() -> void:
@@ -315,6 +320,7 @@ func _end_splash(fade: float) -> void:
 
 func _on_splash_faded() -> void:
 	_splash_done = true
+	_splash_done_at = _time
 	_sparkles.clear()
 	_mascot = null
 	if _splash_root != null:
@@ -386,7 +392,7 @@ func _process(delta: float) -> void:
 		_progress_rect.size.x = _progress_bg.size.x * clamp(pct, 0.05, 1.0)
 
 	# Also wait for the publisher splash to finish (or be skipped).
-	if status == ResourceLoader.THREAD_LOAD_LOADED and _time >= MIN_HOLD_SECONDS and _splash_done:
+	if status == ResourceLoader.THREAD_LOAD_LOADED and _time >= MIN_HOLD_SECONDS and _splash_done and _time - _splash_done_at >= TITLE_HOLD_SECONDS:
 		var packed: PackedScene = ResourceLoader.load_threaded_get(START_SCENE_PATH) as PackedScene
 		if packed != null:
 			_switched = true

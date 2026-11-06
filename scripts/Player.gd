@@ -836,6 +836,7 @@ func _try_fire_torpedo() -> void:
 	if torpedo_count <= 0:
 		return
 	torpedo_count -= 1
+	Telemetry.torps_fired += 1
 	_torpedo_grace_timer = torpedo_fire_grace
 	var torpedo: Torpedo = TorpedoScript.new()
 	torpedo.position = global_position + Vector2(0, -40)
@@ -852,6 +853,8 @@ func _handle_firing(delta: float) -> void:
 		_beam_audio_active = false
 		return
 	_fire_cooldown -= delta
+	if _is_firing:
+		Telemetry.add_fire_time(weapon_type, delta)
 	# Beam follows its own logic — handle and bail
 	if weapon_type == WeaponType.BEAM:
 		_handle_beam_firing(delta)

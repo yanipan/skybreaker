@@ -671,6 +671,7 @@ func _on_buy(kind: StringName) -> void:
 	# Deduct money manually (GameState.add_money is for gains)
 	GameState.money -= price
 	EventBus.money_changed.emit(GameState.money)
+	Telemetry.track("shop_purchase", {"item": String(kind), "price": price})
 	_show_message("PURCHASED!", Color(0.55, 1.0, 0.65))
 	_bounce_icon(kind)
 	_advance_alien()

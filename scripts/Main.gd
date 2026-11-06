@@ -90,6 +90,7 @@ var _shake_duration: float = 0.0
 
 
 func _ready() -> void:
+	Telemetry.reset_sector_counters()
 	print("=== Skybreaker booting ===")
 	_viewport_size = get_viewport_rect().size
 	print("Viewport size = ", _viewport_size)
@@ -665,6 +666,8 @@ func _finish_warp_transition() -> void:
 	Engine.time_scale = 1.0
 	GameState.commit_high_score()
 	var player := get_tree().get_first_node_in_group(&"player")
+	Telemetry.track("sector_complete", Telemetry.snapshot(player))
+	Telemetry.flush()
 	if player != null:
 		GameState.snapshot_player(player)
 	# Sidekick survives the jump if one is currently in the field.
@@ -787,6 +790,13 @@ func _on_player_died() -> void:
 	# at the moment of death (50% rounded up).
 	var player := get_tree().get_first_node_in_group(&"player")
 	var lives_after: int = GameState.lives - 1
+	var tdeath: Dictionary = Telemetry.snapshot(player)
+	tdeath["boss"] = not get_tree().get_nodes_in_group(&"bosses").is_empty()
+	Telemetry.track("death", tdeath)
+	if lives_after <= 0:
+		Telemetry.track("game_over", {"score": GameState.total_score + GameState.mission_score})
+		Telemetry.end_run()
+	Telemetry.flush()
 	if player != null and lives_after > 0:
 		GameState.stash_respawn(player)
 	GameState.lives = max(0, lives_after)
@@ -991,6 +1001,8 @@ func _notification(what: int) -> void:
 	# so add_child() here fails with "Parent node is busy setting up children"
 	# and the tree would stay paused with no overlay. The deferred call runs on
 	# the first idle frame after return; nothing auto-resumes on FOCUS_IN.
+	Telemetry.track("app_background", Telemetry.snapshot(get_tree().get_first_node_in_group(&"player")))
+	Telemetry.flush()
 	_snapshot_and_save()
 	get_tree().paused = true
 	_pause_pending = true
@@ -1087,6 +1099,9 @@ func _on_main_menu() -> void:
 	# player's current loadout exactly. has_active_run stays true so Continue
 	# is enabled. Never snapshot a finished (0-life) run.
 	var player := get_tree().get_first_node_in_group(&"player")
+	if GameState.has_active_run and not _game_over:
+		Telemetry.track("run_quit", Telemetry.snapshot(player))
+		Telemetry.flush()
 	if player != null and GameState.lives > 0 and GameState.has_active_run:
 		GameState.snapshot_player(player)
 	GameState.commit_high_score()

@@ -1,6 +1,6 @@
 # Privacy Policy — Skybreaker
 
-**Last updated:** April 18, 2026
+**Last updated:** November 6, 2026
 **Applies to:** Skybreaker mobile game (iOS App Store, Google Play Store)
 **Developer:** Origami Solutions — contact: yaniv@origami.ms
 
@@ -8,56 +8,54 @@
 
 ## Summary
 
-Skybreaker does not collect, store, or transmit any personal data about you. The game runs entirely on your device. There are no analytics, no advertising, no accounts, no cloud sync, and no third-party SDKs that phone home.
+Skybreaker does not collect any personal data. There are no accounts, no ads and no third-party SDKs. Starting with version 1.0.1 the game sends **anonymous gameplay statistics** to our own server so we can balance the game (for example, which sector is too hard). You can switch this off at any time in **Settings > Play stats**.
 
-## What data the app stores
+## What data the app stores on your device
 
-Skybreaker saves your progress (sector, weapon upgrades, money, high score, story-cutscene-seen flag, and similar gameplay state) in a single JSON file on your device at the OS-provided user data directory (`user://savegame.dat`). This file never leaves your device. We cannot read it; no server receives it. Deleting the app deletes the save.
+Skybreaker saves your progress (sector, weapon upgrades, money, high score, settings and similar game state) in files in the app's private storage on your device. Deleting the app deletes them.
 
-## What data the app collects about you
+## Anonymous gameplay statistics
 
-None. The app does not:
+When play stats are on, the game sends small batches of game events to a server we operate (englishapp.shimonster.com). Each batch contains:
 
-- Request your name, email, phone number, or any account
-- Ask for contacts, photos, camera, microphone, location, health, or biometric data
-- Integrate any analytics SDK (no Firebase, Google Analytics, AppsFlyer, Amplitude, Mixpanel, or equivalent)
-- Integrate any advertising SDK (no AdMob, Unity Ads, ironSource, or equivalent)
-- Integrate any social-login SDK (no Facebook, Google, or Apple Sign-In)
-- Use third-party crash-reporting services
-- Connect to any server operated by us or by anyone else for any purpose
+- A **random player ID** created by the game on first launch. It is not derived from your device, your Apple or Google account, or any advertising identifier, and it is never combined with other data to identify you.
+- **Game events:** game started, sector cleared, ship destroyed, game over, starbase purchase, app sent to the background, return to menu, settings changed.
+- **Game state at those moments:** sector, score, in-game money, weapon levels, torpedoes, energy cells, shield and speed upgrades, how long each weapon was fired, time spent in the sector, lives, kills.
+- **Technical context:** app version, platform (iOS or Android), OS version, device model name and the device language.
+
+We do **not** collect your name, email, phone number, contacts, location, photos, IP-based location, advertising identifiers, or any free text. The server does not store IP addresses with the statistics. The data is used only to understand how the game is played and to improve its balance. It is not sold, not shared with anyone, and not used for advertising or tracking across other apps or websites. It is kept for up to 24 months.
+
+To stop sending statistics, open **Settings** on the start screen and set **Play stats: OFF**. Any statistics not yet sent are deleted from the device at that moment. To ask us to delete statistics already sent, email us the short player ID shown on the Settings page and we will delete everything stored under it.
+
+## What the app does not do
+
+- No accounts, no sign-in, no social login
+- No advertising SDKs and no analytics SDKs from third parties (no Firebase, Google Analytics, AppsFlyer or similar)
+- No access to contacts, photos, camera, microphone, location, health or Bluetooth
 
 ## Permissions the app requests
 
-The app declares only the default device permissions needed to run on iOS and Android:
-
-- **Network access** — reserved but currently unused. No network requests are issued in version 1.0.0. A future update may add optional online features (e.g. leaderboards); if that happens this policy will be updated and the new data flows disclosed before the feature ships.
-- **Vibration / haptic feedback** — so the action buttons and torpedo fire feel tactile. No data involved.
-
-No camera, microphone, location, photo library, contacts, or Bluetooth permissions are requested.
+- **Network access**: used only to send the anonymous play statistics described above.
+- **Vibration / haptic feedback**: so the buttons feel tactile. No data involved.
 
 ## Children
 
-Skybreaker is rated for players 9+ (mild cartoon violence, no language, no blood, no real-world imagery). The app is safe for children in the sense that no data about them is collected. Parents who want to restrict in-game time should use OS-level parental controls; the app itself has no time-gate, purchase, or external communication.
+Skybreaker is rated 9+. It collects no personal data from anyone, including children; the anonymous statistics described above cannot identify a player.
 
-## In-app purchases
+## Price and purchases
 
-Skybreaker 1.0.0 is a paid one-time purchase with no in-app purchases and no subscription. Nothing is monetized after installation. Future updates may add optional cosmetic IAP; if that happens this policy will be updated.
+Skybreaker is free. It has no in-app purchases, no subscriptions and no ads. In-game money is earned only by playing.
 
 ## Third parties
 
-- **Apple / Google:** the platform stores receive your purchase record and any payment details you provide to the store. Apple and Google have their own privacy policies that govern that data. Skybreaker does not receive any of it.
-- **No other third parties** have access to any data related to your use of Skybreaker.
+- **Apple / Google** handle the app download under their own privacy policies. Skybreaker receives none of that data.
+- Our statistics server is hosted by our web hosting provider (SiteGround), which processes the data only on our behalf.
+- No other third party receives any data related to your use of Skybreaker.
 
 ## Your rights
 
-Because we do not collect personal data, there is no data to access, correct, delete, or export. You are always in complete control of every byte of data Skybreaker produces — it all lives on your device.
-
-If you have questions about this policy, email yaniv@origami.ms.
+You can switch statistics off at any time in Settings. For any question or deletion request, email yaniv@origami.ms.
 
 ## Changes to this policy
 
-If we ever add network features, analytics, ads, or any other data flow, this policy will be updated and the change will be called out in the app's release notes before the feature goes live.
-
----
-
-*This policy must be hosted at a publicly accessible URL before store submission. See `docs/STORE_SUBMISSION.md` step 3.*
+If we add any new data flow, this policy will be updated and the change will be noted in the release notes before it goes live.
