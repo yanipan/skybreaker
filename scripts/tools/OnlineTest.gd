@@ -36,6 +36,15 @@ func _ready() -> void:
 	GameState.begin_run(0, code, 777, "GodotTest_3")
 	var s: Dictionary = await Online.start_run(code)
 	_check(s.get("success", false) and GameState.run_seed == 424242, "challenge run gets the challenger's seed")
+	# Report flow: three other players report GodotTest_3 -> name resets.
+	var me_id: String = Telemetry.player_id
+	for i in 3:
+		Telemetry.player_id = "00000000-0000-4000-8000-00000000001%d" % i
+		var ok: bool = await Online.report_name("GodotTest_3")
+		_check(ok, "report %d accepted" % (i + 1))
+	Telemetry.player_id = me_id
+	var b2: Dictionary = await Online.board("all")
+	_check(b2.get("me") is Dictionary and str(b2["me"]["name"]).begins_with("Pilot-"), "3 reports reset the name to %s" % (b2.get("me", {}) as Dictionary).get("name", "?"))
 	Online.allow_debug = false
 	var off: Dictionary = await Online.call_api({"action": "board"})
 	_check(off.is_empty(), "debug builds stay offline by default")

@@ -136,6 +136,7 @@ func open_leaderboard() -> void:
 	box.add_child(_row([all_b, week_b]))
 	_status = _label("", _font(), COL_MUTED)
 	box.add_child(_status)
+	box.add_child(_label("Tap a name to report it.", _font() * 0.75, Color(COL_MUTED, 0.6)))
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(_vw * 0.86, _vh * 0.42)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -182,6 +183,16 @@ func _load_board(kind: String) -> void:
 func _board_row(row: Dictionary) -> Control:
 	var mine: bool = row.get("me", false)
 	var h := HBoxContainer.new()
+	h.mouse_filter = Control.MOUSE_FILTER_PASS
+	# Tap someone else's chosen name to report it (Apple 1.2 user content).
+	var who: String = str(row["name"])
+	if not mine and not who.begins_with("Pilot-"):
+		h.mouse_filter = Control.MOUSE_FILTER_STOP
+		h.gui_input.connect(func(ev: InputEvent) -> void:
+			var tapped: bool = (ev is InputEventScreenTouch and not ev.pressed) or \
+				(ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed and ev.device != InputEvent.DEVICE_ID_EMULATION)
+			if tapped:
+				_confirm_report(who))
 	var col: Color = COL_GOLD if mine else Color(0.9, 0.93, 1.0)
 	var f: int = int(_font() * 0.95)
 	var parts: Array = [
@@ -198,8 +209,32 @@ func _board_row(row: Dictionary) -> Control:
 		l.clip_text = true
 		l.add_theme_font_size_override("font_size", f)
 		l.add_theme_color_override("font_color", col)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(l)
 	return h
+
+
+func _confirm_report(who: String) -> void:
+	var box := _open("REPORT NAME")
+	box.add_child(_label("Report the pilot name \"%s\" as offensive or inappropriate?" % who, _font() * 1.1, Color.WHITE))
+	box.add_child(_label("We review every report. Names reported by several players are removed automatically.", _font() * 0.9, COL_MUTED))
+	var msg := _label("", _font(), COL_GREEN)
+	box.add_child(msg)
+	var holder := VBoxContainer.new()
+	box.add_child(holder)
+	holder.add_child(_row([
+		_button("REPORT", COL_RED, func() -> void:
+			msg.text = "Sending..."
+			var ok: bool = await Online.report_name(who)
+			if not is_instance_valid(msg):
+				return
+			msg.text = "Thanks, we'll review it." if ok else "No connection. Try again later."
+			if ok:
+				for c in holder.get_children():
+					c.queue_free()
+				holder.add_child(_button("BACK", COL_CYAN, open_leaderboard))),
+		_button("CANCEL", COL_CYAN, open_leaderboard),
+	]))
 
 
 # --- Pilot name ---

@@ -16,6 +16,9 @@ func _ready() -> void:
 	ss._online_ui.open_leaderboard()
 	await get_tree().create_timer(3.0).timeout
 	await _shot(out + "/ui_board.png")
+	ss._online_ui._confirm_report("SomeName_9")
+	await get_tree().create_timer(0.5).timeout
+	await _shot(out + "/ui_report.png")
 	ss._online_ui.open_name_prompt()
 	await get_tree().create_timer(0.5).timeout
 	await _shot(out + "/ui_name.png")

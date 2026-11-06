@@ -184,5 +184,10 @@ func get_challenge(code: String) -> Dictionary:
 	return await call_api({"action": "challenge_get", "code": code.strip_edges().to_upper()})
 
 
+func report_name(n: String) -> bool:
+	var r: Dictionary = await call_api({"action": "report", "name": n})
+	return r.get("success", false)
+
+
 func has_custom_name() -> bool:
 	return pilot_name != "" and not pilot_name.begins_with("Pilot-")
