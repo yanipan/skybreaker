@@ -16,6 +16,8 @@ const AsteroidScript := preload("res://scripts/Asteroid.gd")
 ## independently of waves so the rocks add ambient pressure.
 @export var asteroid_interval_min: float = 4.5
 @export var asteroid_interval_max: float = 9.0
+## While a boss is alive, a wave is at most this many ships.
+const BOSS_WAVE_MAX: int = 2
 
 var _viewport_size: Vector2
 var _timer: float = 0.0
@@ -50,8 +52,9 @@ var _sidekick_dropped: bool = false
 var _sidekick_enabled: bool = false
 
 # Boss — spawned partway into a level if Levels.gd marks it as has_boss.
-# Regular enemies keep spawning before, during, and after — the player still
-# needs steady fodder for pickups while fighting the boss.
+# Regular enemies keep spawning before, during, and after so the player still
+# has pickup fodder, but while the boss is alive waves cap at BOSS_WAVE_MAX
+# and the gap stretches to max(_spawn_interval * 3, 9s).
 var _boss_spawn_time: float = -1.0
 var _boss_spawned: bool = false
 var _boss_enabled: bool = false
@@ -133,7 +136,8 @@ func _process(delta: float) -> void:
 	_mission_time += delta
 	_timer -= delta
 	if _timer <= 0.0:
-		_timer = _spawn_interval
+		var boss_alive := _boss_spawned and not get_tree().get_nodes_in_group(&"bosses").is_empty()
+		_timer = _boss_wave_interval() if boss_alive else _spawn_interval
 		_spawn_wave()
 	if _guaranteed_power_enabled and not _guaranteed_power_dropped and _mission_time >= _guaranteed_power_time:
 		_drop_guaranteed_power()
@@ -221,21 +225,18 @@ func _spawn_starbase() -> void:
 
 
 ## Spawns the level's boss centered above the playfield. Regular waves continue
-## firing in the background — the boss is layered on top, not a replacement —
-## but their cadence is throttled by 25% so the player isn't getting buried by
-## fodder while trying to focus on the boss pattern.
+## in the background — the boss is layered on top, not a replacement — but
+## while it lives, waves cap at BOSS_WAVE_MAX and fire at most every
+## max(_spawn_interval * 3, 9) seconds. After it dies the base cadence returns.
 func _spawn_boss() -> void:
 	_boss_spawned = true
 	var boss: Boss = BossScript.new()
 	boss.type = clamp(_boss_type_idx, 0, 5)
 	boss.position = Vector2(_viewport_size.x * 0.5, -120.0)
 	get_parent().add_child(boss)
-	# 25% slower wave cadence for the rest of the stage. We stretch the
-	# baseline interval AND the currently-running countdown so the slowdown
-	# is felt immediately, not only after the next spawn.
-	_spawn_interval = _spawn_interval * 1.3333
-	_timer = _timer * 1.3333
-	print("BOSS spawned: type=", _boss_type_idx, " — wave cadence x1.33")
+	# Push the next wave out so fodder does not land on the boss entrance.
+	_timer = max(_timer, _boss_wave_interval())
+	print("BOSS spawned: type=", _boss_type_idx, " — fodder <=", BOSS_WAVE_MAX, " every ", _boss_wave_interval(), "s")
 
 
 ## Spawns a single drifting asteroid. Size weights shift toward bigger rocks
@@ -279,6 +280,9 @@ func _spawn_wave() -> void:
 	var size_min: int = int(_level_data.get("wave_size_min", 1))
 	var size_max: int = int(_level_data.get("wave_size_max", 3))
 	var wave_size: int = randi_range(size_min, size_max)
+	var boss_alive := _boss_spawned and not get_tree().get_nodes_in_group(&"bosses").is_empty()
+	if boss_alive:
+		wave_size = mini(wave_size, BOSS_WAVE_MAX)
 	var x_jitter: float = randf_range(-x_jitter_range, x_jitter_range)
 
 	for i in wave_size:
@@ -303,6 +307,10 @@ func _spawn_wave() -> void:
 			enemy.position = Vector2(jx * _viewport_size.x, -80.0 + y_offset)
 
 		get_parent().add_child(enemy)
+
+
+func _boss_wave_interval() -> float:
+	return max(_spawn_interval * 3.0, 9.0)
 
 
 func get_level_duration() -> float:

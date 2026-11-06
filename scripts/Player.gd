@@ -3,12 +3,15 @@ class_name Player
 ## Player ship. Drag-to-move with thumb offset so the finger doesn't cover the ship.
 ## Self-constructs its visual + collision shape on _ready (no .tscn needed yet).
 
+const DOUBLE_TAP_MS: int = 300      ## Max gap (ms) between taps to count as a weapon switch
+const DOUBLE_TAP_PX: float = 120.0  ## Max distance between taps to count as a weapon switch
+
 @export var follow_speed: float = 16.0       ## How quickly the ship catches up to the target (higher = snappier)
 ## Movement speed tier — 0..3. Each tier scales follow_speed by 1.35x, bought at the Starbase shop.
 ## Baseline tier 0 is intentionally a touch slow to make speed upgrades meaningful.
 var speed_tier: int = 0
 const SPEED_TIER_MAX: int = 3
-@export var thumb_offset: float = 60.0       ## Pixels above the finger so the ship is visible while dragging
+@export var thumb_offset: float = 150.0      ## Pixels above the finger so the ship is visible while dragging
 @export var screen_padding: float = 40.0     ## Keep the ship this far from screen edges
 @export var ship_size: float = 74.0          ## Width/height of placeholder square (+15% over the original 64)
 @export var ship_color: Color = Color(0.3, 0.85, 1.0)
@@ -74,13 +77,17 @@ const BANK_VELOCITY_THRESHOLD: float = 60.0
 
 var _target_position: Vector2
 var _is_dragging: bool = false  ## Touch only — true while finger is on screen
-var _is_firing: bool = false    ## True while fire button (mouse left or touch) is held
+var _is_firing: bool = false    ## True while fire button (mouse left or FIRE button) is held
+## Main sets it during warp out / warp in.
+var firing_locked: bool = false
 const MISSILE_TURN_RATE_MIN: float = 1.2    ## Radians/sec at weapon level 1
 const MISSILE_TURN_RATE_MAX: float = 6.0    ## Radians/sec at weapon level 25
 const MISSILE_REACQUIRE_MIN: float = 120.0  ## Re-lock range at weapon level 1
 const MISSILE_REACQUIRE_MAX: float = 260.0  ## Re-lock range at weapon level 25
 var _touch_index: int = -1      ## Touch only — index of the finger steering the ship, -1 = none
-var _fire_touch_index: int = -1 ## Touch only — index of the second (fire-control) finger, -1 = none
+var _fire_button_held: bool = false ## Touch only — FIRE overlay button currently held
+var _last_tap_ms: int = -100000 ## Timestamp of the last screen tap (weapon double-tap)
+var _last_tap_pos: Vector2 = Vector2.ZERO ## Position of the last screen tap (weapon double-tap)
 var _touch_play: bool = false   ## True on mobile or once any touch arrives — enables the touch fire scheme
 var _mouse_active: bool = false ## True once we've seen any mouse motion (desktop)
 var _screen_size: Vector2
@@ -671,25 +678,28 @@ func _build_collision() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	# --- Touch (mobile) ---
-	# First finger down steers the ship. Firing is decoupled from steering
-	# (see GameState.FireMode): in AUTO the ship always fires and a held
-	# second finger ceases fire so the charge can refill; in HOLD the ship
-	# fires only while the second finger is held. A third finger is ignored.
+	# First finger down steers the ship. Extra fingers never steal steering.
+	# Firing is the on-screen FIRE button (see set_fire_button). Double-tap
+	# anywhere (button taps never reach here — Controls consume them) cycles
+	# weapon. Touch-emulated mouse is ignored in the mouse branches below.
 	if event is InputEventScreenTouch:
 		_touch_play = true
 		if event.pressed:
+			var now_ms: int = Time.get_ticks_msec()
+			if now_ms - _last_tap_ms <= DOUBLE_TAP_MS and event.position.distance_to(_last_tap_pos) <= DOUBLE_TAP_PX:
+				cycle_weapon()
+				_last_tap_ms = -100000
+			else:
+				_last_tap_ms = now_ms
+				_last_tap_pos = event.position
 			if _touch_index == -1:
 				_touch_index = event.index
 				_is_dragging = true
 				_update_target(event.position)
-			elif _fire_touch_index == -1 and event.index != _touch_index:
-				_fire_touch_index = event.index
 		else:
 			if event.index == _touch_index:
 				_touch_index = -1
 				_is_dragging = false
-			elif event.index == _fire_touch_index:
-				_fire_touch_index = -1
 		_refresh_touch_firing()
 		return
 	if event is InputEventScreenDrag:
@@ -699,18 +709,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# --- Mouse (desktop) ---
 	# Ship tracks mouse position always. Left click = fire only.
+	# Touch emulates mouse (device == DEVICE_ID_EMULATION); those events
+	# must never set _is_firing or the target through this path.
 	if event is InputEventMouseMotion:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return
 		_mouse_active = true
 		_update_target(event.position)
 		return
 	if event is InputEventMouseButton:
+		if event.device == InputEvent.DEVICE_ID_EMULATION:
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_is_firing = event.pressed
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 			_try_fire_torpedo()
 		elif event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
-			# Scroll-wheel CLICK cycles to the next weapon. Mobile gets its
-			# own control later — for now desktop is the only switch path.
+			# Scroll-wheel CLICK cycles to the next weapon. Mobile double-
+			# tap is the matching switch path.
 			cycle_weapon()
 		return
 
@@ -720,22 +736,29 @@ func _notification(what: int) -> void:
 	# drop the tracked finger instead of leaving the ship stuck on it.
 	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		_touch_index = -1
-		_fire_touch_index = -1
+		_fire_button_held = false
 		_is_dragging = false
 		_is_firing = false
 		if _touch_play:
 			_refresh_touch_firing()
 
 
-## Derive _is_firing from the touch state and the player's fire-mode setting.
+## Overlay FIRE button. Marks this as touch play so AUTO/HOLD apply.
+func set_fire_button(held: bool) -> void:
+	_fire_button_held = held
+	_touch_play = true
+	_refresh_touch_firing()
+
+
+## Derive _is_firing from the FIRE button and the player's fire-mode setting.
 ## Only used for touch play; desktop keeps mouse-button firing.
 func _refresh_touch_firing() -> void:
 	if not _touch_play:
 		return
 	if GameState.fire_mode == GameState.FireMode.HOLD:
-		_is_firing = _fire_touch_index != -1
+		_is_firing = _fire_button_held
 	else:
-		_is_firing = _fire_touch_index == -1
+		_is_firing = not _fire_button_held
 
 
 func _update_target(finger_pos: Vector2) -> void:
@@ -803,6 +826,12 @@ func _try_fire_torpedo() -> void:
 
 
 func _handle_firing(delta: float) -> void:
+	if firing_locked:
+		for b in _beams:
+			if is_instance_valid(b):
+				b.active = false
+		_beam_audio_active = false
+		return
 	_fire_cooldown -= delta
 	# Beam follows its own logic — handle and bail
 	if weapon_type == WeaponType.BEAM:

@@ -2,7 +2,7 @@ from asc import *
 APP='6827568754'; VER='a2fa8b40-5824-45f0-ac2a-48b72eab9b43'
 end=time.time()+25*60; b=None
 while time.time()<end:
-    st,j=call('GET',f'/v1/builds?filter[app]={APP}&filter[version]=3&sort=-uploadedDate&limit=5')
+    st,j=call('GET',f'/v1/builds?filter[app]={APP}&filter[version]=4&sort=-uploadedDate&limit=5')
     if st==200 and j['data']:
         b=j['data'][0]; a=b['attributes']
         print(time.strftime('%H:%M:%S'),b['id'],a.get('processingState'),a.get('uploadedDate'),flush=True)

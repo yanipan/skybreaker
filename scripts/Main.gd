@@ -38,6 +38,7 @@ var _pause_layer: CanvasLayer = null
 ## every parent is "busy setting up children"), so the overlay is built on
 ## the next idle frame while the tree is already paused.
 var _pause_pending: bool = false
+var _physics_watchdog: PhysicsWatchdog = null
 
 # --- Level state ---
 var _starfield: Node2D
@@ -113,6 +114,7 @@ func _ready() -> void:
 	_spawn_enemy_spawner()
 	_spawn_level_banner()
 	_spawn_mobile_controls()
+	_spawn_physics_watchdog()
 	# If we just warped here from the previous sector, kick off the entry
 	# cinematic — the player arrives from below the screen and the warp
 	# streaks linger for a moment before settling into normal scrolling.
@@ -174,8 +176,14 @@ func _process(delta: float) -> void:
 	_update_shake(delta)
 	_update_level_banner(delta)
 	_update_warp(delta)
+	if not is_inside_tree():
+		return
 	_update_entry(delta)
+	if not is_inside_tree():
+		return
 	_update_death(delta)
+	if not is_inside_tree():
+		return
 	_check_level_complete()
 
 
@@ -407,6 +415,26 @@ func _spawn_mobile_controls() -> void:
 	add_child(mc)
 
 
+func _spawn_physics_watchdog() -> void:
+	_physics_watchdog = PhysicsWatchdog.new()
+	_physics_watchdog.unrecovered.connect(_on_physics_unrecovered)
+	add_child(_physics_watchdog)
+
+
+## Collisions are still dead after forcing the physics server on. Reload the
+## sector from a no-penalty snapshot, at most twice per launch so a truly
+## broken device cannot loop. A transition already under way resets it anyway.
+func _on_physics_unrecovered() -> void:
+	if GameState.physics_reloads >= 2:
+		return
+	if _death_active or _warp_active or _entry_active or _cutscene_active or _level_transitioning or get_tree().paused:
+		return
+	GameState.physics_reloads += 1
+	_level_transitioning = true
+	_snapshot_and_save()
+	get_tree().reload_current_scene.call_deferred()
+
+
 func _spawn_level_banner() -> void:
 	# Big centered "Sector N: Name" title that fades out after a couple seconds.
 	_level_banner = Label.new()
@@ -539,6 +567,9 @@ func _begin_warp_transition() -> void:
 	# Stop further spawns and pickup drops mid-warp
 	if _spawner != null:
 		_spawner.set_process(false)
+	var fire_player := get_tree().get_first_node_in_group(&"player")
+	if fire_player != null:
+		fire_player.firing_locked = true
 	# Clear current enemies + bullets so the warp jump looks like deep space.
 	# Pickups are intentionally NOT cleared here — _update_warp magnetises them
 	# to the player during the ramp so the player scoops up anything still on
@@ -678,6 +709,7 @@ func _begin_entry_sequence() -> void:
 		_starfield.warp_factor = 0.85
 	var player := get_tree().get_first_node_in_group(&"player")
 	if player != null and is_instance_valid(player):
+		player.firing_locked = true
 		_entry_player_target_y = player.position.y
 		_entry_player_start_y = _viewport_size.y + 120.0
 		player.position.y = _entry_player_start_y
@@ -722,6 +754,7 @@ func _finish_entry_sequence() -> void:
 	_warp_curtain = null
 	var player := get_tree().get_first_node_in_group(&"player")
 	if player != null and is_instance_valid(player):
+		player.firing_locked = false
 		player.position.y = _entry_player_target_y
 		if "_target_position" in player:
 			player._target_position = player.position
@@ -1016,6 +1049,19 @@ func _open_pause() -> void:
 	quit_btn.pressed.connect(_on_quit_app)
 	_pause_layer.add_child(quit_btn)
 
+	# Small status line: tells a device bug report whether collisions are alive.
+	if _physics_watchdog != null:
+		var diag := Label.new()
+		var ship := get_tree().get_first_node_in_group(&"player") as Area2D
+		var ship_state: String = "ship %d/%d" % [int(ship.monitoring), int(ship.monitorable)] if ship != null else "no ship"
+		diag.text = "%s  %s" % [_physics_watchdog.diag_text(), ship_state]
+		diag.add_theme_font_size_override("font_size", 20)
+		diag.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+		diag.size = Vector2(_viewport_size.x, 30)
+		diag.position = Vector2(0, col_y + (btn_h + gap) * 3 + 8.0)
+		diag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_pause_layer.add_child(diag)
+
 
 func _make_pause_button(text: String, w: float, h: float, color: Color) -> Button:
 	var b := Button.new()
@@ -1058,6 +1104,7 @@ func _on_quit_app() -> void:
 
 
 func _finish_death_sequence() -> void:
+	_level_transitioning = true
 	_death_active = false
 	Engine.time_scale = 1.0
 	GameState.commit_high_score()

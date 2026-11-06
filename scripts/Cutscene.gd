@@ -61,6 +61,8 @@ var _skip_btn: Control
 var _advance_timer: float = 0.0
 var _beat_duration: float = 5.0
 var _kb_tween: Tween
+var _kb_tween_prev: Tween   ## Two slots alternate, so this one is on the slot being reused
+var _fade_tween: Tween
 var _dismissing: bool = false
 
 
@@ -262,6 +264,9 @@ func _advance_to_beat(idx: int, is_first: bool) -> void:
 		target_rect.modulate.a = 0.0
 
 	# Kick off Ken Burns on the still. Pan direction alternates per beat.
+	if _kb_tween_prev != null and _kb_tween_prev.is_valid():
+		_kb_tween_prev.kill()
+	_kb_tween_prev = _kb_tween
 	_kb_tween = create_tween()
 	_kb_tween.set_process_mode(Tween.TWEEN_PROCESS_IDLE)
 	var pan_dir: float = 1.0 if (idx % 2 == 0) else -1.0
@@ -274,7 +279,11 @@ func _advance_to_beat(idx: int, is_first: bool) -> void:
 
 	# Crossfade or hard-fade from black on the first beat.
 	var fade_dur: float = EDGE_FADE_SECONDS if is_first else BEAT_CROSSFADE_SECONDS
+	# A tap mid-crossfade: stop the old fade so it can't fight the new one.
+	if _fade_tween != null and _fade_tween.is_valid():
+		_fade_tween.kill()
 	var fade_tw := create_tween()
+	_fade_tween = fade_tw
 	fade_tw.set_process_mode(Tween.TWEEN_PROCESS_IDLE)
 	if is_first:
 		# Black curtain fades out to reveal the image already at full opacity.
@@ -307,15 +316,21 @@ func _process(delta: float) -> void:
 
 # --- Input handlers ---
 
+## One physical tap: touch on mobile, left-click on desktop. A touch also
+## arrives as an emulated mouse click, which must not count a second time or
+## one tap skips a whole image.
+func _is_tap(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		return event.pressed
+	return event is InputEventMouseButton and event.pressed \
+			and event.button_index == MOUSE_BUTTON_LEFT \
+			and event.device != InputEvent.DEVICE_ID_EMULATION
+
+
 func _on_tap_catcher_input(event: InputEvent) -> void:
 	if _dismissing:
 		return
-	# Accept any press — touch on mobile, left-click on desktop testing.
-	var pressed: bool = false
-	if event is InputEventScreenTouch and event.pressed:
-		pressed = true
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		pressed = true
+	var pressed: bool = _is_tap(event)
 	if pressed:
 		_on_advance_requested()
 		get_viewport().set_input_as_handled()
@@ -324,11 +339,7 @@ func _on_tap_catcher_input(event: InputEvent) -> void:
 func _on_skip_input(event: InputEvent) -> void:
 	if _dismissing:
 		return
-	var pressed: bool = false
-	if event is InputEventScreenTouch and event.pressed:
-		pressed = true
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		pressed = true
+	var pressed: bool = _is_tap(event)
 	if pressed:
 		var am: Node = get_node_or_null("/root/AudioManager")
 		if am != null and am.has_method("haptic_light"):

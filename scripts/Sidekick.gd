@@ -149,6 +149,10 @@ func _process(delta: float) -> void:
 	elif shield < float(max_shield):
 		shield = min(float(max_shield), shield + shield_recharge_per_second * delta)
 
+	# Hold fire with the player during warp out / warp in.
+	if is_instance_valid(_player) and _player.firing_locked:
+		queue_redraw()
+		return
 	_fire_cooldown -= delta
 	if _fire_cooldown <= 0.0:
 		_fire()

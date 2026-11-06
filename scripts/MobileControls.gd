@@ -3,18 +3,22 @@ class_name MobileControls
 ## On-screen touch controls overlay for mobile builds.
 ##
 ## Skybreaker's core movement is already touch-driven (drag anywhere on the
-## screen to fly the ship — see Player._unhandled_input), but mobile players
-## have no way to fire torpedoes or switch weapons because those are bound
-## to right-click and middle-click on desktop. This overlay adds:
+## screen to fly the ship — see Player._unhandled_input). Desktop binds fire
+## to left-click and torpedoes to right-click; this overlay adds the mobile
+## equivalents:
 ##
 ##   * BIG TORPEDO BUTTON in the bottom-right safe area — large circular
 ##     hitbox so it's hittable with the right thumb without looking. Glows
 ##     when a torpedo is ready, dims + shows a cooldown ring when empty,
 ##     and shows the live ammo count in the center.
-##   * BIG WEAPON-SWITCH BUTTON in the bottom-left safe area — same size,
-##     cycles PHASER → BEAM → MISSILE → PHASER. Center shows the active
-##     weapon's letter (P / B / M) so the player always knows what they're
-##     about to shoot.
+##   * BIG FIRE BUTTON in the bottom-left safe area — 1.2× the action-button
+##     size, kept fully on-screen in the safe area. Label reads "FIRE"
+##     (or "STOP" in AUTO fire_mode) with the active weapon letter
+##     (P / B / M) underneath, coloured to the current weapon. HOLD mode
+##     fires while held; AUTO mode pauses fire while held. Double-tap
+##     anywhere else (consumed button taps never reach the player) cycles
+##     PHASER → BEAM → MISSILE. Release is delivered even if the finger
+##     slides off the control.
 ##   * ANIMATED FINGER RING that follows the player's drag position. Gives
 ##     real visual confirmation that the touch is registering — a major
 ##     QoL win on phones where the ship offsets above the finger and
@@ -23,8 +27,8 @@ class_name MobileControls
 ## Design rules:
 ##   * The two buttons are real Control nodes with mouse_filter = STOP, so
 ##     taps inside them are CONSUMED before reaching Player._unhandled_input.
-##     This means tapping the torpedo button never accidentally yanks the
-##     ship to the bottom-right corner — exactly what you want.
+##     This means tapping the fire/torpedo button never accidentally yanks
+##     the ship to that corner — exactly what you want.
 ##   * The finger ring listens via _input (NOT _unhandled_input) so it sees
 ##     touches even when other nodes will consume them, but it never calls
 ##     accept_event() so the player still gets the same events.
@@ -61,11 +65,13 @@ const COL_BORDER_DIM := Color(0.55, 0.95, 1.00, 0.45)
 var _viewport_size: Vector2
 var _player: Node = null
 var _torpedo_btn: Control
-var _weapon_btn: Control
+var _fire_btn: Control
 var _pause_btn: Control
 var _torpedo_label: Label
+var _fire_label: Label
 var _weapon_label: Label
 var _torpedo_count_label: Label
+var _fire_held: bool = false
 var _finger_ring: Node2D
 var _ring_pos: Vector2 = Vector2.ZERO
 var _ring_alpha: float = 0.0
@@ -99,7 +105,7 @@ func _ready() -> void:
 	_resolve_player()
 	_build_finger_ring()
 	_build_torpedo_button()
-	_build_weapon_button()
+	_build_fire_button()
 	_build_pause_button()
 	EventBus.cutscene_started.connect(_on_cutscene_started)
 	EventBus.cutscene_finished.connect(_on_cutscene_finished)
@@ -226,52 +232,67 @@ func _fire_torpedo() -> void:
 			am.haptic_medium()
 
 
-# --- Weapon switch button (bottom-left) ---
+# --- Fire button (bottom-left) ---
 
-func _build_weapon_button() -> void:
+func _build_fire_button() -> void:
 	var safe := _safe_area()
-	var size: float = _button_size()
-	var center := Vector2(
-		safe.position.x + BUTTON_INSET,
-		safe.position.y + safe.size.y - BUTTON_INSET
-	)
-	_weapon_btn = _make_circle_button(center, size, &"WEAPON")
-	_weapon_btn.gui_input.connect(_on_weapon_input)
-	add_child(_weapon_btn)
+	var size: float = _button_size() * 1.2
+	var half: float = size * 0.5
+	var cx: float = safe.position.x + maxf(BUTTON_INSET, half)
+	var cy: float = safe.position.y + safe.size.y - maxf(BUTTON_INSET, half)
+	cx = clampf(cx, safe.position.x + half, safe.position.x + safe.size.x - half)
+	cy = clampf(cy, safe.position.y + half, safe.position.y + safe.size.y - half)
+	var center := Vector2(cx, cy)
+	_fire_btn = _make_circle_button(center, size, &"FIRE")
+	_fire_btn.gui_input.connect(_on_fire_input)
+	add_child(_fire_btn)
+
+	_fire_label = Label.new()
+	_fire_label.text = "FIRE"
+	_fire_label.add_theme_font_size_override("font_size", int(size * 0.20))
+	_fire_label.add_theme_color_override("font_color", COL_CYAN)
+	_fire_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_fire_label.add_theme_constant_override("outline_size", 4)
+	_fire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_fire_label.size = Vector2(size, size * 0.40)
+	_fire_label.position = Vector2(0, size * 0.16)
+	_fire_btn.add_child(_fire_label)
 
 	_weapon_label = Label.new()
 	_weapon_label.text = "P"
-	_weapon_label.add_theme_font_size_override("font_size", int(size * 0.55))
+	_weapon_label.add_theme_font_size_override("font_size", int(size * 0.28))
 	_weapon_label.add_theme_color_override("font_color", COL_CYAN)
 	_weapon_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_weapon_label.add_theme_constant_override("outline_size", 5)
 	_weapon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_weapon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_weapon_label.size = Vector2(size, size)
-	_weapon_label.position = Vector2(0, 0)
-	_weapon_btn.add_child(_weapon_label)
+	_weapon_label.size = Vector2(size, size * 0.40)
+	_weapon_label.position = Vector2(0, size * 0.46)
+	_fire_btn.add_child(_weapon_label)
 
 
-func _on_weapon_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch and event.pressed:
-		_cycle_weapon()
+func _on_fire_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		_set_fire(event.pressed)
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		_cycle_weapon()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.device != InputEvent.DEVICE_ID_EMULATION:
+		_set_fire(event.pressed)
 		get_viewport().set_input_as_handled()
 
 
-func _cycle_weapon() -> void:
+func _set_fire(held: bool) -> void:
+	_fire_held = held
 	_resolve_player()
-	if _player == null or not _player.has_method("cycle_weapon"):
-		return
-	_player.cycle_weapon()
-	_pop(_weapon_btn)
-	# Light tap for weapon switch — it's a quick QoL toggle, not a
-	# committed action like firing a torpedo.
-	var am: Node = get_node_or_null("/root/AudioManager")
-	if am != null and am.has_method("haptic_light"):
-		am.haptic_light()
+	if _player != null and is_instance_valid(_player) and _player.has_method("set_fire_button"):
+		_player.set_fire_button(held)
+	if held:
+		_pop(_fire_btn)
+		var am: Node = get_node_or_null("/root/AudioManager")
+		if am != null and am.has_method("haptic_light"):
+			am.haptic_light()
+	if _fire_btn != null:
+		_fire_btn.set_meta("pulse", 1.0 if held else _ring_pulse * 0.5)
 
 
 # --- Pause button (top-right safe corner) ---
@@ -417,9 +438,14 @@ func _process(delta: float) -> void:
 					)
 		if wt != _last_weapon_type:
 			_last_weapon_type = wt
+			var wcol: Color = _color_for_weapon(wt)
 			if _weapon_label != null:
 				_weapon_label.text = ["P", "B", "M"][clamp(wt, 0, 2)]
-				_weapon_label.add_theme_color_override("font_color", _color_for_weapon(wt))
+				_weapon_label.add_theme_color_override("font_color", wcol)
+			if _fire_label != null:
+				_fire_label.add_theme_color_override("font_color", wcol)
+		if _fire_label != null:
+			_fire_label.text = "STOP" if GameState.fire_mode == GameState.FireMode.AUTO else "FIRE"
 
 		# Pulse + glow color depends on mode:
 		#  * DETONATE — fast red pulse, always "ready"
@@ -439,10 +465,10 @@ func _process(delta: float) -> void:
 				_torpedo_btn.set_meta("col_glow", COL_CYAN)
 				_torpedo_btn.set_meta("col_border", COL_BORDER_DIM)
 			_torpedo_btn.queue_redraw()
-		if _weapon_btn != null:
-			_weapon_btn.set_meta("ready", true)
-			_weapon_btn.set_meta("pulse", _ring_pulse * 0.5)
-			_weapon_btn.queue_redraw()
+		if _fire_btn != null:
+			_fire_btn.set_meta("ready", true)
+			_fire_btn.set_meta("pulse", 1.0 if _fire_held else _ring_pulse * 0.5)
+			_fire_btn.queue_redraw()
 
 
 ## True if any player torpedo is currently airborne. Drives the torpedo

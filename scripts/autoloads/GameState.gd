@@ -15,11 +15,14 @@ var resume_pending: bool = false
 # Kept in their own file (not the run save) so NEW GAME / delete_save never
 # resets them. Loaded once at autoload time.
 const SETTINGS_PATH: String = "user://settings.cfg"
-## Touch fire scheme. AUTO: the ship fires on its own; holding a second
-## finger anywhere ceases fire (lets the charge refill). HOLD: the ship only
-## fires while a second finger is held down. Desktop mouse play is unaffected.
+## Touch fire scheme. AUTO: the ship fires on its own; holding the FIRE
+## button ceases fire (lets the charge refill). HOLD: the ship only
+## fires while the FIRE button is held. Desktop mouse play is unaffected.
 enum FireMode { AUTO, HOLD }
-var fire_mode: int = FireMode.AUTO
+var fire_mode: int = FireMode.HOLD
+## Session counters for PhysicsWatchdog; survive scene reloads, not relaunch.
+var physics_stalls: int = 0
+var physics_reloads: int = 0
 
 
 func _ready() -> void:
@@ -30,12 +33,12 @@ func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
 		return
-	fire_mode = clampi(int(cfg.get_value("controls", "fire_mode", FireMode.AUTO)), FireMode.AUTO, FireMode.HOLD)
+	fire_mode = clampi(int(cfg.get_value("controls", "fire_mode_v2", FireMode.HOLD)), FireMode.AUTO, FireMode.HOLD)
 
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
-	cfg.set_value("controls", "fire_mode", fire_mode)
+	cfg.set_value("controls", "fire_mode_v2", fire_mode)
 	var err: int = cfg.save(SETTINGS_PATH)
 	if err != OK:
 		push_warning("GameState: settings save failed (%d)" % err)
@@ -146,29 +149,19 @@ func clear_respawn() -> void:
 	respawn_energy_cells = 0
 
 
-## Stash 50% (rounded up) of the player's current loadout for respawn after
+## Stash the player's current loadout, unreduced, for respawn after
 ## a non-fatal death. Half phasers, half torpedoes, etc — losing a life still
 ## stings but the player isn't reset to bare baseline.
 func stash_respawn(p: Node) -> void:
 	respawn_pending = true
-	# Death penalty is light: lose ONE weapon power level, keep everything
-	# else intact. Otherwise dying in a late sector left the player with too
-	# few power-ups to survive the rematch. HP/shields refill on respawn.
+	# No weapon penalty on death: dying already costs a life and restarts the
+	# sector. HP/shields refill on respawn.
 	respawn_hp = int(p.max_hp) if "max_hp" in p else 100
 	respawn_shield = float(int(p.max_shield) if "max_shield" in p else 1)
-	respawn_power_level = max(1, (int(p.power_level) if "power_level" in p else 1) - 1)
-	# Snapshot the per-weapon slots, applying the same -1 penalty to whichever
-	# slot was active when the player died. The other two slots carry forward
-	# unchanged so a missile death doesn't punish the phaser progress you'd
-	# already grinded for.
+	respawn_power_level = max(1, int(p.power_level) if "power_level" in p else 1)
 	respawn_weapon_levels = {}
 	if "weapon_levels" in p and p.weapon_levels is Dictionary:
-		var active_wt: int = int(p.weapon_type) if "weapon_type" in p else 0
-		for k in p.weapon_levels.keys():
-			var v: int = int(p.weapon_levels[k])
-			if int(k) == active_wt:
-				v = max(1, v - 1)
-			respawn_weapon_levels[k] = v
+		respawn_weapon_levels = p.weapon_levels.duplicate()
 	respawn_torpedo_count = int(p.torpedo_count) if "torpedo_count" in p else 0
 	respawn_weapon_type = int(p.weapon_type) if "weapon_type" in p else 0
 	respawn_max_shield = int(p.max_shield) if "max_shield" in p else 1

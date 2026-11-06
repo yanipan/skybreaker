@@ -380,8 +380,8 @@ func _animate_menu_out() -> void:
 
 func _fire_mode_text() -> String:
 	if GameState.fire_mode == GameState.FireMode.HOLD:
-		return "FIRE: HOLD 2ND FINGER"
-	return "FIRE: AUTO  (2ND FINGER PAUSES)"
+		return "FIRE: HOLD BUTTON"
+	return "FIRE: AUTO  (BUTTON PAUSES)"
 
 
 func _on_fire_mode() -> void:

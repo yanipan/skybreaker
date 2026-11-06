@@ -117,7 +117,7 @@ assets/fonts/
 - Fire rate bonus per level: 0.49/level (dropped from 0.62 to make L25 ≈ old L20)
 - Max power level: 25 (raised from 20; per-level formulas rescaled to match old L20 ceiling)
 - Max charge: 100 base, +50% per energy cell, max 4 cells (300 total)
-- Death penalty: lose 1 weapon power level on the active slot, keep everything else
+- Death penalty: lose a life and restart the sector; weapons and gear are kept
 
 ## Store / Release
 - `docs/STORE_SUBMISSION.md` — submission runbook
