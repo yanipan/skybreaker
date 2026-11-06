@@ -55,3 +55,7 @@ graphify-out/
 # raw gameplay masters for store shots (180 MB, regenerate with ShotDirector)
 assets/store/screenshots/master_gameplay/
 __pycache__/
+
+# Online API keys (server copies in skybreaker/api/_common.php)
+config/online_keys.gd
+config/online_keys.gd.uid

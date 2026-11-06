@@ -9,7 +9,7 @@ extends Node
 signal run_finished(result: Dictionary)
 
 const ENDPOINT: String = "https://englishapp.shimonster.com/skybreaker/api/lb.php"
-const SIG_PARTS: Array = ["f868a23a93b2a18e", "5339d376a340f5cc", "a5caf887e365f39f"]
+const KEYS := preload("res://config/online_keys.gd")
 const PENDING_PATH: String = "user://pending_run_end.json"
 const TIMEOUT: float = 10.0
 
@@ -33,7 +33,7 @@ func _ready() -> void:
 
 
 func _sig_key() -> PackedByteArray:
-	return "".join(SIG_PARTS).to_utf8_buffer()
+	return KEYS.SIG_KEY.to_utf8_buffer()
 
 
 func _sign(ts: int, body: String) -> String:

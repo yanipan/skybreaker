@@ -8,7 +8,9 @@ extends Node
 ## Server: englishapp.shimonster.com/skybreaker/api/track.php (+ stats.php).
 
 const ENDPOINT: String = "https://englishapp.shimonster.com/skybreaker/api/track.php"
-const APP_KEY: String = "dfe2b02bd541a187be0488b57d9a04ef"
+const KEYS := preload("res://config/online_keys.gd")
+var APP_KEY: String:
+	get: return KEYS.APP_KEY
 const CFG_PATH: String = "user://telemetry.cfg"
 const QUEUE_PATH: String = "user://telemetry_queue.json"
 const MAX_QUEUE: int = 300
