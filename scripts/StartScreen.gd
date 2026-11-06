@@ -35,7 +35,6 @@ const COL_PANEL_BG := Color(0.04, 0.06, 0.12, 0.78)
 var _viewport_size: Vector2
 var _starfield: Node2D
 var _continue_btn: Button
-var _fire_mode_btn: Button
 var _side_btn: Button
 var _settings_layer: CanvasLayer
 var _stats_btn: Button
@@ -412,7 +411,7 @@ func _open_settings() -> void:
 	title.add_theme_constant_override("outline_size", 6)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.size = Vector2(vw, font * 2.2)
-	var top: float = vh * 0.5 - (bh * 4 + gap * 3) * 0.5
+	var top: float = vh * 0.5 - (bh * 3 + gap * 2) * 0.5
 	title.position = Vector2(0, top - font * 3.0)
 	_settings_layer.add_child(title)
 	var x: float = (vw - pw) * 0.5
@@ -420,12 +419,8 @@ func _open_settings() -> void:
 	_side_btn.position = Vector2(x, top)
 	_side_btn.pressed.connect(_on_side)
 	_settings_layer.add_child(_side_btn)
-	_fire_mode_btn = _make_button(_fire_mode_text(), pw, bh, COL_GOLD, font)
-	_fire_mode_btn.position = Vector2(x, top + bh + gap)
-	_fire_mode_btn.pressed.connect(_on_fire_mode)
-	_settings_layer.add_child(_fire_mode_btn)
 	_stats_btn = _make_button(_stats_text(), pw, bh, COL_GOLD, font)
-	_stats_btn.position = Vector2(x, top + (bh + gap) * 2)
+	_stats_btn.position = Vector2(x, top + bh + gap)
 	_stats_btn.pressed.connect(_on_stats)
 	_settings_layer.add_child(_stats_btn)
 	var note := Label.new()
@@ -434,10 +429,10 @@ func _open_settings() -> void:
 	note.add_theme_color_override("font_color", Color(0.78, 0.80, 0.92, 0.85))
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.size = Vector2(vw, font * 2.4)
-	note.position = Vector2(0, top + (bh + gap) * 3 - gap * 0.5)
+	note.position = Vector2(0, top + (bh + gap) * 2 - gap * 0.5)
 	_settings_layer.add_child(note)
 	var back := _make_button("BACK", pw, bh, COL_CYAN, font)
-	back.position = Vector2(x, top + (bh + gap) * 3 + font * 2.4)
+	back.position = Vector2(x, top + (bh + gap) * 2 + font * 2.4)
 	back.pressed.connect(_close_settings)
 	_settings_layer.add_child(back)
 
@@ -459,13 +454,11 @@ func _close_settings() -> void:
 	if _settings_layer != null:
 		Telemetry.track("settings_changed", {
 			"side": "right" if GameState.controls_side == GameState.ControlsSide.RIGHT else "left",
-			"fire_mode": "auto" if GameState.fire_mode == GameState.FireMode.AUTO else "hold",
 		})
 		_stats_btn = null
 		_settings_layer.queue_free()
 		_settings_layer = null
 		_side_btn = null
-		_fire_mode_btn = null
 
 
 func _side_text() -> String:
@@ -477,21 +470,6 @@ func _on_side() -> void:
 	GameState.set_controls_side(next)
 	if _side_btn != null:
 		_side_btn.text = _side_text()
-
-
-func _fire_mode_text() -> String:
-	if GameState.fire_mode == GameState.FireMode.HOLD:
-		return "FIRE: HOLD BUTTON"
-	return "FIRE: AUTO  (BUTTON PAUSES)"
-
-
-func _on_fire_mode() -> void:
-	if _transitioning:
-		return
-	var next: int = GameState.FireMode.HOLD if GameState.fire_mode == GameState.FireMode.AUTO else GameState.FireMode.AUTO
-	GameState.set_fire_mode(next)
-	if _fire_mode_btn != null:
-		_fire_mode_btn.text = _fire_mode_text()
 
 
 func _on_exit() -> void:

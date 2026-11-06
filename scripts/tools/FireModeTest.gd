@@ -201,7 +201,12 @@ func _ready() -> void:
 	_check(load_err == OK and stored == GameState.FireMode.AUTO, "settings wrote fire_mode_v2=%s" % stored)
 	GameState.fire_mode = GameState.FireMode.HOLD
 	GameState.load_settings()
-	_check(GameState.fire_mode == GameState.FireMode.AUTO, "settings round-trip loaded AUTO from v2 (got %s)" % GameState.fire_mode)
+	_check(GameState.fire_mode == GameState.FireMode.HOLD, "saved AUTO from an old build is ignored: always HOLD (got %s)" % GameState.fire_mode)
+	GameState.set_controls_side(GameState.ControlsSide.RIGHT)
+	GameState.controls_side = GameState.ControlsSide.LEFT
+	GameState.load_settings()
+	_check(GameState.controls_side == GameState.ControlsSide.RIGHT, "controls side round-trips through settings.cfg")
+	GameState.set_controls_side(GameState.ControlsSide.LEFT)
 	GameState.set_fire_mode(GameState.FireMode.HOLD)
 	_check(GameState.fire_mode == GameState.FireMode.HOLD, "restored HOLD default")
 

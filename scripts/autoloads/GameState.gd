@@ -37,7 +37,9 @@ func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) != OK:
 		return
-	fire_mode = clampi(int(cfg.get_value("controls", "fire_mode_v2", FireMode.HOLD)), FireMode.AUTO, FireMode.HOLD)
+	# 6/11: the fire-mode setting is gone (per-weapon buttons are hold-to-
+	# fire), so a saved AUTO from an older build is ignored.
+	fire_mode = FireMode.HOLD
 	controls_side = clampi(int(cfg.get_value("controls", "side", ControlsSide.LEFT)), ControlsSide.LEFT, ControlsSide.RIGHT)
 
 

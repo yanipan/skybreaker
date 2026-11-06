@@ -39,7 +39,6 @@ func _ready() -> void:
 	add_child(_http)
 	track("session_start", {
 		"side": "right" if GameState.controls_side == GameState.ControlsSide.RIGHT else "left",
-		"fire_mode": "auto" if GameState.fire_mode == GameState.FireMode.AUTO else "hold",
 	})
 	call_deferred("flush")
 
