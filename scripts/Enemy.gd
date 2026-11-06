@@ -44,6 +44,13 @@ var contact_damage: int = 1
 # Firing
 var fire_pattern: StringName = &"none"  ## "none", "aimed", "spread", "straight", "fan"
 var fire_interval: float = 0.0
+## Sector 1 fire interval multiplier (Sector 20 is 0.45). Was 1.70: early
+## sectors felt like bullet hell (playtest 6/11).
+const EARLY_FIRE_MUL: float = 2.4
+const FIRST_SHOT_MIN: float = 0.9
+## Up to this sector, multi-shot volleys are thinned (fan 5 -> 3, drones 4 -> 2,
+## tank spread 3 -> 2).
+const LIGHT_VOLLEY_UNTIL: int = 4
 var _fire_timer: float = 0.0
 var fire_sfx: AudioStream = null
 var bullet_style: int = 0   ## EnemyBullet.Style — set per type so each enemy has distinct shots
@@ -274,11 +281,13 @@ func _configure() -> void:
 	var hp_mul: float = lerp(0.70, 2.90, t)
 	var speed_mul: float = lerp(0.80, 1.30, t)
 	var fire_t: float = t * t * (3.0 - 2.0 * t)  # smoothstep
-	var fire_mul: float = lerp(1.70, 0.45, fire_t)
+	var fire_mul: float = lerp(EARLY_FIRE_MUL, 0.45, fire_t)
 	max_hp = max(1, int(round(float(max_hp) * hp_mul)))
 	speed *= speed_mul
 	if fire_interval > 0.0:
 		fire_interval *= fire_mul
+		# First shot waits too, and never comes the instant a ship enters.
+		_fire_timer = max(_fire_timer * fire_mul, FIRST_SHOT_MIN)
 	# Late-game enemies hit harder on contact too — by Sector 20 a graze costs
 	# nearly twice as much HP as it does in Sector 1.
 	contact_damage = max(1, int(round(float(contact_damage) * lerp(0.85, 1.80, t))))
@@ -446,6 +455,10 @@ func _process(delta: float) -> void:
 		queue_free()
 
 
+func _light_volley() -> bool:
+	return GameState.current_level <= LIGHT_VOLLEY_UNTIL
+
+
 func _fire() -> void:
 	match fire_pattern:
 		&"straight":
@@ -459,21 +472,24 @@ func _fire() -> void:
 			_spawn_enemy_bullet(dir, 4)
 		&"spread":
 			# Heavier rounds from a Tank
-			_spawn_enemy_bullet(Vector2.DOWN.rotated(-0.35), 6)
-			_spawn_enemy_bullet(Vector2.DOWN, 6)
-			_spawn_enemy_bullet(Vector2.DOWN.rotated(0.35), 6)
+			if _light_volley():
+				_spawn_enemy_bullet(Vector2.DOWN.rotated(-0.18), 6)
+				_spawn_enemy_bullet(Vector2.DOWN.rotated(0.18), 6)
+			else:
+				_spawn_enemy_bullet(Vector2.DOWN.rotated(-0.35), 6)
+				_spawn_enemy_bullet(Vector2.DOWN, 6)
+				_spawn_enemy_bullet(Vector2.DOWN.rotated(0.35), 6)
 		&"fan":
-			# Bomber lobs a wide downward fan of 5 shots
-			_spawn_enemy_bullet(Vector2.DOWN.rotated(-0.45), 4)
-			_spawn_enemy_bullet(Vector2.DOWN.rotated(-0.22), 4)
-			_spawn_enemy_bullet(Vector2.DOWN, 4)
-			_spawn_enemy_bullet(Vector2.DOWN.rotated(0.22), 4)
-			_spawn_enemy_bullet(Vector2.DOWN.rotated(0.45), 4)
+			# Bomber lobs a wide downward fan of 5 shots (3 in early sectors)
+			var fan_offs: Array = [-0.30, 0.0, 0.30] if _light_volley() else [-0.45, -0.22, 0.0, 0.22, 0.45]
+			for fo in fan_offs:
+				_spawn_enemy_bullet(Vector2.DOWN.rotated(fo), 4)
 		&"drone_burst":
 			# Swarmer releases a tight cluster of 4 cyan drones in a downward
 			# spread. Drones are slower than normal bullets so they linger and
 			# create a real area-denial effect.
-			for off in [-0.25, -0.08, 0.08, 0.25]:
+			var drone_offs: Array = [-0.15, 0.15] if _light_volley() else [-0.25, -0.08, 0.08, 0.25]
+			for off in drone_offs:
 				var d := Vector2.DOWN.rotated(off)
 				var bullet: EnemyBullet = EnemyBulletScript.new()
 				bullet.position = global_position + Vector2(0, enemy_size * 0.4)

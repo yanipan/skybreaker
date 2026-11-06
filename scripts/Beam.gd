@@ -80,11 +80,10 @@ func _process(delta: float) -> void:
 		# the hard way, beam or no beam.
 		if "from_boss" in b and b.from_boss:
 			continue
-		# Roll dropped from 50% to 30% — most bullets now leak through the
-		# beam. Combined with the narrower burn band, beam-only kids will
-		# actually take hits.
-		if randf() < 0.42:
-			b.queue_free()
+		# Heat, not a per-frame dice roll: the old 42%-per-frame roll popped
+		# almost every bullet on contact at 60 fps, so the beam was a shield.
+		if b.has_method("beam_burn"):
+			b.beam_burn(delta)
 	# --- Apply core damage to the topmost core target in tick chunks ---
 	if hit_target != null:
 		_damage_accum += dps * delta

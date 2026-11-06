@@ -26,6 +26,15 @@ enum Style { ORB, PELLET, DART, SHELL, SPARK, PLASMA, ACID }
 ## Boss._spawn_bullet.
 @export var from_boss: bool = false
 
+## Beam burn: a non-boss bullet must sit in the beam for beam_resist seconds
+## before it pops. Rolled per bullet, so some pop on contact and some take a
+## couple of beam sweeps. Heavy rounds (shell/acid/plasma) resist longer.
+const BEAM_RESIST_MIN: float = 0.12
+const BEAM_RESIST_MAX: float = 0.45
+const BEAM_HEAVY_MUL: float = 1.6
+var beam_resist: float = 0.0
+var beam_heat: float = 0.0
+
 const TRAIL_LEN: int = 10
 
 var _viewport_size: Vector2
@@ -37,8 +46,29 @@ func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
 	add_to_group(&"enemy_bullets")
 	_apply_style_defaults()
+	_roll_beam_resist()
 	_build_collision()
 	queue_redraw()
+
+
+func _roll_beam_resist() -> void:
+	beam_resist = randf_range(BEAM_RESIST_MIN, BEAM_RESIST_MAX)
+	if style == Style.SHELL or style == Style.ACID or style == Style.PLASMA:
+		beam_resist *= BEAM_HEAVY_MUL
+
+
+## Called by Beam every frame this bullet sits in the burn band. Returns true
+## (and frees the bullet) once enough heat has built up. Heat stays between
+## sweeps, so a second pass finishes a bullet the first one softened.
+func beam_burn(delta: float) -> bool:
+	if from_boss:
+		return false
+	beam_heat += delta
+	modulate = Color(1, 1, 1).lerp(Color(2.2, 2.2, 2.2), clamp(beam_heat / max(beam_resist, 0.001), 0.0, 1.0))
+	if beam_heat >= beam_resist:
+		queue_free()
+		return true
+	return false
 
 
 ## Apply per-style defaults. Enemy.gd sets `style` before adding the bullet —

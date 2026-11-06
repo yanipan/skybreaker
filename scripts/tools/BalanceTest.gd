@@ -38,5 +38,49 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_check(b1.fire_cd_mul > 1.0 and b1.bullet_dmg_mul < 1.0, "boss 1 fires slower and hits softer")
 	_check(is_equal_approx(b2.fire_cd_mul, 1.0) and is_equal_approx(b2.bullet_dmg_mul, 1.0), "boss 2 unchanged")
+	# --- Beam burn: heat, not instant ---
+	var EB = load("res://scripts/EnemyBullet.gd")
+	var survived_frame := 0
+	var max_t := 0.0
+	for i in 40:
+		var eb: Node = EB.new()
+		add_child(eb)
+		if not eb.beam_burn(1.0 / 60.0):
+			survived_frame += 1
+		var tt := 1.0 / 60.0
+		while not eb.beam_burn(1.0 / 60.0):
+			tt += 1.0 / 60.0
+		max_t = max(max_t, tt)
+	print("beam: %d/40 survive one frame, slowest pop %.2fs" % [survived_frame, max_t])
+	_check(survived_frame == 40, "no normal bullet pops on its first beam frame")
+	_check(max_t <= 0.47, "every normal bullet pops within ~0.45s of beam")
+	var shell: Node = EB.new()
+	shell.style = 3  # SHELL
+	add_child(shell)
+	_check(shell.beam_resist >= 0.12 * 1.6 - 0.001, "heavy rounds resist longer")
+	var bb: Node = EB.new()
+	bb.from_boss = true
+	add_child(bb)
+	var popped := false
+	for i in 120:
+		popped = popped or bb.beam_burn(1.0 / 60.0)
+	_check(not popped, "boss bullets stay beam-immune")
+	# --- Early sector fire rate ---
+	var EN = load("res://scripts/Enemy.gd")
+	var saved_lvl: int = GameState.current_level
+	GameState.current_level = 1
+	var g1: Node = EN.new(); g1.type = 0; add_child(g1)
+	GameState.current_level = 20
+	var g20: Node = EN.new(); g20.type = 0; add_child(g20)
+	await get_tree().process_frame
+	print("grunt fire interval S1=%.2f S20=%.2f first shot S1=%.2f" % [g1.fire_interval, g20.fire_interval, g1._fire_timer])
+	_check(g1.fire_interval >= 2.8 * 2.4 - 0.01, "sector 1 grunt fires 2.4x slower than base")
+	_check(is_equal_approx(g20.fire_interval, 2.8 * 0.45), "sector 20 fire rate unchanged")
+	_check(g1._fire_timer >= 0.9, "no instant first shot")
+	GameState.current_level = 1
+	_check(g1._light_volley(), "sector 1 uses light volleys")
+	GameState.current_level = 5
+	_check(not g1._light_volley(), "sector 5 back to full volleys")
+	GameState.current_level = saved_lvl
 	print("BALANCE TEST DONE fails=%d" % _fails)
 	get_tree().quit(_fails)
