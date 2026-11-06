@@ -33,6 +33,8 @@ AudioManager="*res://scripts/autoloads/AudioManager.gd"
 Fonts="*res://scripts/autoloads/Fonts.gd"
 DevTools="*res://scripts/autoloads/DevTools.gd"
 Telemetry="*res://scripts/autoloads/Telemetry.gd"
+GameRng="*res://scripts/autoloads/GameRng.gd"
+Online="*res://scripts/autoloads/Online.gd"
 
 [display]
 

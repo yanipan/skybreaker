@@ -220,6 +220,35 @@ func snapshot_player(p: Node) -> void:
 	carry_sidekick = p.get_tree().get_first_node_in_group(&"sidekick") != null
 
 
+# --- Online run (leaderboard / challenges) ---
+## Wave seed for the whole run (GameRng). Challenges reuse the challenger's.
+var run_seed: int = 0
+## Score for the whole run (mission_score resets every sector, total_score
+## never resets). This is what the leaderboard ranks.
+var run_score: int = 0
+## Server-issued, single-use token; "" when the run started offline (unranked).
+var run_token: String = ""
+## Per cleared sector: {sector, score, t}. Sent with the final score so the
+## server can sanity-check it.
+var run_sectors: Array = []
+var challenge_code: String = ""
+var challenge_target: int = 0
+var challenge_name: String = ""
+## Result of the last finished run, shown on the start screen.
+var last_run: Dictionary = {}
+
+
+func begin_run(seed: int, code: String = "", target: int = 0, who: String = "") -> void:
+	reset_mission_stats()
+	run_score = 0
+	run_seed = seed
+	run_token = ""
+	run_sectors = []
+	challenge_code = code
+	challenge_target = target
+	challenge_name = who
+
+
 func reset_mission_stats() -> void:
 	mission_score = 0
 	mission_money = 0
@@ -236,13 +265,14 @@ func add_money(amount: int) -> void:
 func add_score(amount: int) -> void:
 	total_score += amount
 	mission_score += amount
+	run_score += amount
 	EventBus.score_changed.emit(total_score)
 
 
 ## Call when a run ends. If this run beat the high score, persist it.
 func commit_high_score() -> void:
-	if mission_score > high_score:
-		high_score = mission_score
+	if run_score > high_score:
+		high_score = run_score
 		EventBus.high_score_changed.emit(high_score)
 	# Save unconditionally — even if the score didn't beat the record, the
 	# run state (current_level / carry_* / money / etc.) needs to persist

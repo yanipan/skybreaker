@@ -91,6 +91,8 @@ var _shake_duration: float = 0.0
 
 func _ready() -> void:
 	Telemetry.reset_sector_counters()
+	# Same run seed + sector = same waves (friend challenges).
+	GameRng.seed_sector(GameState.run_seed, GameState.current_level)
 	print("=== Skybreaker booting ===")
 	_viewport_size = get_viewport_rect().size
 	print("Viewport size = ", _viewport_size)
@@ -345,6 +347,20 @@ func _spawn_hud() -> void:
 	_high_score_label.add_theme_font_size_override("font_size", 20)
 	_high_score_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	add_child(_high_score_label)
+	# Friend challenge: the target stays on screen for the whole run.
+	if GameState.challenge_code != "":
+		var ch := Label.new()
+		ch.position = Vector2(score_x - 120.0, score_y + 62)
+		ch.size = Vector2(score_w + 120.0, 26)
+		ch.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		ch.clip_text = true
+		ch.add_theme_font_override("font", Fonts.SUBHEAD)
+		ch.add_theme_font_size_override("font_size", 18)
+		ch.add_theme_color_override("font_color", Color(0.55, 1.0, 0.65))
+		ch.add_theme_color_override("font_outline_color", Color.BLACK)
+		ch.add_theme_constant_override("outline_size", 3)
+		ch.text = "BEAT %s  %d" % [GameState.challenge_name, GameState.challenge_target]
+		add_child(ch)
 
 	# Lives — under money on the left, hearts read instantly across the HUD.
 	# Parametric heart curve, ~26 px wide, one polygon per possible life.
@@ -374,11 +390,11 @@ func _refresh_hud() -> void:
 	if _money_label != null:
 		_money_label.text = "$%d" % GameState.money
 	if _score_label != null:
-		_score_label.text = "SCORE %d" % GameState.mission_score
+		_score_label.text = "SCORE %d" % GameState.run_score
 	if _high_score_label != null:
 		# Show the higher of saved best vs the current run, so a new record
 		# updates live as the player passes their previous best.
-		var best: int = max(GameState.high_score, GameState.mission_score)
+		var best: int = max(GameState.high_score, GameState.run_score)
 		_high_score_label.text = "BEST %d" % best
 	# One heart per remaining life — caps at MAX_LIVES, none on GAME OVER.
 	var shown_lives: int = clamp(0 if _game_over else GameState.lives, 0, GameState.MAX_LIVES)
@@ -541,6 +557,8 @@ func _begin_cutscene(key: StringName, then_warp: bool) -> void:
 			_snapshot_and_save()
 		if is_ending:
 			# Ending: wipe the run and bounce to StartScreen. No warp.
+			Online.record_sector(GameState.current_level, _spawner.get_mission_time() if _spawner != null else 0.0)
+			Online.finish_run(true)
 			GameState.has_active_run = false
 			GameState.current_level = 1
 			GameState.lives = GameState.STARTING_LIVES
@@ -668,6 +686,7 @@ func _finish_warp_transition() -> void:
 	var player := get_tree().get_first_node_in_group(&"player")
 	Telemetry.track("sector_complete", Telemetry.snapshot(player))
 	Telemetry.flush()
+	Online.record_sector(GameState.current_level, _spawner.get_mission_time() if _spawner != null else 0.0)
 	if player != null:
 		GameState.snapshot_player(player)
 	# Sidekick survives the jump if one is currently in the field.
@@ -794,8 +813,9 @@ func _on_player_died() -> void:
 	tdeath["boss"] = not get_tree().get_nodes_in_group(&"bosses").is_empty()
 	Telemetry.track("death", tdeath)
 	if lives_after <= 0:
-		Telemetry.track("game_over", {"score": GameState.total_score + GameState.mission_score})
+		Telemetry.track("game_over", {"score": GameState.run_score})
 		Telemetry.end_run()
+		Online.finish_run(false)
 	Telemetry.flush()
 	if player != null and lives_after > 0:
 		GameState.stash_respawn(player)

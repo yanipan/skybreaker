@@ -1,6 +1,6 @@
 # Privacy Policy — Skybreaker
 
-**Last updated:** November 6, 2026
+**Last updated:** November 6, 2026 (pilot names and leaderboards added)
 **Applies to:** Skybreaker mobile game (iOS App Store, Google Play Store)
 **Developer:** Origami Solutions — contact: yaniv@origami.ms
 
@@ -27,6 +27,12 @@ We do **not** collect your name, email, phone number, contacts, location, photos
 
 To stop sending statistics, open **Settings** on the start screen and set **Play stats: OFF**. Any statistics not yet sent are deleted from the device at that moment. To ask us to delete statistics already sent, email us the short player ID shown on the Settings page and we will delete everything stored under it.
 
+## Pilot names and leaderboards
+
+If you finish a run while online, your score is sent to our server so it can appear on the public leaderboard and be used for friend challenges. Each score is stored with your random player ID, the sector you reached, the wave seed of the run and the time it was played, so the server can check that the score is genuine. You can choose a **pilot name** (3 to 16 letters, numbers or _). Until you do, you appear as Pilot-XXXX. Your pilot name and best scores are **visible to all players**. Do not use your real name or any personal information as a pilot name. Names are checked by an automatic filter, and we remove or reset names that are offensive or impersonate someone. To have your name or scores removed, email us the short player ID shown on the Settings page.
+
+A **challenge code** (6 characters) only lets a friend replay the same waves and see your pilot name and score. It contains no personal data.
+
 ## What the app does not do
 
 - No accounts, no sign-in, no social login
@@ -35,7 +41,7 @@ To stop sending statistics, open **Settings** on the start screen and set **Play
 
 ## Permissions the app requests
 
-- **Network access**: used only to send the anonymous play statistics described above.
+- **Network access**: used only for the anonymous play statistics, the leaderboard and friend challenges described above.
 - **Vibration / haptic feedback**: so the buttons feel tactile. No data involved.
 
 ## Children

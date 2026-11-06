@@ -101,7 +101,7 @@ func track(event_name: String, data: Dictionary = {}) -> void:
 		"name": event_name,
 		"run_id": run_id,
 		"sector": GameState.current_level,
-		"score": GameState.total_score + GameState.mission_score,
+		"score": GameState.run_score,
 		"money": GameState.money,
 		"ts": int(Time.get_unix_time_from_system()),
 	}

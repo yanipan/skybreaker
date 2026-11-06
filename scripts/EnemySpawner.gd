@@ -84,24 +84,24 @@ func _ready() -> void:
 	var dur: float = float(_level_data.get("duration", 60.0))
 	_guaranteed_power_enabled = (GameState.current_level % 2 == 0)
 	if _guaranteed_power_enabled:
-		_guaranteed_power_time = randf_range(dur * 0.20, dur * 0.80)
+		_guaranteed_power_time = GameRng.randf_range(dur * 0.20, dur * 0.80)
 	# Weapon-change drop every 3rd stage so the player still sees their other
 	# weapon options without flooding the field with goodies.
 	_weapon_change_enabled = (GameState.current_level % 3 == 1)
 	if _weapon_change_enabled:
-		_weapon_change_time = randf_range(dur * 0.30, dur * 0.70)
+		_weapon_change_time = GameRng.randf_range(dur * 0.30, dur * 0.70)
 	# Rare LIFE drop — ~12% chance per stage from level 3 onward, never on a
 	# boss stage. Tied to a single random moment in the middle of the stage.
 	var has_boss_now: bool = bool(_level_data.get("has_boss", false))
-	if not has_boss_now and GameState.current_level >= 3 and randf() < 0.12:
+	if not has_boss_now and GameState.current_level >= 3 and GameRng.randf() < 0.12:
 		_life_enabled = true
-		_life_time = randf_range(dur * 0.30, dur * 0.70)
+		_life_time = GameRng.randf_range(dur * 0.30, dur * 0.70)
 	# SIDEKICK drop — was ~8% from level 4 onward, bumped to ~22% from level 3
 	# onward. Sidekick is the more interesting friendly buff so we want the
 	# player to actually see it land in most runs (not once a session).
-	if not has_boss_now and GameState.current_level >= 3 and randf() < 0.22:
+	if not has_boss_now and GameState.current_level >= 3 and GameRng.randf() < 0.22:
 		_sidekick_enabled = true
-		_sidekick_time = randf_range(dur * 0.30, dur * 0.70)
+		_sidekick_time = GameRng.randf_range(dur * 0.30, dur * 0.70)
 	# Boss setup — appears about 35% of the way in so the player has time to warm
 	# up and the regular spawn cadence is established before the encounter.
 	_boss_enabled = bool(_level_data.get("has_boss", false))
@@ -117,16 +117,16 @@ func _ready() -> void:
 	var next_is_boss: bool = bool(Levels.get_level(GameState.current_level + 1).get("has_boss", false))
 	if next_is_boss:
 		_starbase_enabled = true
-		_starbase_time = randf_range(dur * 0.30, dur * 0.65)
+		_starbase_time = GameRng.randf_range(dur * 0.30, dur * 0.65)
 	elif not _boss_enabled and GameState.current_level >= 2:
-		if randf() < 0.45:
+		if GameRng.randf() < 0.45:
 			_starbase_enabled = true
-			_starbase_time = randf_range(dur * 0.30, dur * 0.65)
+			_starbase_time = GameRng.randf_range(dur * 0.30, dur * 0.65)
 	# Asteroids — enabled from sector 2 onward, never on boss stages (the
 	# screen is busy enough). First rock takes a beat to show up.
 	_asteroids_enabled = (GameState.current_level >= 2 and not _boss_enabled)
 	if _asteroids_enabled:
-		_asteroid_timer = randf_range(6.0, 12.0)
+		_asteroid_timer = GameRng.randf_range(6.0, 12.0)
 	print("EnemySpawner _ready: level=", GameState.current_level,
 			" name=", _level_data.get("name", "?"),
 			" pool=", _level_data.get("enemy_pool", []))
@@ -159,7 +159,7 @@ func _process(delta: float) -> void:
 			var lvl_t: float = clamp(float(GameState.current_level - 1) / 19.0, 0.0, 1.0)
 			var lo: float = lerp(asteroid_interval_min, asteroid_interval_min * 0.55, lvl_t)
 			var hi: float = lerp(asteroid_interval_max, asteroid_interval_max * 0.55, lvl_t)
-			_asteroid_timer = randf_range(lo, hi)
+			_asteroid_timer = GameRng.randf_range(lo, hi)
 
 
 ## Force-drops a POWER pickup from the top of the screen so every level
@@ -169,14 +169,14 @@ func _process(delta: float) -> void:
 func _drop_guaranteed_power() -> void:
 	_guaranteed_power_dropped = true
 	var pickup: Pickup = PickupScript.new()
-	var v: int = randi() % 3
+	var v: int = GameRng.randi() % 3
 	var pwr: int = Pickup.Type.POWER_PHASER
 	if v == 1:
 		pwr = Pickup.Type.POWER_BEAM
 	elif v == 2:
 		pwr = Pickup.Type.POWER_MISSILE
 	pickup.type = pwr
-	var x: float = randf_range(_viewport_size.x * 0.20, _viewport_size.x * 0.80)
+	var x: float = GameRng.randf_range(_viewport_size.x * 0.20, _viewport_size.x * 0.80)
 	pickup.position = Vector2(x, -40.0)
 	get_parent().add_child(pickup)
 	if OS.is_debug_build():
@@ -196,7 +196,7 @@ func _drop_life() -> void:
 	_life_dropped = true
 	var pickup: Pickup = PickupScript.new()
 	pickup.type = Pickup.Type.LIFE
-	var x: float = randf_range(_viewport_size.x * 0.25, _viewport_size.x * 0.75)
+	var x: float = GameRng.randf_range(_viewport_size.x * 0.25, _viewport_size.x * 0.75)
 	pickup.position = Vector2(x, -40.0)
 	get_parent().add_child(pickup)
 	if OS.is_debug_build():
@@ -208,7 +208,7 @@ func _drop_sidekick() -> void:
 	_sidekick_dropped = true
 	var pickup: Pickup = PickupScript.new()
 	pickup.type = Pickup.Type.SIDEKICK
-	var x: float = randf_range(_viewport_size.x * 0.25, _viewport_size.x * 0.75)
+	var x: float = GameRng.randf_range(_viewport_size.x * 0.25, _viewport_size.x * 0.75)
 	pickup.position = Vector2(x, -40.0)
 	get_parent().add_child(pickup)
 	if OS.is_debug_build():
@@ -219,7 +219,7 @@ func _drop_sidekick() -> void:
 func _spawn_starbase() -> void:
 	_starbase_spawned = true
 	var sb: Starbase = StarbaseScript.new()
-	sb.position = Vector2(randf_range(_viewport_size.x * 0.30, _viewport_size.x * 0.70), -160.0)
+	sb.position = Vector2(GameRng.randf_range(_viewport_size.x * 0.30, _viewport_size.x * 0.70), -160.0)
 	get_parent().add_child(sb)
 	print("STARBASE spawned at x=", sb.position.x)
 
@@ -242,7 +242,7 @@ func _spawn_boss() -> void:
 ## Spawns a single drifting asteroid. Size weights shift toward bigger rocks
 ## in late sectors so the player isn't just shrugging off small chunks at L20.
 func _spawn_asteroid() -> void:
-	var roll: float = randf()
+	var roll: float = GameRng.randf()
 	var size_pick: int = AsteroidScript.Size.SMALL
 	var lvl_t: float = clamp(float(GameState.current_level - 1) / 19.0, 0.0, 1.0)
 	# Small/medium/large weights drift from 60/30/10 → 25/45/30 across the run.
@@ -257,11 +257,11 @@ func _spawn_asteroid() -> void:
 	var rock: Node = AsteroidScript.new()
 	rock.size = size_pick
 	# Spawn somewhere along the top edge with a touch of horizontal slack.
-	var x: float = randf_range(-40.0, _viewport_size.x + 40.0)
+	var x: float = GameRng.randf_range(-40.0, _viewport_size.x + 40.0)
 	rock.position = Vector2(x, -120.0)
 	# Drift mostly down, occasionally angled across the screen.
-	var vy: float = randf_range(110.0, 200.0)
-	var vx: float = randf_range(-60.0, 60.0)
+	var vy: float = GameRng.randf_range(110.0, 200.0)
+	var vx: float = GameRng.randf_range(-60.0, 60.0)
 	# If spawned off-edge, push it inward so it actually crosses the playfield
 	if x < 0:
 		vx = abs(vx) + 40.0
@@ -279,24 +279,24 @@ func _spawn_wave() -> void:
 		return
 	var size_min: int = int(_level_data.get("wave_size_min", 1))
 	var size_max: int = int(_level_data.get("wave_size_max", 3))
-	var wave_size: int = randi_range(size_min, size_max)
+	var wave_size: int = GameRng.randi_range(size_min, size_max)
 	var boss_alive := _boss_spawned and not get_tree().get_nodes_in_group(&"bosses").is_empty()
 	if boss_alive:
 		wave_size = mini(wave_size, BOSS_WAVE_MAX)
-	var x_jitter: float = randf_range(-x_jitter_range, x_jitter_range)
+	var x_jitter: float = GameRng.randf_range(-x_jitter_range, x_jitter_range)
 
 	for i in wave_size:
-		var t: int = pool[randi() % pool.size()]
+		var t: int = pool[GameRng.randi() % pool.size()]
 		# Evenly distribute across the screen, then jitter the whole formation
 		var x_pct: float = float(i + 1) / float(wave_size + 1)
-		var y_offset: float = randf_range(-60.0, 60.0)
+		var y_offset: float = GameRng.randf_range(-60.0, 60.0)
 
 		var enemy: Enemy = EnemyScript.new()
 		enemy.type = t
 
 		if t == Enemy.Type.STRAFER:
 			# Strafers spawn at a screen edge and fly across.
-			if randf() < 0.5:
+			if GameRng.randf() < 0.5:
 				enemy.position = Vector2(-60.0, y_offset + 200.0)
 				enemy.h_dir = 1
 			else:

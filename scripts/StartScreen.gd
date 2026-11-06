@@ -39,6 +39,7 @@ var _side_btn: Button
 var _settings_layer: CanvasLayer
 var _stats_btn: Button
 var _joy_btn: Button
+var _online_ui: CanvasLayer
 var _hero_sprite: Sprite2D
 var _hero_base_pos: Vector2
 var _time: float = 0.0
@@ -190,10 +191,22 @@ func _build_ui() -> void:
 	layer.add_child(exit_btn)
 
 	var opt_font: int = int(clamp(opt_h * 0.40, 16, 26))
-	var settings_btn := _make_button("SETTINGS", btn_w, opt_h, COL_GOLD, opt_font)
-	settings_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 3)
+	var half_w: float = (btn_w - gap) * 0.5
+	var lb_btn := _make_button("LEADERBOARD", half_w, opt_h, COL_GOLD, opt_font)
+	lb_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 3)
+	lb_btn.pressed.connect(func() -> void:
+		if not _transitioning:
+			_online_ui.open_leaderboard())
+	layer.add_child(lb_btn)
+	var settings_btn := _make_button("SETTINGS", half_w, opt_h, COL_GOLD, opt_font)
+	settings_btn.position = Vector2(col_x + half_w + gap, col_y + (btn_h + gap) * 3)
 	settings_btn.pressed.connect(_open_settings)
 	layer.add_child(settings_btn)
+	_online_ui = preload("res://scripts/OnlineUI.gd").new()
+	_online_ui.host = self
+	add_child(_online_ui)
+	if not GameState.last_run.is_empty():
+		_online_ui.call_deferred("open_last_run")
 
 	# Footer high score
 	if GameState.high_score > 0:
@@ -327,6 +340,30 @@ func _on_new_game() -> void:
 	if _transitioning:
 		return
 	_transitioning = true
+	GameState.begin_run(randi_range(1, 2147483646))
+	# Registers the run for the leaderboard in the background (gets a token);
+	# play never waits for it. Offline = the run is simply not ranked.
+	Online.start_run()
+	_prepare_new_run()
+
+
+## From the challenge-code screen: needs the server for the challenger's seed.
+func start_challenge(code: String, target: int, who: String, msg: Label) -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	GameState.begin_run(0, code, target, who)
+	var r: Dictionary = await Online.start_run(code)
+	if not r.get("success", false) or GameState.run_seed <= 0:
+		_transitioning = false
+		if is_instance_valid(msg):
+			msg.text = "Could not start the challenge. Check your connection."
+		return
+	_online_ui.close()
+	_prepare_new_run()
+
+
+func _prepare_new_run() -> void:
 	GameState.lives = GameState.STARTING_LIVES
 	GameState.current_level = 1
 	GameState.clear_carry()

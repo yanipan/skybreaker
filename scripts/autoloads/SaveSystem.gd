@@ -46,6 +46,13 @@ func save_game() -> void:
 		"lives": GameState.lives,
 		"money": GameState.money,
 		"total_score": GameState.total_score,
+		"run_score": GameState.run_score,
+		"run_seed": GameState.run_seed,
+		"run_token": GameState.run_token,
+		"run_sectors": GameState.run_sectors,
+		"challenge_code": GameState.challenge_code,
+		"challenge_target": GameState.challenge_target,
+		"challenge_name": GameState.challenge_name,
 		"high_score": GameState.high_score,
 		# --- Story / cutscene state ---
 		"intro_seen": GameState.intro_seen,
@@ -139,6 +146,14 @@ func _apply_save_data() -> void:
 	GameState.lives = int(_save_data.get("lives", GameState.STARTING_LIVES))
 	GameState.money = int(_save_data.get("money", 0))
 	GameState.total_score = int(_save_data.get("total_score", 0))
+	GameState.run_score = int(_save_data.get("run_score", 0))
+	GameState.run_seed = int(_save_data.get("run_seed", 0))
+	GameState.run_token = str(_save_data.get("run_token", ""))
+	var rs: Variant = _save_data.get("run_sectors", [])
+	GameState.run_sectors = rs if rs is Array else []
+	GameState.challenge_code = str(_save_data.get("challenge_code", ""))
+	GameState.challenge_target = int(_save_data.get("challenge_target", 0))
+	GameState.challenge_name = str(_save_data.get("challenge_name", ""))
 	GameState.high_score = int(_save_data.get("high_score", 0))
 	# --- Story ---
 	GameState.intro_seen = bool(_save_data.get("intro_seen", false))
