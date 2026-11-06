@@ -11,16 +11,14 @@ var speed_tier: int = 0
 const SPEED_TIER_MAX: int = 3
 @export var thumb_offset: float = 150.0      ## Pixels above the finger so the ship is visible while dragging
 @export var screen_padding: float = 40.0     ## Keep the ship this far from screen edges
-## On-screen joystick (6/11): knob offset 0..1 maps to speed through a dead
-## zone and a gentle curve, so a small push nudges and a full push darts.
-## 6/11 playtest: "react faster": linear response, full speed at 70% of the
-## ring (was the very edge, curve 1.35), smaller dead zone, faster top speed.
-const JOY_DEADZONE: float = 0.08
-const JOY_CURVE: float = 1.0
-const JOY_FULL_AT: float = 0.70           ## deflection that already gives full speed
-const JOY_MAX_SPEED: float = 980.0        ## px/s at full speed, speed tier 0
+## On-screen MINI-SCREEN stick (6/11 v3, Yaniv: "the joystick as a
+## representation of the screen"). The pad is a small portrait map of the
+## play field: where the thumb is on the map is where the ship flies, in a
+## straight line, so direction changes are instant. The ship moves at its own
+## speed (thruster tier), capped at JOY_MAX_SPEED x tier; release = it stays.
+const JOY_MAX_SPEED: float = 1500.0       ## px/s cap at tier 0 for long trips
 const JOY_TIER_MUL: float = 1.25          ## per Starbase thruster tier
-var _joy_vec: Vector2 = Vector2.ZERO
+var _stick_active: bool = false
 @export var ship_size: float = 74.0          ## Width/height of placeholder square (+15% over the original 64)
 @export var ship_color: Color = Color(0.3, 0.85, 1.0)
 
@@ -227,13 +225,16 @@ func _take_damage(amount: int) -> void:
 	# Any incoming hit pauses shield recharge for a window
 	_shield_recharge_wait = shield_recharge_delay
 
-	# Shield fully negates the hit — any hit while the shield is up drops the
-	# whole shield bar to zero, but the hull takes nothing for that strike.
+	# Shield pips (6/11): each hit spends ONE full pip and the hull takes
+	# nothing. Before, any hit zeroed the whole bar, so a level-5 shield
+	# blocked exactly one hit, same as level 1, and the upgrade did nothing.
+	# A pip only blocks once it is fully recharged.
 	var remaining: int = amount
-	if shield > 0.0:
-		shield = 0.0
+	if shield >= 1.0:
+		shield = maxf(0.0, shield - 1.0)
 		remaining = 0
-		_shield_break_flicker = 1.0
+		if shield < 1.0:
+			_shield_break_flicker = 1.0
 		if AudioManager.SFX_SHIELD_HIT != null:
 			AudioManager.play_sfx(AudioManager.SFX_SHIELD_HIT, -4.0)
 		else:
@@ -395,7 +396,7 @@ func _draw() -> void:
 	# Shield aura — animated energy bubble around the ship
 	# - Soft outer halo + pulsing bright ring + rotating arc highlights
 	# - Brief strobe-out for ~1s right after the shield breaks
-	if shield > 0.0:
+	if shield >= 1.0:   # bubble only while a full pip actually protects
 		var t: float = float(Time.get_ticks_msec()) / 1000.0
 		var pct: float = shield / float(max_shield)
 		var base_r: float = half + 22.0 + pct * 6.0
@@ -445,6 +446,7 @@ func _draw() -> void:
 	# ship — those moved to the new left-edge weapon meters HUD in Main.gd.
 	# Only the torpedo, charge, shield and health bars stay attached to the ship.
 	_draw_torpedo_indicator()
+	_draw_weapon_marker()
 	_draw_charge_bar()
 	_draw_shield_bar()
 	_draw_health_bar()
@@ -544,6 +546,27 @@ func _draw_power_indicator() -> void:
 	for i in max_power_level:
 		var color: Color = tier_color if i < power_level else Color(1, 1, 1, 0.25)
 		draw_circle(Vector2(start_x + i * spacing, y), dot_size, color)
+
+
+## Selected-weapon badge on the ship's left (6/11), mirroring the torpedo
+## slots on the right: the player sees which weapon is up without looking
+## at the button corner. Grows and flashes for a moment on every switch.
+const WEAPON_MARK_LETTERS: Array = ["P", "B", "M"]
+const WEAPON_MARK_COLORS: Array = [Color(0.55, 0.95, 1.0), Color(0.6, 1.0, 0.5), Color(1.0, 0.85, 0.4)]
+var _weapon_mark_flash: float = 0.0
+
+func _draw_weapon_marker() -> void:
+	var wt: int = clampi(weapon_type, 0, 2)
+	var col: Color = WEAPON_MARK_COLORS[wt]
+	var r: float = 17.0 + 7.0 * _weapon_mark_flash
+	var c := Vector2(-(ship_size * 0.5) - 40.0 - r, 0.0)   # clear of the shield bubble
+	draw_circle(c, r + 3.0, Color(col, 0.18 + 0.5 * _weapon_mark_flash))
+	draw_circle(c, r, Color(0.02, 0.06, 0.12, 0.75))
+	draw_arc(c, r, 0.0, TAU, 32, col, 2.5, true)
+	var fs: int = int(r * 1.25)
+	var font: Font = Fonts.HEADLINE
+	var tw: Vector2 = font.get_string_size(WEAPON_MARK_LETTERS[wt], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+	draw_string(font, c + Vector2(-tw.x * 0.5, fs * 0.36), WEAPON_MARK_LETTERS[wt], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
 func _draw_torpedo_indicator() -> void:
@@ -661,6 +684,10 @@ func _draw_shield_bar() -> void:
 	if _shield_recharge_wait > 0.0:
 		fill_color = Color(0.3, 0.5, 0.85)
 	draw_rect(Rect2(-bar_width * 0.5, bar_y, bar_width * pct, bar_height), fill_color, true)
+	# Pip dividers: one segment per shield level, so upgrades are visible.
+	for i in range(1, max_shield):
+		var x: float = -bar_width * 0.5 + bar_width * float(i) / float(max_shield)
+		draw_line(Vector2(x, bar_y), Vector2(x, bar_y + bar_height), Color(0, 0, 0, 0.9), 2.0)
 
 
 func _draw_health_bar() -> void:
@@ -689,6 +716,24 @@ func _build_collision() -> void:
 	rect.size = Vector2(ship_size, ship_size)
 	shape.shape = rect
 	add_child(shape)
+
+
+## The steering finger is followed from _input (before the GUI), so sliding
+## over the joystick or a weapon button no longer swallows the drag or the
+## release (6/11: the ship could not reach the corner under the stick, and a
+## release over a button left the ship following a lifted finger). Picking
+## the steering finger still happens in _unhandled_input, so a touch that
+## STARTS on a control never steers.
+func _input(event: InputEvent) -> void:
+	if _touch_index == -1:
+		return
+	if event is InputEventScreenDrag and event.index == _touch_index:
+		if _is_dragging:
+			_update_target(event.position)
+	elif event is InputEventScreenTouch and not event.pressed and event.index == _touch_index:
+		_touch_index = -1
+		_is_dragging = false
+		_refresh_touch_firing()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -752,7 +797,7 @@ func _notification(what: int) -> void:
 		_touch_index = -1
 		_fire_button_held = false
 		_weapon_buttons_down.clear()
-		_joy_vec = Vector2.ZERO
+		_stick_active = false
 		_is_dragging = false
 		_is_firing = false
 		if _touch_play:
@@ -799,31 +844,47 @@ func _update_target(finger_pos: Vector2) -> void:
 	_target_position = t
 
 
-## Joystick input from MobileControls: vector inside the unit circle.
-func set_joystick(v: Vector2) -> void:
-	_joy_vec = v.limit_length(1.0)
+## Mini-screen stick from MobileControls. `u` is the thumb's spot on the map,
+## 0..1 on both axes (0,0 = top-left of the play field). `active` false =
+## thumb lifted: the ship stops where it is.
+func set_stick_target(u: Vector2, active: bool) -> void:
 	_touch_play = true
+	if not active:
+		_stick_active = false
+		_target_position = position
+		return
+	_stick_active = true
+	_target_position = stick_to_screen(u)
 
 
-## Speed (px/s) for a joystick deflection; 0 inside the dead zone.
-func joy_speed(mag: float) -> float:
-	if mag <= JOY_DEADZONE:
-		return 0.0
-	var t: float = clampf((mag - JOY_DEADZONE) / (JOY_FULL_AT - JOY_DEADZONE), 0.0, 1.0)
-	return pow(t, JOY_CURVE) * JOY_MAX_SPEED * pow(JOY_TIER_MUL, float(speed_tier))
+## Map point (0..1) to a ship target inside the padded play field.
+func stick_to_screen(u: Vector2) -> Vector2:
+	var sz: Vector2 = _screen_size if _screen_size != Vector2.ZERO else get_viewport_rect().size
+	return Vector2(
+		lerpf(screen_padding, sz.x - screen_padding, clampf(u.x, 0.0, 1.0)),
+		lerpf(screen_padding, sz.y - screen_padding, clampf(u.y, 0.0, 1.0)))
 
 
-func _apply_joystick(delta: float) -> bool:
-	var mag: float = _joy_vec.length()
-	var spd: float = joy_speed(mag)
-	if spd <= 0.0:
+## Ship position as a map point (0..1), drawn as the dot on the stick.
+func stick_position() -> Vector2:
+	var sz: Vector2 = _screen_size if _screen_size != Vector2.ZERO else get_viewport_rect().size
+	return Vector2(
+		inverse_lerp(screen_padding, sz.x - screen_padding, position.x),
+		inverse_lerp(screen_padding, sz.y - screen_padding, position.y)).clamp(Vector2.ZERO, Vector2.ONE)
+
+
+func stick_max_speed() -> float:
+	return JOY_MAX_SPEED * pow(JOY_TIER_MUL, float(speed_tier))
+
+
+## Straight line to the stick target: eased near the end (same follow as
+## finger drag), capped at stick_max_speed on long trips.
+func _apply_joystick(delta: float, follow: float) -> bool:
+	if not _stick_active:
 		return false
-	var p: Vector2 = position + _joy_vec / mag * spd * delta
-	p.x = clamp(p.x, screen_padding, _screen_size.x - screen_padding)
-	p.y = clamp(p.y, screen_padding, _screen_size.y - screen_padding)
-	# Keep the drag target on the ship so releasing the stick never yanks it.
-	_target_position = p
-	position = p
+	var want: Vector2 = position.lerp(_target_position, clampf(follow * delta, 0.0, 1.0))
+	var step: Vector2 = (want - position).limit_length(stick_max_speed() * delta)
+	position += step
 	return true
 
 
@@ -833,7 +894,7 @@ func _process(delta: float) -> void:
 	# real bite: T0 16, T1 25.6, T2 41, T3 65.5 — the ship genuinely darts
 	# across the screen at max tier, which is what the shop price deserves.
 	var effective_follow: float = follow_speed * pow(1.60, float(speed_tier))
-	if not _apply_joystick(delta):
+	if not _apply_joystick(delta, effective_follow):
 		position = position.lerp(_target_position, clamp(effective_follow * delta, 0.0, 1.0))
 	# Compute horizontal velocity and pick the matching banking sprite
 	var h_vel: float = (position.x - _last_x) / max(delta, 0.0001)
@@ -852,6 +913,8 @@ func _process(delta: float) -> void:
 	# Shield break flicker — independent of recharge timing
 	if _shield_break_flicker > 0.0:
 		_shield_break_flicker = max(0.0, _shield_break_flicker - delta)
+	if _weapon_mark_flash > 0.0:
+		_weapon_mark_flash = maxf(0.0, _weapon_mark_flash - delta * 2.5)
 	# Shield recharge: wait out the cooldown after a hit, then regenerate
 	if _shield_recharge_wait > 0.0:
 		_shield_recharge_wait = max(0.0, _shield_recharge_wait - delta)
@@ -1162,6 +1225,7 @@ func select_weapon(wt: int) -> void:
 
 
 func cycle_weapon() -> void:
+	_weapon_mark_flash = 1.0
 	# Cancel any active beams so the visual doesn't linger after we switch
 	for b in _beams:
 		if is_instance_valid(b):

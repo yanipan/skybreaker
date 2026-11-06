@@ -76,6 +76,11 @@ func set_fire_mode(mode: int) -> void:
 ## warp streaks, then clears it.
 var pending_warp_entry: bool = false
 
+## Story cutscene to play on arrival in the next sector (6/11: the act
+## slides now play after the warp, before the new sector starts, instead
+## of before the warp). Set by Main at sector complete, consumed in _ready.
+var pending_story_key: StringName = &""
+
 ## True once the player has watched the intro cutscene at least once.
 ## Persisted so a returning player doesn't re-watch the 4-beat cold open
 ## every time they hit New Game on a fresh install. See Cutscene.gd.

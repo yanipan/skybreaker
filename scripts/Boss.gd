@@ -193,7 +193,7 @@ func _build_collision() -> void:
 func _build_hp_bar() -> void:
 	# Background
 	_hp_bar_bg = ColorRect.new()
-	_hp_bar_bg.color = Color(0, 0, 0, 0.65)
+	_hp_bar_bg.color = Color(0, 0, 0, 0.75)
 	_hp_bar_bg.size = Vector2(_viewport_size.x * 0.7, 22)
 	_hp_bar_bg.position = Vector2(_viewport_size.x * 0.15, 150)
 	_hp_bar_bg.top_level = true
@@ -208,7 +208,7 @@ func _build_hp_bar() -> void:
 	# Label
 	_hp_label = Label.new()
 	_hp_label.text = boss_name
-	_hp_label.add_theme_font_size_override("font_size", 24)
+	_hp_label.add_theme_font_size_override("font_size", 18)
 	_hp_label.add_theme_color_override("font_color", Color.WHITE)
 	_hp_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_hp_label.add_theme_constant_override("outline_size", 4)
@@ -454,11 +454,29 @@ func _on_area_entered(_area: Area2D) -> void:
 
 # --- HUD bar ---
 
+const HP_BAR_H: float = 14.0
+
+func _hp_bar_width() -> float:
+	return clampf(boss_size * 1.15, 240.0, _viewport_size.x * 0.7)
+
+
 func _update_hp_bar() -> void:
 	if _hp_bar == null:
 		return
 	var pct: float = clamp(float(hp) / float(max_hp), 0.0, 1.0)
-	_hp_bar.size.x = (_viewport_size.x * 0.7) * pct
+	# 6/11: the bar rides just under the boss (where the player is looking)
+	# instead of a strip at the top of the screen. Kept on screen.
+	var w: float = _hp_bar_width()
+	var x: float = clampf(global_position.x - w * 0.5, 8.0, _viewport_size.x - 8.0 - w)
+	var y: float = clampf(global_position.y + boss_size * 0.5 + 10.0, 70.0, _viewport_size.y * 0.62)
+	_hp_bar_bg.size = Vector2(w + 4.0, HP_BAR_H + 4.0)
+	_hp_bar_bg.position = Vector2(x - 2.0, y - 2.0)
+	_hp_bar.position = Vector2(x, y)
+	_hp_bar.size = Vector2(w * pct, HP_BAR_H)
+	if _hp_label != null:
+		_hp_label.size = Vector2(w + 120.0, 26)
+		_hp_label.position = Vector2(x - 60.0, y + HP_BAR_H + 2.0)
+	_hp_bar.size.x = w * pct
 	# Color shifts red→orange as boss is hurt
 	if pct > 0.66:
 		_hp_bar.color = Color(0.95, 0.25, 0.25)

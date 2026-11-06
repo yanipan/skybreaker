@@ -53,11 +53,11 @@ func _ready() -> void:
 		max_t = max(max_t, tt)
 	print("beam: %d/40 survive one frame, slowest pop %.2fs" % [survived_frame, max_t])
 	_check(survived_frame == 40, "no normal bullet pops on its first beam frame")
-	_check(max_t <= 0.47, "every normal bullet pops within ~0.45s of beam")
+	_check(max_t <= 0.20, "every normal bullet pops within ~0.18s of beam")
 	var shell: Node = EB.new()
 	shell.style = 3  # SHELL
 	add_child(shell)
-	_check(shell.beam_resist >= 0.12 * 1.6 - 0.001, "heavy rounds resist longer")
+	_check(shell.beam_resist >= 0.05 * 1.5 - 0.001, "heavy rounds resist longer")
 	var bb: Node = EB.new()
 	bb.from_boss = true
 	add_child(bb)

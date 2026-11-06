@@ -109,6 +109,7 @@ func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
 	_resolve_player()
 	_build_finger_ring()
+	_build_button_pad()
 	_build_torpedo_button()
 	_build_weapon_buttons()
 	if GameState.joystick_enabled:
@@ -178,6 +179,84 @@ func _input(event: InputEvent) -> void:
 			_ring_alpha = max(_ring_alpha, 0.6)
 
 
+# --- Corner pad (6/11) ---
+# Players fire without looking at the corner, and the round buttons were small
+# targets. One invisible pad covers the whole cluster plus a margin; every
+# touch on it picks the nearest button. The buttons become visuals only.
+
+var _pad: Control = null
+var _pad_centers: Array = []
+var _pad_touch: Dictionary = {}   ## touch index (or -100 for mouse) -> slot 0..3
+
+## Reach of the pad from the corner button's center. Static for tests.
+static func pad_reach(size: float) -> float:
+	return size * 1.42 + size * 0.95
+
+
+func _build_button_pad() -> void:
+	var size: float = _button_size()
+	_pad_centers = cluster_centers(_safe_area(), size, GameState.controls_side)
+	var corner: Vector2 = _pad_centers[3]
+	var reach: float = pad_reach(size)
+	_pad = Control.new()
+	_pad.name = "BUTTON_PAD"
+	_pad.set_script(preload("res://scripts/MobileControlsPad.gd"))
+	_pad.radius = reach
+	_pad.size = Vector2(reach, reach) * 2.0
+	_pad.position = corner - Vector2(reach, reach)
+	_pad.gui_input.connect(_on_pad_input)
+	add_child(_pad)
+
+
+func _pad_press(key: int, local_pos: Vector2) -> void:
+	var slot: int = preload("res://scripts/MobileControlsPad.gd").nearest_slot(_pad.position + local_pos, _pad_centers)
+	_pad_touch[key] = slot
+	if slot == 3:
+		_fire_torpedo()
+	else:
+		_set_weapon(slot, true)
+
+
+func _pad_release(key: int) -> void:
+	if not _pad_touch.has(key):
+		return
+	var slot: int = _pad_touch[key]
+	_pad_touch.erase(key)
+	if slot < 3 and not _pad_touch.values().has(slot):
+		_set_weapon(slot, false)
+
+
+func _on_pad_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			# A press on an index we still hold means its release was lost
+			# (pause menu): drop the stale hold first.
+			_pad_release(event.index)
+			_pad_press(event.index, event.position)
+			_pad.accept_event()
+		elif _pad_touch.has(event.index):
+			_pad_release(event.index)
+			_pad.accept_event()
+	elif event is InputEventScreenDrag:
+		# Own fingers stay put on their slot; a steering finger sliding
+		# through the corner is not ours and passes on to the ship.
+		if _pad_touch.has(event.index):
+			_pad.accept_event()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.device != InputEvent.DEVICE_ID_EMULATION:
+		if event.pressed:
+			_pad_press(-100, event.position)
+		else:
+			_pad_release(-100)
+		_pad.accept_event()
+
+
+## Release everything the pad holds (pause / focus loss never delivers it).
+func _pad_reset() -> void:
+	for key in _pad_touch.keys():
+		_pad_release(key)
+	_pad_touch.clear()
+
+
 # --- Torpedo button (bottom-right) ---
 
 func _build_torpedo_button() -> void:
@@ -185,6 +264,8 @@ func _build_torpedo_button() -> void:
 	var center: Vector2 = cluster_centers(_safe_area(), size, GameState.controls_side)[3]
 	_torpedo_btn = _make_circle_button(center, size, &"TORPEDO")
 	_torpedo_btn.gui_input.connect(_on_torpedo_input)
+	# Visual only: touches are routed by the corner pad underneath.
+	_torpedo_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_torpedo_btn)
 
 	# Center label — large "T" icon
@@ -287,8 +368,12 @@ func _build_joystick() -> void:
 	_joystick.set_script(preload("res://scripts/MobileJoystick.gd"))
 	_joystick.size = Vector2(hit, hit) * 2.0
 	_joystick.position = lay[0] - Vector2(hit, hit)
+	# Keep the whole mini-screen inside the safe area.
+	var safe: Rect2 = _safe_area()
+	_joystick.position = _joystick.position.clamp(safe.position, safe.end - _joystick.size)
 	_joystick.base_radius = lay[1]
-	_joystick.moved.connect(_on_joystick)
+	_joystick.screen_aspect = _viewport_size.x / maxf(_viewport_size.y, 1.0)
+	_joystick.aimed.connect(_on_joystick)
 	add_child(_joystick)
 
 
@@ -296,12 +381,13 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
 		if _joystick != null and is_instance_valid(_joystick):
 			_joystick.reset()
+		_pad_reset()
 
 
-func _on_joystick(v: Vector2) -> void:
+func _on_joystick(u: Vector2, active: bool) -> void:
 	_resolve_player()
-	if _player != null and is_instance_valid(_player) and _player.has_method("set_joystick"):
-		_player.set_joystick(v)
+	if _player != null and is_instance_valid(_player) and _player.has_method("set_stick_target"):
+		_player.set_stick_target(u, active)
 
 
 ## Finger ring ignores touches that land on the joystick or a button.
@@ -310,8 +396,17 @@ func _over_controls(pos: Vector2) -> bool:
 	nodes.append(_torpedo_btn)
 	nodes.append(_pause_btn)
 	nodes.append(_joystick)
+	nodes.append(_pad)
 	for n in nodes:
-		if n != null and is_instance_valid(n) and n.visible and n._has_point(pos - n.position):
+		if n == null or not is_instance_valid(n) or not n.visible:
+			continue
+		var local: Vector2 = pos - n.position
+		# Round buttons have no _has_point override (calling it errored on
+		# every touch and aborted this handler): test the circle here.
+		if n.has_method("_has_point"):
+			if n._has_point(local):
+				return true
+		elif local.distance_to(n.size * 0.5) <= minf(n.size.x, n.size.y) * 0.5:
 			return true
 	return false
 
@@ -322,6 +417,7 @@ func _build_weapon_buttons() -> void:
 	for wt in 3:
 		var b: Control = _make_circle_button(centers[wt], size, StringName("WEAPON_%d" % wt))
 		b.gui_input.connect(_on_weapon_input.bind(wt))
+		b.mouse_filter = Control.MOUSE_FILTER_IGNORE   # corner pad routes touches
 		add_child(b)
 		var col: Color = _color_for_weapon(wt)
 		b.set_meta("col_glow", col)
@@ -491,6 +587,9 @@ func _process(delta: float) -> void:
 	if _finger_ring != null and _finger_ring.has_method("update_ring"):
 		_finger_ring.update_ring(_ring_pos, _ring_alpha, _ring_pulse)
 
+	# Ship dot on the mini-screen stick.
+	if _joystick != null and is_instance_valid(_joystick) and _player != null and is_instance_valid(_player) and _player.has_method("stick_position"):
+		_joystick.set_ship_u(_player.stick_position())
 	# Sync button readouts to player state
 	if _player != null and is_instance_valid(_player):
 		var tc: int = int(_player.get("torpedo_count")) if "torpedo_count" in _player else 0

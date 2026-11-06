@@ -200,7 +200,77 @@ func _ready() -> void:
 	_refresh_all()
 
 
+## Touch scroll (6/11). Most of the scroll area is buttons (icons + BUY), and a
+## drag that began on a button never reached the ScrollContainer, so the first
+## swipe often did nothing. The shop now scrolls itself from _input (before the
+## GUI) wherever the finger lands; a drag past DRAG_START_PX becomes a scroll
+## and blocks the BUY that the release would otherwise trigger.
+const DRAG_START_PX: float = 14.0
+var _scroll: ScrollContainer = null
+var _drag_idx: int = -1
+var _drag_start_y: float = 0.0
+var _drag_last_y: float = 0.0
+var _drag_scrolling: bool = false
+var _fling_v: float = 0.0           ## px/s, decays after release
+var _scroll_pos: float = 0.0        ## float shadow of scroll_vertical (int)
+var _buy_blocked_until_ms: int = 0
+
+
+func _input(event: InputEvent) -> void:
+	if _scroll == null:
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if _drag_idx == -1 and _scroll.get_global_rect().has_point(event.position):
+				_drag_idx = event.index
+				_drag_start_y = event.position.y
+				_drag_last_y = event.position.y
+				_drag_scrolling = false
+				_fling_v = 0.0
+				_scroll_pos = float(_scroll.scroll_vertical)
+		elif event.index == _drag_idx:
+			if _drag_scrolling:
+				_buy_blocked_until_ms = Time.get_ticks_msec() + 200
+			_drag_idx = -1
+			_drag_scrolling = false
+	elif event is InputEventScreenDrag and event.index == _drag_idx:
+		if not _drag_scrolling and absf(event.position.y - _drag_start_y) > DRAG_START_PX:
+			_drag_scrolling = true
+			_drag_last_y = event.position.y
+		if _drag_scrolling:
+			var dy: float = event.position.y - _drag_last_y
+			_drag_last_y = event.position.y
+			_scroll_by(-dy)
+			if event.velocity != Vector2.ZERO:
+				_fling_v = -event.velocity.y
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.pressed and event.device != InputEvent.DEVICE_ID_EMULATION \
+			and (event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN) \
+			and _scroll.get_global_rect().has_point(event.position):
+		_scroll_pos = float(_scroll.scroll_vertical)
+		_scroll_by(-80.0 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 80.0)
+		get_viewport().set_input_as_handled()
+
+
+func _scroll_by(px: float) -> void:
+	var vbar: VScrollBar = _scroll.get_v_scroll_bar()
+	var max_y: float = maxf(0.0, vbar.max_value - vbar.page)
+	# Something else moved the list (scrollbar, focus): follow it.
+	if absf(_scroll_pos - float(_scroll.scroll_vertical)) > 1.0:
+		_scroll_pos = float(_scroll.scroll_vertical)
+	_scroll_pos = clampf(_scroll_pos + px, 0.0, max_y)
+	_scroll.scroll_vertical = int(round(_scroll_pos))
+
+
+func _buy_blocked() -> bool:
+	return _drag_scrolling or Time.get_ticks_msec() < _buy_blocked_until_ms
+
+
 func _process(delta: float) -> void:
+	# Fling: keep gliding after release, decaying quickly.
+	if _scroll != null and _drag_idx == -1 and absf(_fling_v) > 20.0:
+		_scroll_by(_fling_v * delta)
+		_fling_v *= pow(0.04, delta)
 	if _msg_time_left > 0.0:
 		_msg_time_left = max(0.0, _msg_time_left - delta)
 		if _msg_label != null:
@@ -352,7 +422,11 @@ func _build_ui() -> void:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_card_w = (scroll.size.x - 16.0 - 12.0) * 0.5
 	scroll.process_mode = Node.PROCESS_MODE_ALWAYS
+	# Scrolling is done by _input; the container's own drag (emulated mouse)
+	# would double it, so it ignores pointer events. Children still get them.
+	scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(scroll)
+	_scroll = scroll
 
 	# 2-column GridContainer of "card" tiles. Each tile is a tall column with
 	# a big image at the top and the name + description + buy button stacked
@@ -365,7 +439,7 @@ func _build_ui() -> void:
 	scroll.add_child(_items_root)
 
 	_add_item("HULL REPAIR", "Restore the ship to full health.", &"repair", TEX_REPAIR)
-	_add_item("STRONGER SHIELD", "Increase max shield capacity (+1).", &"shield", TEX_SHIELD)
+	_add_item("STRONGER SHIELD", "Shield blocks one more hit (+1).", &"shield", TEX_SHIELD)
 	# One power-up button per weapon type. The "switch weapon" button is gone
 	# now that the player can cycle weapons in-flight with middle mouse button.
 	_add_item("PHASER POWER UP", "Boost phaser firepower one tier.", &"power_phaser", TEX_PHASER)
@@ -657,6 +731,9 @@ func _fit_item_name(label: Label) -> void:
 # --- Purchase handling ---
 
 func _on_buy(kind: StringName) -> void:
+	# A swipe that started on a card is a scroll, not a purchase.
+	if _buy_blocked():
+		return
 	var price: int = _price_for(kind)
 	# Maxed-out item — trader has nothing left to sell on this slot
 	if price < 0:

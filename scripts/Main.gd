@@ -122,9 +122,16 @@ func _ready() -> void:
 	# cinematic — the player arrives from below the screen and the warp
 	# streaks linger for a moment before settling into normal scrolling.
 	var warped_in: bool = GameState.pending_warp_entry
+	var story_key: StringName = GameState.pending_story_key
+	GameState.pending_story_key = &""
 	if GameState.pending_warp_entry:
 		GameState.pending_warp_entry = false
 		_begin_entry_sequence()
+		# Act story between sectors: the entry starts under its black curtain,
+		# the cutscene pauses the tree on top of it, and the fly-in continues
+		# once the slides are dismissed.
+		if story_key != &"":
+			call_deferred("_begin_cutscene", story_key, false)
 	# Re-spawn the sidekick if one was alive at the end of the previous sector.
 	if should_restore_sidekick:
 		GameState.carry_sidekick = false
@@ -507,14 +514,14 @@ func _check_level_complete() -> void:
 	var bosses := get_tree().get_nodes_in_group(&"bosses")
 	if not bosses.is_empty():
 		return
-	# Story intercept — if this sector completion triggers a cutscene, play
-	# it before the warp. Cutscene's `finished` signal resumes the original
-	# warp transition, so the player sees: beats → fade to black → warp
-	# cinematic → scene reload.
+	# Story intercept. The ending plays right here (no warp follows). Act
+	# cutscenes play AFTER the warp: warp → new sector loads under black →
+	# story slides → ship flies in and the sector starts (see _ready).
 	var trigger_key: StringName = CutsceneData.TRIGGERS.get(GameState.current_level, &"")
-	if trigger_key != &"":
+	if trigger_key == CutsceneData.ENDING_KEY:
 		_begin_cutscene(trigger_key, true)
 		return
+	GameState.pending_story_key = trigger_key
 	_begin_warp_transition()
 
 
@@ -569,8 +576,10 @@ func _begin_cutscene(key: StringName, then_warp: bool) -> void:
 		elif then_warp:
 			_begin_warp_transition()
 		else:
-			# Intro: resume gameplay. Spawner already frozen — unfreeze.
-			if _spawner != null:
+			# Intro / arrival story: resume gameplay. Spawner already frozen;
+			# unfreeze unless the warp fly-in still owns it (it re-enables
+			# spawns when it finishes).
+			if _spawner != null and not _entry_active:
 				_spawner.set_process(true)
 	)
 	cs.play(beats)

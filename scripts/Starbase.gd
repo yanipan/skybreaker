@@ -2,8 +2,7 @@ extends Area2D
 class_name Starbase
 ## Friendly drifting shop. Cannot be hit by player or enemy bullets — touching it
 ## once opens the StarbaseShop overlay where the player spends money on upgrades.
-## After the player closes the shop, the Starbase finishes drifting off the bottom
-## of the screen and despawns. Each Starbase grants exactly one shopping session.
+## After the player closes the shop, the Starbase fades out and despawns. Each Starbase grants exactly one shopping session.
 ##
 ## Spawned by EnemySpawner on a random chance every few stages.
 
@@ -119,3 +118,13 @@ func _on_shop_closed() -> void:
 	bye.position = Vector2(-130, -visual_size * 0.65)
 	bye.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(bye)
+	# 6/11: the used station no longer lingers on screen. It shrinks and
+	# fades out (warping away) right after the shop closes, then frees.
+	set_deferred("monitoring", false)
+	set_deferred("monitorable", false)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(self, "modulate:a", 0.0, 0.9).set_delay(0.5)
+	if _sprite != null:
+		tw.tween_property(_sprite, "scale", _sprite.scale * 0.35, 0.9).set_delay(0.5) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(queue_free)

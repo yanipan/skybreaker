@@ -13,6 +13,10 @@ func _ready() -> void:
 		bg.color = Color(0.02, 0.03, 0.08)
 		bg.size = Vector2(720, 1560)
 		add_child(bg)
+		GameState.joystick_enabled = true
+		var pl: Node = load("res://scripts/Player.gd").new()
+		pl.position = Vector2(360, 1100)
+		bg.add_child(pl)
 		var mc: CanvasLayer = load("res://scripts/MobileControls.gd").new()
 		mc.force_visible = true
 		add_child(mc)
