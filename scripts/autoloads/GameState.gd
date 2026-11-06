@@ -24,6 +24,8 @@ var fire_mode: int = FireMode.HOLD
 ## steers. Default LEFT matches where the old FIRE button sat.
 enum ControlsSide { LEFT, RIGHT }
 var controls_side: int = ControlsSide.LEFT
+## On-screen joystick in the corner opposite the weapon buttons.
+var joystick_enabled: bool = true
 ## Session counters for PhysicsWatchdog; survive scene reloads, not relaunch.
 var physics_stalls: int = 0
 var physics_reloads: int = 0
@@ -41,12 +43,14 @@ func load_settings() -> void:
 	# fire), so a saved AUTO from an older build is ignored.
 	fire_mode = FireMode.HOLD
 	controls_side = clampi(int(cfg.get_value("controls", "side", ControlsSide.LEFT)), ControlsSide.LEFT, ControlsSide.RIGHT)
+	joystick_enabled = bool(cfg.get_value("controls", "joystick", true))
 
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("controls", "fire_mode_v2", fire_mode)
 	cfg.set_value("controls", "side", controls_side)
+	cfg.set_value("controls", "joystick", joystick_enabled)
 	var err: int = cfg.save(SETTINGS_PATH)
 	if err != OK:
 		push_warning("GameState: settings save failed (%d)" % err)
@@ -54,6 +58,11 @@ func save_settings() -> void:
 
 func set_controls_side(side: int) -> void:
 	controls_side = clampi(side, ControlsSide.LEFT, ControlsSide.RIGHT)
+	save_settings()
+
+
+func set_joystick_enabled(on: bool) -> void:
+	joystick_enabled = on
 	save_settings()
 
 

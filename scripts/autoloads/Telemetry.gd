@@ -39,6 +39,7 @@ func _ready() -> void:
 	add_child(_http)
 	track("session_start", {
 		"side": "right" if GameState.controls_side == GameState.ControlsSide.RIGHT else "left",
+		"joystick": GameState.joystick_enabled,
 	})
 	call_deferred("flush")
 

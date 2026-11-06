@@ -38,6 +38,7 @@ var _continue_btn: Button
 var _side_btn: Button
 var _settings_layer: CanvasLayer
 var _stats_btn: Button
+var _joy_btn: Button
 var _hero_sprite: Sprite2D
 var _hero_base_pos: Vector2
 var _time: float = 0.0
@@ -411,7 +412,7 @@ func _open_settings() -> void:
 	title.add_theme_constant_override("outline_size", 6)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.size = Vector2(vw, font * 2.2)
-	var top: float = vh * 0.5 - (bh * 3 + gap * 2) * 0.5
+	var top: float = vh * 0.5 - (bh * 4 + gap * 3) * 0.5
 	title.position = Vector2(0, top - font * 3.0)
 	_settings_layer.add_child(title)
 	var x: float = (vw - pw) * 0.5
@@ -419,8 +420,12 @@ func _open_settings() -> void:
 	_side_btn.position = Vector2(x, top)
 	_side_btn.pressed.connect(_on_side)
 	_settings_layer.add_child(_side_btn)
+	_joy_btn = _make_button(_joy_text(), pw, bh, COL_GOLD, font)
+	_joy_btn.position = Vector2(x, top + bh + gap)
+	_joy_btn.pressed.connect(_on_joy)
+	_settings_layer.add_child(_joy_btn)
 	_stats_btn = _make_button(_stats_text(), pw, bh, COL_GOLD, font)
-	_stats_btn.position = Vector2(x, top + bh + gap)
+	_stats_btn.position = Vector2(x, top + (bh + gap) * 2)
 	_stats_btn.pressed.connect(_on_stats)
 	_settings_layer.add_child(_stats_btn)
 	var note := Label.new()
@@ -429,12 +434,22 @@ func _open_settings() -> void:
 	note.add_theme_color_override("font_color", Color(0.78, 0.80, 0.92, 0.85))
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.size = Vector2(vw, font * 2.4)
-	note.position = Vector2(0, top + (bh + gap) * 2 - gap * 0.5)
+	note.position = Vector2(0, top + (bh + gap) * 3 - gap * 0.5)
 	_settings_layer.add_child(note)
 	var back := _make_button("BACK", pw, bh, COL_CYAN, font)
-	back.position = Vector2(x, top + (bh + gap) * 2 + font * 2.4)
+	back.position = Vector2(x, top + (bh + gap) * 3 + font * 2.4)
 	back.pressed.connect(_close_settings)
 	_settings_layer.add_child(back)
+
+
+func _joy_text() -> String:
+	return "JOYSTICK: ON" if GameState.joystick_enabled else "JOYSTICK: OFF  (DRAG ONLY)"
+
+
+func _on_joy() -> void:
+	GameState.set_joystick_enabled(not GameState.joystick_enabled)
+	if _joy_btn != null:
+		_joy_btn.text = _joy_text()
 
 
 func _stats_text() -> String:
@@ -454,15 +469,19 @@ func _close_settings() -> void:
 	if _settings_layer != null:
 		Telemetry.track("settings_changed", {
 			"side": "right" if GameState.controls_side == GameState.ControlsSide.RIGHT else "left",
+			"joystick": GameState.joystick_enabled,
 		})
 		_stats_btn = null
+		_joy_btn = null
 		_settings_layer.queue_free()
 		_settings_layer = null
 		_side_btn = null
 
 
 func _side_text() -> String:
-	return "WEAPON BUTTONS: LEFT SIDE" if GameState.controls_side == GameState.ControlsSide.LEFT else "WEAPON BUTTONS: RIGHT SIDE"
+	if GameState.controls_side == GameState.ControlsSide.LEFT:
+		return "WEAPONS LEFT  ·  STICK RIGHT"
+	return "WEAPONS RIGHT  ·  STICK LEFT"
 
 
 func _on_side() -> void:

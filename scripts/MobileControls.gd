@@ -73,6 +73,7 @@ var _torpedo_btn: Control
 var _weapon_btns: Array = []        ## Index = Player.WeaponType
 var _weapon_lvl_labels: Array = []
 var _weapon_held: Dictionary = {}
+var _joystick: Control = null
 var _pause_btn: Control
 var _torpedo_label: Label
 var _torpedo_count_label: Label
@@ -110,6 +111,8 @@ func _ready() -> void:
 	_build_finger_ring()
 	_build_torpedo_button()
 	_build_weapon_buttons()
+	if GameState.joystick_enabled:
+		_build_joystick()
 	_build_pause_button()
 	EventBus.cutscene_started.connect(_on_cutscene_started)
 	EventBus.cutscene_finished.connect(_on_cutscene_finished)
@@ -147,6 +150,8 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if _ring_index != -1 and event.index != _ring_index:
+				return
+			if _over_controls(event.position):
 				return
 			_ring_index = event.index
 			_ring_pos = event.position
@@ -258,6 +263,57 @@ static func cluster_centers(safe: Rect2, size: float, side: int) -> Array:
 		out.append(corner + Vector2(cos(a) * r * inward, -sin(a) * r))
 	out.append(corner)
 	return out
+
+
+## Joystick in the bottom corner opposite the weapon cluster. Returns
+## [center, base_radius, hit_radius]. Static so the layout can be tested.
+static func joystick_layout(safe: Rect2, size: float, side: int) -> Array:
+	var r: float = size * 0.95
+	var hit: float = r * 1.45
+	var margin: float = r + 26.0
+	var on_right: bool = side == 0   # weapons LEFT -> stick RIGHT
+	var c := Vector2(
+		safe.position.x + safe.size.x - margin if on_right else safe.position.x + margin,
+		safe.position.y + safe.size.y - margin
+	)
+	return [c, r, hit]
+
+
+func _build_joystick() -> void:
+	var lay: Array = joystick_layout(_safe_area(), _button_size(), GameState.controls_side)
+	var hit: float = lay[2]
+	_joystick = Control.new()
+	_joystick.name = "JOYSTICK"
+	_joystick.set_script(preload("res://scripts/MobileJoystick.gd"))
+	_joystick.size = Vector2(hit, hit) * 2.0
+	_joystick.position = lay[0] - Vector2(hit, hit)
+	_joystick.base_radius = lay[1]
+	_joystick.moved.connect(_on_joystick)
+	add_child(_joystick)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		if _joystick != null and is_instance_valid(_joystick):
+			_joystick.reset()
+
+
+func _on_joystick(v: Vector2) -> void:
+	_resolve_player()
+	if _player != null and is_instance_valid(_player) and _player.has_method("set_joystick"):
+		_player.set_joystick(v)
+
+
+## Finger ring ignores touches that land on the joystick or a button.
+func _over_controls(pos: Vector2) -> bool:
+	var nodes: Array = _weapon_btns.duplicate()
+	nodes.append(_torpedo_btn)
+	nodes.append(_pause_btn)
+	nodes.append(_joystick)
+	for n in nodes:
+		if n != null and is_instance_valid(n) and n.visible and n._has_point(pos - n.position):
+			return true
+	return false
 
 
 func _build_weapon_buttons() -> void:

@@ -11,6 +11,13 @@ var speed_tier: int = 0
 const SPEED_TIER_MAX: int = 3
 @export var thumb_offset: float = 150.0      ## Pixels above the finger so the ship is visible while dragging
 @export var screen_padding: float = 40.0     ## Keep the ship this far from screen edges
+## On-screen joystick (6/11): knob offset 0..1 maps to speed through a dead
+## zone and a gentle curve, so a small push nudges and a full push darts.
+const JOY_DEADZONE: float = 0.12
+const JOY_CURVE: float = 1.35
+const JOY_MAX_SPEED: float = 820.0        ## px/s at full deflection, speed tier 0
+const JOY_TIER_MUL: float = 1.25          ## per Starbase thruster tier
+var _joy_vec: Vector2 = Vector2.ZERO
 @export var ship_size: float = 74.0          ## Width/height of placeholder square (+15% over the original 64)
 @export var ship_color: Color = Color(0.3, 0.85, 1.0)
 
@@ -742,6 +749,7 @@ func _notification(what: int) -> void:
 		_touch_index = -1
 		_fire_button_held = false
 		_weapon_buttons_down.clear()
+		_joy_vec = Vector2.ZERO
 		_is_dragging = false
 		_is_firing = false
 		if _touch_play:
@@ -788,13 +796,42 @@ func _update_target(finger_pos: Vector2) -> void:
 	_target_position = t
 
 
+## Joystick input from MobileControls: vector inside the unit circle.
+func set_joystick(v: Vector2) -> void:
+	_joy_vec = v.limit_length(1.0)
+	_touch_play = true
+
+
+## Speed (px/s) for a joystick deflection; 0 inside the dead zone.
+func joy_speed(mag: float) -> float:
+	if mag <= JOY_DEADZONE:
+		return 0.0
+	var t: float = clampf((mag - JOY_DEADZONE) / (1.0 - JOY_DEADZONE), 0.0, 1.0)
+	return pow(t, JOY_CURVE) * JOY_MAX_SPEED * pow(JOY_TIER_MUL, float(speed_tier))
+
+
+func _apply_joystick(delta: float) -> bool:
+	var mag: float = _joy_vec.length()
+	var spd: float = joy_speed(mag)
+	if spd <= 0.0:
+		return false
+	var p: Vector2 = position + _joy_vec / mag * spd * delta
+	p.x = clamp(p.x, screen_padding, _screen_size.x - screen_padding)
+	p.y = clamp(p.y, screen_padding, _screen_size.y - screen_padding)
+	# Keep the drag target on the ship so releasing the stick never yanks it.
+	_target_position = p
+	position = p
+	return true
+
+
 func _process(delta: float) -> void:
 	# Thruster tiers were barely noticeable at 1.35x per step — players paid a
 	# fortune at the shop and couldn't feel the upgrade. 1.60x gives each tier
 	# real bite: T0 16, T1 25.6, T2 41, T3 65.5 — the ship genuinely darts
 	# across the screen at max tier, which is what the shop price deserves.
 	var effective_follow: float = follow_speed * pow(1.60, float(speed_tier))
-	position = position.lerp(_target_position, clamp(effective_follow * delta, 0.0, 1.0))
+	if not _apply_joystick(delta):
+		position = position.lerp(_target_position, clamp(effective_follow * delta, 0.0, 1.0))
 	# Compute horizontal velocity and pick the matching banking sprite
 	var h_vel: float = (position.x - _last_x) / max(delta, 0.0001)
 	_last_x = position.x
