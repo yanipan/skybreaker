@@ -1140,6 +1140,14 @@ func _beam_offsets_for_count(count: int) -> Array:
 ## Spawn 1-3 missiles per shot depending on power_level. Missiles are slow,
 ## non-homing, high-damage projectiles — much rarer than phaser bullets so the
 ## salvo feels weighty rather than overwhelming.
+## Damage of one player missile at the current power level. 7/11 playtest:
+## missiles hit a little too hard, 6 + round(p x 1.16) -> 5 + p (about -10%
+## across the ladder incl. the tier bonus: L1 11 -> 10, L25 41 -> 36).
+func missile_damage() -> int:
+	var tier := _bullet_tier_for_level(power_level)
+	return 5 + power_level + int(tier["damage"]) * 2
+
+
 func _fire_missile_pattern() -> void:
 	# Missiles fire slowly and (at low tiers) one at a time, so each shot has
 	# to land hard to feel worth waiting for. Damage scales aggressively with
@@ -1149,9 +1157,7 @@ func _fire_missile_pattern() -> void:
 	# the L20 ceiling lands near the old L16 peak instead of overshooting it.
 	# Old: 5 + round(power*1.5) + tier*2  →  L16 = 35
 	# New: 5 + round(power*1.2) + tier*2  →  L20 ≈ 35
-	var tier := _bullet_tier_for_level(power_level)
-	# 1.45 → 1.16 so L25 missile damage ≈ old L20 (6 + round(20×1.45) = 35 base).
-	var dmg: int = 6 + int(round(power_level * 1.16)) + int(tier["damage"]) * 2
+	var dmg: int = missile_damage()
 	# Missile count ramp — stretched to 5 tiers across the new 25-level
 	# ladder. The 5-missile barrage now shows up at L21+ (was L17+),
 	# preserving the "feels maxed" moment at the top of the climb.

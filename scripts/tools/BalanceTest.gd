@@ -33,6 +33,14 @@ func _ready() -> void:
 	_check(low.turn_rate < mid.turn_rate and mid.turn_rate < top.turn_rate, "turn rate rises with level")
 	_check(is_equal_approx(top.turn_rate, 6.0), "L25 turn rate equals the old homing")
 	_check(low.reacquire_radius < top.reacquire_radius, "re-lock range rises with level")
+	# --- Missile damage trimmed ~12% (7/11) ---
+	p.power_level = 1
+	var md1: int = p.missile_damage()
+	p.power_level = 25
+	var md25: int = p.missile_damage()
+	print("missile damage L1=%d L25=%d" % [md1, md25])
+	_check(md1 == 10, "L1 missile damage trimmed to 10 (was 11), got %d" % md1)
+	_check(md25 == 36, "L25 missile damage trimmed to 36 (was 41), got %d" % md25)
 	var b1 := _boss(0)
 	var b2 := _boss(1)
 	await get_tree().process_frame

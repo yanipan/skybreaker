@@ -250,8 +250,9 @@ func _spawn_bullet(local_offset: Vector2, dir: Vector2, color: Color, dmg: int) 
 
 
 func _fire_missile() -> void:
-	# Mirrors Player missile damage formula scaled to 75%.
-	var dmg: int = max(2, int(ceil((6 + power_level * 2 + _tier_damage() * 2) * 0.75)))
+	# Mirrors Player missile damage formula scaled down (75% -> 66% on 7/11,
+	# missiles hit a little too hard).
+	var dmg: int = max(2, int(ceil((6 + power_level * 2 + _tier_damage() * 2) * 0.66)))
 	var m: Area2D = MissileScript.new()
 	m.position = global_position + Vector2(0, -28)
 	if "damage" in m:
