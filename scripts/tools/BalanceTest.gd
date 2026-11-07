@@ -53,11 +53,11 @@ func _ready() -> void:
 		max_t = max(max_t, tt)
 	print("beam: %d/40 survive one frame, slowest pop %.2fs" % [survived_frame, max_t])
 	_check(survived_frame == 40, "no normal bullet pops on its first beam frame")
-	_check(max_t <= 0.20, "every normal bullet pops within ~0.18s of beam")
+	_check(max_t <= 0.14, "every normal bullet pops within ~0.12s of beam")
 	var shell: Node = EB.new()
 	shell.style = 3  # SHELL
 	add_child(shell)
-	_check(shell.beam_resist >= 0.05 * 1.5 - 0.001, "heavy rounds resist longer")
+	_check(shell.beam_resist >= 0.03 * 1.4 - 0.001, "heavy rounds resist longer")
 	var bb: Node = EB.new()
 	bb.from_boss = true
 	add_child(bb)
@@ -79,8 +79,16 @@ func _ready() -> void:
 	_check(g1._fire_timer >= 0.9, "no instant first shot")
 	GameState.current_level = 1
 	_check(g1._light_volley(), "sector 1 uses light volleys")
-	GameState.current_level = 5
-	_check(not g1._light_volley(), "sector 5 back to full volleys")
+	GameState.current_level = 7
+	_check(g1._light_volley(), "pirate sectors (through 7) keep light volleys")
+	GameState.current_level = 8
+	_check(not g1._light_volley(), "sector 8 back to full volleys")
+	# --- Pirate sectors thinned (7/11) ---
+	var s6: Dictionary = Levels.get_level(6)
+	var s7: Dictionary = Levels.get_level(7)
+	_check(int(s6["wave_size_max"]) <= 5 and float(s6["spawn_interval"]) >= 3.6, "sector 6 waves <=5 every >=3.6s")
+	_check(int(s7["wave_size_max"]) <= 5 and float(s7["spawn_interval"]) >= 3.4, "sector 7 waves <=5 every >=3.4s")
+	_check(float(Levels.get_level(5)["spawn_interval"]) >= float(s6["spawn_interval"]) and float(s6["spawn_interval"]) >= float(s7["spawn_interval"]), "cadence still tightens 5 -> 6 -> 7")
 	# --- Drop economy + shop caps (6/11) ---
 	GameState.current_level = 1
 	p.weapon_levels = {0: 4, 1: 4, 2: 4}

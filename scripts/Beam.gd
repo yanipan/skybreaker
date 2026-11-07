@@ -59,11 +59,11 @@ func _process(delta: float) -> void:
 		if hit_target == null or e.global_position.y > hit_y:
 			hit_target = e
 			hit_y = e.global_position.y
-	# --- Vaporize enemy bullets sitting in our column. Burn band tightened
-	# again — was halo_tolerance * 2.08 (already a 20% cut), now 1.5 with a
-	# tighter min. Combined with the 30% pop chance below and the boss-fire
-	# immunity, the beam no longer doubles as a defensive shield.
-	var burn_tolerance: float = max(halo_tolerance * 1.5, 56.0)
+	# --- Vaporize enemy bullets sitting in our column. Burn band was
+	# halo_tolerance * 2.08, cut to 1.5 / 56 px when the beam doubled as a
+	# shield, widened a notch to 1.8 / 64 px on 7/11 (beam burn felt weak);
+	# heat-based burn below plus boss-fire immunity keep it from being a wall.
+	var burn_tolerance: float = max(halo_tolerance * 1.8, 64.0)
 	var bullets := get_tree().get_nodes_in_group(&"enemy_bullets")
 	for b in bullets:
 		if not is_instance_valid(b):

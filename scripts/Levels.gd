@@ -57,8 +57,8 @@ const ENTRIES: Array = [
 		"theme_color": Color(1.10, 0.85, 0.85),
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 3, 4],
-		"wave_size_min": 3, "wave_size_max": 5,
-		"spawn_interval": 3.4, "duration": 75.0, "has_boss": false,
+		"wave_size_min": 3, "wave_size_max": 4,
+		"spawn_interval": 3.6, "duration": 75.0, "has_boss": false,
 	},
 	# --- ACT 2: Outer Colonies (Levels 6-10) ---
 	{
@@ -66,16 +66,19 @@ const ENTRIES: Array = [
 		"theme_color": Color(1.05, 0.80, 0.95),
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 4],
-		"wave_size_min": 3, "wave_size_max": 6,
-		"spawn_interval": 3.2, "duration": 80.0, "has_boss": false,
+		# Playtest 7/11: 3-6 every 3.2 s with full bomber fans was a wall of
+		# fire right after the Act 1 boss. Thinned, and volleys stay light
+		# through Sector 7 (Enemy.LIGHT_VOLLEY_UNTIL).
+		"wave_size_min": 3, "wave_size_max": 5,
+		"spawn_interval": 3.6, "duration": 80.0, "has_boss": false,
 	},
 	{
 		"name": "Sector 7: Asteroid Drift",
 		"theme_color": Color(0.95, 0.85, 0.70),
 		"bg_texture_path": "",
 		"enemy_pool": [0, 3, 4],
-		"wave_size_min": 4, "wave_size_max": 6,
-		"spawn_interval": 3.0, "duration": 80.0, "has_boss": false,
+		"wave_size_min": 3, "wave_size_max": 5,
+		"spawn_interval": 3.4, "duration": 80.0, "has_boss": false,
 	},
 	{
 		"name": "Sector 8: Bulwark Patrol",

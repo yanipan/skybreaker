@@ -30,11 +30,12 @@ enum Style { ORB, PELLET, DART, SHELL, SPARK, PLASMA, ACID }
 ## before it pops. Rolled per bullet, so some pop on contact and some take a
 ## couple of beam sweeps. Heavy rounds (shell/acid/plasma) resist longer.
 ## 6/11: 0.12-0.45 s x1.6 made the beam barely clear shots (angled shots cross
-## the burn band in under 0.2 s); now 0.05-0.18 s x1.5: still never on the
-## first frame, but a sweep across a stream clears most of it.
-const BEAM_RESIST_MIN: float = 0.05
-const BEAM_RESIST_MAX: float = 0.18
-const BEAM_HEAVY_MUL: float = 1.5
+## the burn band in under 0.2 s); then 0.05-0.18 s x1.5. 7/11 playtest: still
+## not quite enough, now 0.03-0.12 s x1.4: never on the first frame, but a
+## held beam clears a stream in a few frames.
+const BEAM_RESIST_MIN: float = 0.03
+const BEAM_RESIST_MAX: float = 0.12
+const BEAM_HEAVY_MUL: float = 1.4
 var beam_resist: float = 0.0
 var beam_heat: float = 0.0
 

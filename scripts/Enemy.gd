@@ -49,8 +49,9 @@ var fire_interval: float = 0.0
 const EARLY_FIRE_MUL: float = 2.4
 const FIRST_SHOT_MIN: float = 0.9
 ## Up to this sector, multi-shot volleys are thinned (fan 5 -> 3, drones 4 -> 2,
-## tank spread 3 -> 2).
-const LIGHT_VOLLEY_UNTIL: int = 4
+## tank spread 3 -> 2). Was 4; the pirate sectors (6-7) were a wall of bomber
+## fans (playtest 7/11), so full volleys now start at the Act 2 boss stage.
+const LIGHT_VOLLEY_UNTIL: int = 7
 var _fire_timer: float = 0.0
 var fire_sfx: AudioStream = null
 var bullet_style: int = 0   ## EnemyBullet.Style — set per type so each enemy has distinct shots
