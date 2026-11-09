@@ -3,6 +3,7 @@
 
     python3 scripts/store/play_track.py tracks
     python3 scripts/store/play_track.py internal builds/skybreaker-1.0.1-vc12.aab "release notes"
+    python3 scripts/store/play_track.py production <aab> "<release name>" notes.txt [full_description.txt]
 
 `internal` uploads the bundle and puts it on the INTERNAL TESTING track only
 (status completed: testers of that track get it; production is not touched).
@@ -42,6 +43,22 @@ if mode == 'tracks':
     try: print('internal testers', req('GET', E + '/testers/internal'))
     except RuntimeError as e: print('internal testers:', str(e)[:200])
     req('DELETE', E)
+elif mode == 'production':
+    # python3 scripts/store/play_track.py production <aab> <release name> <notes file> [full description file]
+    # Uploads the bundle, optionally replaces the en-US full description, puts the bundle on the
+    # PRODUCTION track at full rollout and commits (the commit sends the change to Google review).
+    aab, rname, notes = sys.argv[2], sys.argv[3], open(sys.argv[4]).read().strip()
+    b = req('POST', f'{UP}/edits/{edit}/bundles?uploadType=media', open(aab, 'rb').read(), 'application/octet-stream')
+    vc = b['versionCode']; print('uploaded versionCode', vc)
+    if len(sys.argv) > 5:
+        l = req('GET', E + '/listings/en-US')
+        full = open(sys.argv[5]).read().strip()
+        assert len(full) <= 4000 and len(notes) <= 500
+        r = req('PUT', E + '/listings/en-US', {'language': 'en-US', 'title': l['title'], 'shortDescription': l['shortDescription'], 'fullDescription': full})
+        print('listing updated, full description', len(r.get('fullDescription', '')), 'chars')
+    tr = req('PUT', E + '/tracks/production', {'track': 'production', 'releases': [{'name': rname, 'status': 'completed', 'versionCodes': [str(vc)], 'releaseNotes': [{'language': 'en-US', 'text': notes}]}]})
+    print('track', json.dumps(tr)[:300])
+    print('commit', req('POST', E + ':commit'))
 elif mode == 'internal':
     aab, notes = sys.argv[2], (sys.argv[3] if len(sys.argv) > 3 else 'Playtest build')
     b = req('POST', f'{UP}/edits/{edit}/bundles?uploadType=media', open(aab, 'rb').read(), 'application/octet-stream')

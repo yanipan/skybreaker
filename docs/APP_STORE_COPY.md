@@ -39,6 +39,8 @@ shmup,shooter,arcade,retro,space,vertical,singleplayer,bullet hell,story,offline
 
 ## Full description (both stores — Play Store 4000 char limit, App Store ~4000 char description field)
 
+> Live on both stores since 9/11/2026 (Play production vc 15, App Store review build 19). The App Store copy is the same text without the divider lines. Privacy wording corrected that day: the game sends anonymous play statistics and shows optional pilot names on the leaderboard, so "no data collection" was removed.
+
 ```
 Earth's deep-space relay catches a signal it shouldn't exist — a distress ping from a colony that went dark forty years ago. One word, repeating.
 
@@ -50,15 +52,15 @@ You're the only pilot close enough. Launch.
 FEATURES
 ━━━━━━━━━━━━━━━━━━━
 
-• 20 HAND-CRAFTED SECTORS. From Earth orbit to a crystalline cathedral at the edge of known space.
+• 24 HAND-CRAFTED SECTORS. From Earth orbit to a crystalline cathedral at the edge of known space.
 
 • THREE WEAPON SYSTEMS. Cycle between rapid-fire phasers, focused plasma beams, and homing missiles. Upgrade each independently at the starbase shop.
 
-• A GENUINE STORY. Six fully-painted cutscenes. A grandmother's last recording. An ending that actually matters.
+• A GENUINE STORY. Seven fully-painted, narrated cutscenes with animated scenes. A grandmother's last recording. An ending that actually matters.
 
-• BUILT FOR ONE HAND. Drag to fly. Tap to fire. Two big buttons for torpedoes and weapon switching. Works on the bus, in the bath, in the back of a taxi.
+• BUILT FOR ONE HAND. Drag to fly. Tap to fire. One fire wheel for all three weapons: touch to fire, slide to switch. A separate torpedo button. Works on the bus, in the bath, in the back of a taxi.
 
-• FREE, NO STRINGS. No ads. No loot boxes. No energy meters. No in-app purchases. No data collection.
+• FREE, NO STRINGS. No ads. No loot boxes. No energy meters. No in-app purchases.
 
 ━━━━━━━━━━━━━━━━━━━
 THE STORY
@@ -72,11 +74,12 @@ Skybreaker is a shoot-'em-up with a real story underneath — the kind of story 
 WHAT'S INSIDE
 ━━━━━━━━━━━━━━━━━━━
 
-• 24 sectors, 16 enemy types, 7 bosses, 1 final two-boss encounter
-• 3 primary weapons × 25 upgrade levels, plus torpedoes
+• 24 sectors, 16 enemy types, 7 bosses, 1 two-boss finale
+• 3 primary weapons × 30 upgrade levels, plus torpedoes
 • A fully-stocked starbase between sectors with a shopkeeper who slowly warms up to you
 • A sidekick wing-drone you can buy (or lose in combat)
 • Procedural wave generation so no two runs play identically
+• Optional online leaderboards and friend challenges
 • Hand-painted cinematic art throughout
 • Haptic feedback calibrated for every action button
 • Cloud-free save system — your progress lives on your device
@@ -85,7 +88,7 @@ WHAT'S INSIDE
 PRIVACY
 ━━━━━━━━━━━━━━━━━━━
 
-Skybreaker does not collect any data. No analytics, no ads, no account. Full privacy policy: https://yanipan.github.io/skybreaker/privacy.html
+No ads, no account, no tracking. The game sends anonymous play statistics (you can switch them off in Settings) and, if you choose a pilot name, shows it with your scores on the leaderboard. Full privacy policy: https://yanipan.github.io/skybreaker/privacy.html
 
 ━━━━━━━━━━━━━━━━━━━
 
@@ -99,10 +102,10 @@ Answer the signal. Fly alone. Come home different.
 ```
 Launch build.
 • 24 sectors, 7 cutscenes with narration, full campaign playable start to finish
-• Mobile-first controls: drag to move, two-finger-free one-hand play
-• Three primary weapons with 25 upgrade tiers each
+• Mobile-first controls: drag to move, one fire wheel, one-hand play
+• Three primary weapons with 30 upgrade tiers each
 • Starbase shop with upgrades, repairs, and a shopkeeper who remembers you
-• Free. No ads, no IAP, no data collection, just a game
+• Free. No ads, no IAP, no tracking, just a game
 ```
 
 ---
