@@ -127,7 +127,8 @@ func _build_ui() -> void:
 	# Tagline sits just under the hero art
 	var subtitle_font: int = int(clamp(panel_h * 0.026, 14, 28))
 	var subtitle := Label.new()
-	subtitle.text = "20 SECTORS  ·  ONE SHIP  ·  BREAK THE SKY"
+	# Count comes from the game, so the menu can never disagree with the campaign again.
+	subtitle.text = "%d SECTORS  ·  ONE SHIP  ·  BREAK THE SKY" % GameState.MAX_LEVEL
 	subtitle.add_theme_font_override("font", Fonts.SUBHEAD)
 	subtitle.add_theme_font_size_override("font_size", subtitle_font)
 	subtitle.add_theme_color_override("font_color", COL_GOLD)
