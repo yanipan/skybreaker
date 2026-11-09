@@ -207,6 +207,11 @@ func _build_ui() -> void:
 	add_child(_online_ui)
 	if not GameState.last_run.is_empty():
 		_online_ui.call_deferred("open_last_run")
+	elif Online.should_ask_name():
+		# First launch (9/11): ask the pilot's name once. LATER keeps the
+		# server's Pilot-#### name; the prompt stays reachable from the
+		# leaderboard screen.
+		_online_ui.call_deferred("open_name_prompt", Callable(), true)
 
 	# Footer high score
 	if GameState.high_score > 0:

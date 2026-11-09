@@ -24,6 +24,10 @@ func _run() -> void:
 	spawner.set_process(false)
 	spawner._boss_spawned = true
 	spawner._boss_enabled = false
+	# The fake boss stands in for the one _spawn_boss would have popped off
+	# the queue; leaving the entry in place would make the spawner bring in
+	# the real sector-4 boss after the fake one dies (9/11 boss queue).
+	spawner._boss_queue.clear()
 
 	var boss_interval: float = max(spawner._spawn_interval * 3.0, 9.0)
 	var cap: int = int(ceil(60.0 / boss_interval)) * 2

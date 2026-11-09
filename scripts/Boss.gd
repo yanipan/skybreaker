@@ -24,6 +24,11 @@ const TEX_BOSS5 := preload("res://assets/sprites/boss5.png")
 const TEX_BOSSF := preload("res://assets/sprites/finalboss.png")
 
 @export var type: Type = Type.BOSS1
+## Optional overrides for a boss used as another stage's escort (see
+## Levels.gd escort_boss): display name and an HP multiplier applied after
+## the per-type base and the level ladder.
+@export var name_override: String = ""
+@export var hp_scale: float = 1.0
 
 # Configured per-type in _configure()
 var max_hp: int = 100
@@ -178,8 +183,11 @@ func _configure() -> void:
 	# Scale meaningfully by current level so a boss met later is much meaner
 	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
 	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
-	max_hp = int(round(float(max_hp) * lerp(1.0, 1.60, t)))
+	max_hp = int(round(float(max_hp) * lerp(1.0, 1.60, t) * hp_scale))
+	max_hp = maxi(1, max_hp)
 	hp = max_hp
+	if name_override != "":
+		boss_name = name_override
 
 
 func _build_collision() -> void:

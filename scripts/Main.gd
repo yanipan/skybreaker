@@ -507,12 +507,15 @@ func _update_level_banner(delta: float) -> void:
 func _check_level_complete() -> void:
 	if _level_transitioning or _entry_active or _spawner == null or _cutscene_active or _death_active:
 		return
-	if _spawner.get_mission_time() < _spawner.get_level_duration():
+	# Boss stages: every queued boss must have entered and died (a bare
+	# "no boss alive" check let the timer end a stage between two bosses).
+	# The finale ends the moment its last boss dies; other stages still
+	# run out their timer.
+	var bosses_done: bool = _spawner.boss_sequence_done()
+	if not bosses_done:
 		return
-	# If this is a boss stage, the boss must die before the level can advance
-	# (otherwise the timer would end the fight prematurely).
-	var bosses := get_tree().get_nodes_in_group(&"bosses")
-	if not bosses.is_empty():
+	var finale_kill: bool = _spawner.ends_on_boss() and _spawner.bosses_spawned() > 0
+	if not finale_kill and _spawner.get_mission_time() < _spawner.get_level_duration():
 		return
 	# Story intercept. The ending plays right here (no warp follows). Act
 	# cutscenes play AFTER the warp: warp → new sector loads under black →

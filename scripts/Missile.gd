@@ -155,10 +155,20 @@ func _process(delta: float) -> void:
 func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group(&"enemies"):
 		if area.has_method("take_damage"):
-			area.take_damage(damage)
+			area.take_damage(damage_against(area))
 		# Bigger pop than a bullet, smaller than a torpedo
 		EventBus.screen_shake_requested.emit(4.0, 0.10)
 		queue_free()
+
+
+## Playtest 9/11: missiles melted bosses too fast. A missile that lands on a
+## boss deals BOSS_DAMAGE_MUL of its damage; regular enemies take it in full.
+const BOSS_DAMAGE_MUL: float = 0.9
+
+func damage_against(target: Node) -> int:
+	if target.is_in_group(&"bosses"):
+		return maxi(1, int(round(float(damage) * BOSS_DAMAGE_MUL)))
+	return damage
 
 
 # --- Drawing — local space, missile points "up" (angle handled by rotation) ---

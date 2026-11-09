@@ -31,11 +31,11 @@ Boot.tscn → StartScreen.tscn → Main.tscn (gameplay)
 | `Levels.gd` | Resource | Level/wave definitions |
 | `Enemy.gd` | Node2D | Base enemy logic |
 | `Boss.gd` | Node2D | Boss phases and patterns |
-| `EnemySpawner.gd` | Node | Spawns waves from Levels data |
+| `EnemySpawner.gd` | Node | Spawns waves from Levels data; boss queue (`escort_boss` then `boss_type`), `boss_sequence_done()` / `ends_on_boss()` gate the stage end in Main |
 | `StarbaseShop.gd` | Node | Between-level shop (upgrade purchases) |
 | `Starbase.gd` | Node | Starbase scene controller |
-| `Cutscene.gd` | Node | Cutscene player; `CutsceneData.gd` holds data |
-| `Sidekick.gd` | Node2D | Companion ship, persists across levels if alive |
+| `Cutscene.gd` | Node | Cutscene player; `CutsceneData.gd` holds data. Plays `assets/audio/narration/<image_file>.mp3` per beat (made by `scripts/tools/narration_tts.mjs`, Inworld voice Eldrin) over `assets/audio/music/cutscene_mystery.mp3` (made by `scripts/tools/make_cutscene_music.py`) |
+| `Sidekick.gd` | Node2D | Companion ship, persists across levels if alive; charged shield eats one whole hit |
 | `Bullet.gd` | Area2D | Player bullet (pooled) |
 | `EnemyBullet.gd` | Area2D | Enemy bullet |
 | `Torpedo.gd` | Area2D | Player torpedo (secondary) |

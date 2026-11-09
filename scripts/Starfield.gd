@@ -187,9 +187,17 @@ func _draw_layer(arr: Array, tint: Color) -> void:
 			# Hot leading head — bright cap on the streak's bottom end
 			draw_circle(pos + Vector2(0, streak_len), s["size"] * (0.6 + 0.6 * warp_factor), Color(1, 1, 1, alpha))
 		else:
-			draw_circle(pos, s["size"], c)
-			if s["size"] > 2.0:
+			# Battery pass 9/11: a star under ~2.2 px is a plain quad (one
+			# rect, 4 vertices) instead of draw_circle's 30-odd-vertex
+			# polygon; nobody can tell at that size and it is the bulk of
+			# the ~200 stars rebuilt every frame. Big near stars keep the
+			# round shape and the glow cross.
+			var sz: float = s["size"]
+			if sz <= 2.2:
+				draw_rect(Rect2(pos.x - sz * 0.5, pos.y - sz * 0.5, sz, sz), c, true)
+			else:
+				draw_circle(pos, sz, c)
 				var glow := Color(tint.r, tint.g, tint.b, alpha * 0.35)
-				var r: float = s["size"] * 2.2
+				var r: float = sz * 2.2
 				draw_line(pos + Vector2(-r, 0), pos + Vector2(r, 0), glow, 1.0)
 				draw_line(pos + Vector2(0, -r), pos + Vector2(0, r), glow, 1.0)

@@ -239,9 +239,17 @@ func _confirm_report(who: String) -> void:
 
 # --- Pilot name ---
 
-func open_name_prompt(after: Callable = Callable()) -> void:
-	var box := _open("PILOT NAME")
-	box.add_child(_label("Your name on the leaderboard. 3-16 letters, numbers or _", _font(), COL_MUTED))
+## `first_time` = the welcome variant shown once on first launch: different
+## copy, a LATER button instead of CANCEL, and the ask is recorded so it
+## never pops again on its own.
+func open_name_prompt(after: Callable = Callable(), first_time: bool = false) -> void:
+	if first_time:
+		Online.mark_name_asked()
+	var box := _open("WELCOME, PILOT" if first_time else "PILOT NAME")
+	if first_time:
+		box.add_child(_label("What should we call you? This is your name on the\nleaderboard. 3-16 letters, numbers or _", _font(), COL_MUTED))
+	else:
+		box.add_child(_label("Your name on the leaderboard. 3-16 letters, numbers or _", _font(), COL_MUTED))
 	var edit := _line_edit(Online.pilot_name if Online.has_custom_name() else "Your pilot name", 16)
 	box.add_child(edit)
 	var msg := _label("", _font(), COL_RED)
@@ -270,7 +278,7 @@ func open_name_prompt(after: Callable = Callable()) -> void:
 		else:
 			msg.text = reason_text(str(r.get("reason", "")))
 	edit.text_submitted.connect(func(_t: String) -> void: save.call())
-	box.add_child(_row([_button("SAVE", COL_GREEN, save), _button("CANCEL", COL_CYAN, back)]))
+	box.add_child(_row([_button("SAVE", COL_GREEN, save), _button("LATER" if first_time else "CANCEL", COL_CYAN, back)]))
 	edit.call_deferred("grab_focus")
 
 

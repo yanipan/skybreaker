@@ -12,7 +12,13 @@ class_name Levels
 ##   wave_size_max    Upper bound for the random wave size
 ##   spawn_interval   Seconds between waves (lower = harder)
 ##   duration         Seconds the level lasts before "level complete"
-##   has_boss         Reserved — true once boss system exists
+##   has_boss         Boss stage: the boss spawns ~35% in; the stage cannot
+##                    end while a boss lives
+##   boss_type        Boss.Type index of the main boss
+##   escort_boss      Optional {type, name, hp_scale}: a first boss that
+##                    guards the stage; the main boss enters after it dies
+##   ends_on_boss     true = the stage ends right after the last boss dies,
+##                    whatever the timer says (used by the finale)
 ##
 ## Difficulty curve: enemy pool grows, wave sizes grow, spawn cadence tightens.
 ## Levels 1-4 introduce types one at a time. 5-8 mix 2-3 types. 9-12 mix 4.
@@ -186,6 +192,12 @@ const ENTRIES: Array = [
 		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8],
 		"wave_size_min": 6, "wave_size_max": 9,
 		"spawn_interval": 2.2, "duration": 120.0, "has_boss": true, "boss_type": 5,
+		# Playtest 9/11: the finale is a boss PAIR. The Prism Warden (a
+		# Crystal-Prism hull at 70% HP) guards the gate; THE SKYBREAKER
+		# itself enters a few seconds after the warden falls. The sector ends
+		# the moment the Skybreaker dies (no filler waves after the boss).
+		"escort_boss": {"type": 3, "name": "PRISM WARDEN", "hp_scale": 0.7},
+		"ends_on_boss": true,
 	},
 ]
 

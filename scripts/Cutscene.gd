@@ -42,6 +42,8 @@ const KB_SCALE_END: float = 1.08
 ## How far the image slides horizontally over a beat (in viewport pixels).
 ## Alternates sign each beat for organic variety.
 const KB_PAN_PX: float = 40.0
+## A beat with narration stays up at least this long after the voice ends.
+const NARRATION_TAIL_SECONDS: float = 1.0
 
 var _beats: Array = []
 var _current_index: int = -1
@@ -78,6 +80,10 @@ func play(beats: Array) -> void:
 	_build_ui()
 	# Freeze gameplay behind us while the cutscene plays.
 	get_tree().paused = true
+	# Story music (9/11): dark ambient loop under the slides, narration per beat.
+	var am: Node = get_node_or_null("/root/AudioManager")
+	if am != null and am.has_method("play_cutscene_music"):
+		am.play_cutscene_music()
 	# Start with a black curtain fading out to reveal beat 1.
 	_edge_fade.color = Color.BLACK
 	_advance_to_beat(0, true)
@@ -231,6 +237,16 @@ func _advance_to_beat(idx: int, is_first: bool) -> void:
 	_caption.text = String(beat.get("caption", ""))
 
 	var image_file: String = String(beat.get("image_file", ""))
+	# Narration: the slide holds until the line has been spoken (plus a tail),
+	# never shorter than its scripted duration. A tap still skips ahead.
+	var am: Node = get_node_or_null("/root/AudioManager")
+	if am != null and am.has_method("narration_for"):
+		var line: AudioStream = am.narration_for(image_file)
+		if line != null:
+			var spoken: float = float(am.play_voice(line))
+			_beat_duration = max(_beat_duration, spoken + NARRATION_TAIL_SECONDS)
+		elif am.has_method("stop_voice"):
+			am.stop_voice()
 	var mp4_path: String = CUTSCENE_DIR + image_file + ".mp4"
 	var png_path: String = CUTSCENE_DIR + image_file + ".png"
 
@@ -365,6 +381,9 @@ func _dismiss() -> void:
 		return
 	_dismissing = true
 	set_process(false)
+	var am: Node = get_node_or_null("/root/AudioManager")
+	if am != null and am.has_method("end_cutscene_music"):
+		am.end_cutscene_music()
 	var tw := create_tween()
 	tw.set_process_mode(Tween.TWEEN_PROCESS_IDLE)
 	tw.tween_property(_edge_fade, "color", Color(0, 0, 0, 1), EDGE_FADE_SECONDS)

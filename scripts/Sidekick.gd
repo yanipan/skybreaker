@@ -297,12 +297,13 @@ func take_damage(amount: int) -> void:
 	if _dying:
 		return
 	_shield_recharge_wait = shield_recharge_delay
-	if shield > 0.0:
-		var absorbed: float = min(shield, float(amount))
-		shield -= absorbed
-		amount -= int(absorbed)
-		if amount <= 0:
-			return
+	# Playtest 9/11: the old 1-point shield shaved one point off a 5-point
+	# volley, so the sidekick died in two hits. A charged shield now eats
+	# the WHOLE hit, then recharges after the quiet window.
+	if shield >= 1.0:
+		shield = 0.0
+		queue_redraw()
+		return
 	hp -= amount
 	if hp <= 0:
 		_die()
@@ -363,12 +364,17 @@ func _on_area_entered(area: Area2D) -> void:
 # --- Draw — shield bubble + small power dots ---
 
 func _draw() -> void:
-	if shield > 0.0:
-		var pct: float = shield / float(max_shield)
-		var r: float = ship_size * 0.5 + 16.0
-		draw_circle(Vector2.ZERO, r + 4.0, Color(0.55, 1.0, 0.85, 0.10 + pct * 0.10))
-		draw_circle(Vector2.ZERO, r, Color(0.55, 1.0, 0.85, 0.18 + pct * 0.10))
+	var r: float = ship_size * 0.5 + 16.0
+	if shield >= 1.0:
+		# Charged: this bubble eats the next hit outright.
+		draw_circle(Vector2.ZERO, r + 4.0, Color(0.55, 1.0, 0.85, 0.20))
+		draw_circle(Vector2.ZERO, r, Color(0.55, 1.0, 0.85, 0.28))
 		draw_arc(Vector2.ZERO, r, 0, TAU, 32, Color(0.7, 1.0, 0.9, 0.7), 1.5, true)
+	elif shield > 0.0:
+		# Recharging: a thin arc grows with the charge so the player can see
+		# the shield coming back.
+		draw_arc(Vector2.ZERO, r, -PI * 0.5, -PI * 0.5 + TAU * (shield / float(max_shield)), 24,
+				Color(0.7, 1.0, 0.9, 0.45), 1.5, true)
 
 	# Tiny power pip stack so the player can see how strong the sidekick is.
 	var dots: int = clamp(power_level, 1, 8)

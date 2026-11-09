@@ -19,9 +19,15 @@ var pilot_name: String = "":
 		if v != pilot_name:
 			pilot_name = v
 			var cfg := ConfigFile.new()
+			cfg.load(NAME_PATH)
 			cfg.set_value("p", "name", v)
 			cfg.save(NAME_PATH)
 const NAME_PATH: String = "user://pilot.cfg"
+
+
+## Set once the first-launch name prompt has been shown (saved in pilot.cfg
+## next to the name, so a reinstall asks again and an update does not).
+var name_asked: bool = false
 
 
 func _ready() -> void:
@@ -29,7 +35,23 @@ func _ready() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(NAME_PATH) == OK:
 		pilot_name = str(cfg.get_value("p", "name", ""))
+		name_asked = bool(cfg.get_value("p", "asked", false))
 	call_deferred("retry_pending")
+
+
+## First launch only: no custom name yet and never asked. Debug builds are
+## offline, so the prompt would only ever say "No connection": skip them.
+func should_ask_name() -> bool:
+	return online_ok() and not name_asked and not has_custom_name()
+
+
+func mark_name_asked() -> void:
+	name_asked = true
+	var cfg := ConfigFile.new()
+	cfg.load(NAME_PATH)
+	cfg.set_value("p", "name", pilot_name)
+	cfg.set_value("p", "asked", true)
+	cfg.save(NAME_PATH)
 
 
 func _sig_key() -> PackedByteArray:

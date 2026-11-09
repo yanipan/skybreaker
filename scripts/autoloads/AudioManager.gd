@@ -21,6 +21,12 @@ const SFX_POOL_SIZE: int = 16
 # Asset paths — kept as constants so the file is the single source of
 # truth, but the actual AudioStream resources are loaded on demand.
 const _PATH_BG_MUSIC: String = "res://assets/audio/music/basic-bg-music.mp3"
+## Story cutscenes (9/11): dark ambient loop made by
+## scripts/tools/make_cutscene_music.py. Crossfaded in while the slides
+## play, back to the game track when they end.
+const _PATH_CUTSCENE_MUSIC: String = "res://assets/audio/music/cutscene_mystery.mp3"
+## Narration clips live here as <beat image_file>.mp3 (scripts/tools/narration_tts.mjs).
+const NARRATION_DIR: String = "res://assets/audio/narration/"
 const _PATH_PLAYER_SHOT: String = "res://assets/audio/sfx/playershot1.mp3"
 const _PATH_COIN_PICKUP: String = "res://assets/audio/sfx/coinpickup.mp3"
 const _PATH_TORPEDO_FIRE: String = "res://assets/audio/sfx/torpedofire.mp3"
@@ -38,6 +44,9 @@ var _stream_cache: Dictionary = {}
 var BG_MUSIC: AudioStream:
 	get:
 		return _get_stream(_PATH_BG_MUSIC)
+var CUTSCENE_MUSIC: AudioStream:
+	get:
+		return _get_stream(_PATH_CUTSCENE_MUSIC)
 
 # These look like properties to call sites (AudioManager.SFX_BEAM) but are
 # actually getters that route through the lazy cache. Drop-in compatible
@@ -68,15 +77,31 @@ const SFX_SHIELD_HIT: AudioStream = null
 
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _music_player: AudioStreamPlayer
+## Second music deck so a cutscene track can crossfade over the game track
+## and hand back without a gap. `_music_player` is always the live deck.
+var _music_player_alt: AudioStreamPlayer
+## Narration deck: one line at a time, music ducks while it speaks.
+var _voice_player: AudioStreamPlayer
+var _cutscene_music_on: bool = false
 var _sfx_index: int = 0
 var _pending_music: bool = true   ## Music boot is deferred — see _ready
 
 
 func _ready() -> void:
-	# Music player
+	# Music keeps playing under the pause screen and the (tree-paused)
+	# story cutscenes, and narration must run while the tree is paused.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Music players (two decks, see _music_player_alt)
 	_music_player = AudioStreamPlayer.new()
 	_music_player.bus = &"Music"
 	add_child(_music_player)
+	_music_player_alt = AudioStreamPlayer.new()
+	_music_player_alt.bus = &"Music"
+	add_child(_music_player_alt)
+	_voice_player = AudioStreamPlayer.new()
+	_voice_player.bus = &"SFX"
+	_voice_player.finished.connect(_on_voice_finished)
+	add_child(_voice_player)
 
 	# SFX pool
 	for i in SFX_POOL_SIZE:
@@ -166,6 +191,109 @@ func stop_music(fade_out: float = 1.0) -> void:
 	_music_tween = create_tween()
 	_music_tween.tween_property(_music_player, "volume_db", MUSIC_SILENT_DB, fade_out)
 	_music_tween.tween_callback(_music_player.stop)
+
+
+## Crossfade the live deck to `stream`: the old deck fades out on the alt
+## player while the new one fades in. Both tweens run while the tree is
+## paused (this node is PROCESS_MODE_ALWAYS).
+func crossfade_music(stream: AudioStream, duration: float = 1.5) -> void:
+	if stream == null:
+		return
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
+	var old: AudioStreamPlayer = _music_player
+	var fresh: AudioStreamPlayer = _music_player_alt
+	_music_player = fresh
+	_music_player_alt = old
+	fresh.stream = stream
+	fresh.volume_db = MUSIC_SILENT_DB
+	fresh.play()
+	_music_tween = create_tween()
+	_music_tween.set_parallel(true)
+	_music_tween.tween_property(fresh, "volume_db", _music_target_db(), duration)
+	_music_tween.tween_property(old, "volume_db", MUSIC_SILENT_DB, duration)
+	_music_tween.set_parallel(false)
+	_music_tween.tween_callback(old.stop)
+
+
+## Story slides: swap to the dark ambient loop.
+func play_cutscene_music() -> void:
+	if _cutscene_music_on:
+		return
+	var stream: AudioStream = CUTSCENE_MUSIC
+	if stream == null:
+		return
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	_cutscene_music_on = true
+	_pending_music = false
+	crossfade_music(stream, 1.2)
+
+
+## Slides over: back to the game track (no-op if the slides never swapped).
+func end_cutscene_music() -> void:
+	stop_voice()
+	if not _cutscene_music_on:
+		return
+	_cutscene_music_on = false
+	var stream: AudioStream = BG_MUSIC
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	crossfade_music(stream, 1.8)
+
+
+## Ducking: music sits MUSIC_DUCK_DB lower while a narration line plays.
+const MUSIC_DUCK_DB: float = -9.0
+var _ducked: bool = false
+var _duck_tween: Tween
+
+
+func _music_target_db() -> float:
+	return MUSIC_TARGET_DB + (MUSIC_DUCK_DB if _ducked else 0.0)
+
+
+func _set_duck(on: bool) -> void:
+	if _ducked == on:
+		return
+	_ducked = on
+	if _duck_tween != null and _duck_tween.is_valid():
+		_duck_tween.kill()
+	# Do not fight a running crossfade: it already targets _music_target_db().
+	if _music_tween != null and _music_tween.is_valid() and _music_tween.is_running():
+		return
+	_duck_tween = create_tween()
+	_duck_tween.tween_property(_music_player, "volume_db", _music_target_db(), 0.4)
+
+
+## Play one narration line (stops the previous one). Returns the clip length
+## in seconds, 0.0 when nothing played, so the caller can hold the slide.
+func play_voice(stream: AudioStream, volume_db: float = 2.0) -> float:
+	if stream == null:
+		return 0.0
+	_voice_player.stop()
+	_voice_player.stream = stream
+	_voice_player.volume_db = volume_db
+	_voice_player.play()
+	_set_duck(true)
+	return stream.get_length()
+
+
+func stop_voice() -> void:
+	if _voice_player.playing:
+		_voice_player.stop()
+	_set_duck(false)
+
+
+func _on_voice_finished() -> void:
+	_set_duck(false)
+
+
+## Narration clip for a cutscene beat, or null when none was generated.
+func narration_for(image_file: String) -> AudioStream:
+	var path: String = NARRATION_DIR + image_file + ".mp3"
+	if not ResourceLoader.exists(path):
+		return null
+	return _get_stream(path)
 
 
 func haptic_light() -> void:

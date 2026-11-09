@@ -52,6 +52,8 @@ const FIRST_SHOT_MIN: float = 0.9
 ## tank spread 3 -> 2). Was 4; the pirate sectors (6-7) were a wall of bomber
 ## fans (playtest 7/11), so full volleys now start at the Act 2 boss stage.
 const LIGHT_VOLLEY_UNTIL: int = 7
+## Extra hull / ram damage for enemies in the last two sectors (19-20).
+const LATE_SECTOR_MUL: float = 1.08
 var _fire_timer: float = 0.0
 var fire_sfx: AudioStream = null
 var bullet_style: int = 0   ## EnemyBullet.Style — set per type so each enemy has distinct shots
@@ -281,6 +283,10 @@ func _configure() -> void:
 	# with much lower spawn count, which is far easier on phone GPU/physics.
 	var hp_mul: float = lerp(0.70, 2.90, t)
 	var speed_mul: float = lerp(0.80, 1.30, t)
+	# Playtest 9/11: the last two sectors should bite harder. Hull and ram
+	# damage get LATE_SECTOR_MUL on top of the ladder; fire rate is unchanged.
+	var late_mul: float = LATE_SECTOR_MUL if lvl >= GameState.MAX_LEVEL - 1 else 1.0
+	hp_mul *= late_mul
 	var fire_t: float = t * t * (3.0 - 2.0 * t)  # smoothstep
 	var fire_mul: float = lerp(EARLY_FIRE_MUL, 0.45, fire_t)
 	max_hp = max(1, int(round(float(max_hp) * hp_mul)))
@@ -291,7 +297,7 @@ func _configure() -> void:
 		_fire_timer = max(_fire_timer * fire_mul, FIRST_SHOT_MIN)
 	# Late-game enemies hit harder on contact too — by Sector 20 a graze costs
 	# nearly twice as much HP as it does in Sector 1.
-	contact_damage = max(1, int(round(float(contact_damage) * lerp(0.85, 1.80, t))))
+	contact_damage = max(1, int(round(float(contact_damage) * lerp(0.85, 1.80, t) * late_mul)))
 	hp = max_hp
 
 

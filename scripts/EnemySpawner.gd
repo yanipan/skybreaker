@@ -59,6 +59,14 @@ var _boss_spawn_time: float = -1.0
 var _boss_spawned: bool = false
 var _boss_enabled: bool = false
 var _boss_type_idx: int = 0
+## Bosses still to enter, in order. Each is {type, name, hp_scale}. A stage
+## with an escort_boss has two entries; the next one enters
+## BOSS_FOLLOWUP_DELAY seconds after the previous boss dies.
+var _boss_queue: Array = []
+var _boss_followup_timer: float = -1.0
+var _bosses_spawned: int = 0
+var _ends_on_boss: bool = false
+const BOSS_FOLLOWUP_DELAY: float = 3.5
 
 # Asteroid drift — independent timer. Rocks start showing up at sector 2 so
 # the very first stage stays a clean introduction. Cadence tightens slightly
@@ -105,9 +113,16 @@ func _ready() -> void:
 	# Boss setup — appears about 35% of the way in so the player has time to warm
 	# up and the regular spawn cadence is established before the encounter.
 	_boss_enabled = bool(_level_data.get("has_boss", false))
+	_ends_on_boss = bool(_level_data.get("ends_on_boss", false))
 	if _boss_enabled:
 		_boss_type_idx = int(_level_data.get("boss_type", 0))
 		_boss_spawn_time = dur * 0.35
+		_boss_queue.clear()
+		var escort: Dictionary = _level_data.get("escort_boss", {})
+		if not escort.is_empty():
+			_boss_queue.append({"type": int(escort.get("type", 0)), "name": str(escort.get("name", "")),
+					"hp_scale": float(escort.get("hp_scale", 1.0))})
+		_boss_queue.append({"type": _boss_type_idx, "name": "", "hp_scale": 1.0})
 	# Starbase — normally never on boss stages, ~45% chance otherwise from
 	# level 2 onward. BUT we always guarantee a shop on the stage immediately
 	# preceding a boss so the player can stock up. This guarantee even
@@ -136,8 +151,7 @@ func _process(delta: float) -> void:
 	_mission_time += delta
 	_timer -= delta
 	if _timer <= 0.0:
-		var boss_alive := _boss_spawned and not get_tree().get_nodes_in_group(&"bosses").is_empty()
-		_timer = _boss_wave_interval() if boss_alive else _spawn_interval
+		_timer = _boss_wave_interval() if _boss_phase() else _spawn_interval
 		_spawn_wave()
 	if _guaranteed_power_enabled and not _guaranteed_power_dropped and _mission_time >= _guaranteed_power_time:
 		_drop_guaranteed_power()
@@ -149,6 +163,16 @@ func _process(delta: float) -> void:
 		_drop_sidekick()
 	if _boss_enabled and not _boss_spawned and _mission_time >= _boss_spawn_time:
 		_spawn_boss()
+	elif _boss_spawned and not _boss_queue.is_empty():
+		# A boss fell and another is queued: short beat, then the next enters.
+		if get_tree().get_nodes_in_group(&"bosses").is_empty():
+			if _boss_followup_timer < 0.0:
+				_boss_followup_timer = BOSS_FOLLOWUP_DELAY
+			else:
+				_boss_followup_timer -= delta
+				if _boss_followup_timer <= 0.0:
+					_boss_followup_timer = -1.0
+					_spawn_boss()
 	if _starbase_enabled and not _starbase_spawned and _mission_time >= _starbase_time:
 		_spawn_starbase()
 	if _asteroids_enabled:
@@ -230,13 +254,47 @@ func _spawn_starbase() -> void:
 ## max(_spawn_interval * 3, 9) seconds. After it dies the base cadence returns.
 func _spawn_boss() -> void:
 	_boss_spawned = true
+	var entry: Dictionary = _boss_queue.pop_front() if not _boss_queue.is_empty() else {"type": _boss_type_idx, "name": "", "hp_scale": 1.0}
+	_bosses_spawned += 1
 	var boss: Boss = BossScript.new()
-	boss.type = clamp(_boss_type_idx, 0, 5)
+	boss.type = clamp(int(entry.get("type", _boss_type_idx)), 0, 5)
+	boss.name_override = str(entry.get("name", ""))
+	boss.hp_scale = float(entry.get("hp_scale", 1.0))
 	boss.position = Vector2(_viewport_size.x * 0.5, -120.0)
 	get_parent().add_child(boss)
+	EventBus.boss_spawned.emit(boss)
 	# Push the next wave out so fodder does not land on the boss entrance.
 	_timer = max(_timer, _boss_wave_interval())
-	print("BOSS spawned: type=", _boss_type_idx, " — fodder <=", BOSS_WAVE_MAX, " every ", _boss_wave_interval(), "s")
+	print("BOSS spawned: type=", boss.type, " name=", boss.boss_name, " hp=", boss.max_hp,
+			" queued=", _boss_queue.size(), " — fodder <=", BOSS_WAVE_MAX, " every ", _boss_wave_interval(), "s")
+
+
+## True while a boss is on screen or the next queued boss is about to enter:
+## waves stay small and slow for the whole encounter, including the beat
+## between an escort and the main boss.
+func _boss_phase() -> bool:
+	if not _boss_spawned:
+		return false
+	return not _boss_queue.is_empty() or not get_tree().get_nodes_in_group(&"bosses").is_empty()
+
+
+## True once every boss of this stage has entered and died. Stages without a
+## boss report true so Main can treat the timer as the only gate.
+func boss_sequence_done() -> bool:
+	if not _boss_enabled:
+		return true
+	if not _boss_spawned or not _boss_queue.is_empty():
+		return false
+	return get_tree().get_nodes_in_group(&"bosses").is_empty()
+
+
+## Finale rule: the stage ends as soon as the last boss dies.
+func ends_on_boss() -> bool:
+	return _ends_on_boss
+
+
+func bosses_spawned() -> int:
+	return _bosses_spawned
 
 
 ## Spawns a single drifting asteroid. Size weights shift toward bigger rocks
@@ -280,8 +338,7 @@ func _spawn_wave() -> void:
 	var size_min: int = int(_level_data.get("wave_size_min", 1))
 	var size_max: int = int(_level_data.get("wave_size_max", 3))
 	var wave_size: int = GameRng.randi_range(size_min, size_max)
-	var boss_alive := _boss_spawned and not get_tree().get_nodes_in_group(&"bosses").is_empty()
-	if boss_alive:
+	if _boss_phase():
 		wave_size = mini(wave_size, BOSS_WAVE_MAX)
 	var x_jitter: float = GameRng.randf_range(-x_jitter_range, x_jitter_range)
 

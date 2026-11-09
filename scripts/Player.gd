@@ -1053,7 +1053,8 @@ func _handle_beam_firing(delta: float) -> void:
 	# ladder. Still under the original 32+L*6.5 at low levels but overtakes it
 	# past L2, matching user's "stronger but not broken" target.
 	# Slope dropped from 7.0 → 5.6 so L25 DPS ≈ old L20 (34 + 20×7 = 174).
-	var per_beam_dps: float = 34.0 + float(power_level) * 5.6
+	# Playtest 9/11: 5% off (34 + L*5.6 -> 32.3 + L*5.32).
+	var per_beam_dps: float = 32.3 + float(power_level) * 5.32
 	# Width nudged back up a bit (7.8+L*2.8 → 9.0+L*3.2) so swept beams catch
 	# more dodgers without becoming a wall again.
 	# Slope 3.2 → 2.56 so L25 width ≈ old L20 (9 + 20×3.2 = 73 px).
