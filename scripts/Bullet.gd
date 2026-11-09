@@ -34,8 +34,10 @@ func _on_area_entered(area: Area2D) -> void:
 func _draw() -> void:
 	var w: float = bullet_size.x
 	var h: float = bullet_size.y
-	# Subtle high-frequency pulse so the beam feels alive
-	var pulse: float = 0.85 + 0.15 * sin(_time * 25.0)
+	# Drawn ONCE (battery pass 9/11): the old per-frame redraw rebuilt nine
+	# shapes for every shot on screen just to pulse the glow by 15%. The
+	# pulse now rides on modulate (see _process), which costs no rebuild.
+	var pulse: float = 1.0
 	var c := bullet_color
 	# Tinted glow layers (use the bullet color, modulated alpha)
 	var glow_outer := Color(c.r, c.g, c.b, 0.18 * pulse)
@@ -68,13 +70,19 @@ func _draw_capsule(center: Vector2, width: float, height: float, color: Color) -
 
 func _build_collision() -> void:
 	var shape := CollisionShape2D.new()
-	var rect := RectangleShape2D.new()
-	rect.size = bullet_size
+	# One shared RectangleShape2D per bullet size (the ship spawns ~150 shots
+	# a second at high power; each used to allocate its own shape resource).
+	var rect: RectangleShape2D = _shape_cache.get(bullet_size)
+	if rect == null:
+		rect = RectangleShape2D.new()
+		rect.size = bullet_size
+		_shape_cache[bullet_size] = rect
 	shape.shape = rect
 	add_child(shape)
 
 
 var _stuck: Array = []
+static var _shape_cache: Dictionary = {}
 
 func _process(delta: float) -> void:
 	_time += delta
@@ -84,7 +92,7 @@ func _process(delta: float) -> void:
 	if HitCheck.stuck(hit != null, _stuck) and not is_queued_for_deletion():
 		HitCheck.note_fallback("bullet")
 		_on_area_entered(hit)
-	queue_redraw()
+	modulate.a = 0.88 + 0.12 * sin(_time * 25.0)
 	# Despawn when fully off any edge (with a small margin)
 	var m: float = 64.0
 	if position.y < -m or position.y > _viewport_size.y + m \

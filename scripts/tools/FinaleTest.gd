@@ -44,7 +44,7 @@ func _ready() -> void:
 	_check(herald != null and herald.type == 7, "first boss is THE HERALD hull")
 	_check(herald != null and herald.boss_name == "THE HERALD", "first boss is named THE HERALD, got %s" % (herald.boss_name if herald else "none"))
 	_check(herald != null and herald.max_hp == int(round(1500.0 * 1.6 * 0.75)), "herald HP = 75%% of a sector-24 Herald (%d)" % (herald.max_hp if herald else -1))
-	_check(herald != null and herald._sprite != null and herald._sprite.modulate != Color.WHITE, "herald rides a tinted stand-in until boss7.png exists")
+	_check(herald != null and herald._sprite != null and (herald._sprite.modulate == Color.WHITE) == ResourceLoader.exists(Boss.PATH_HERALD), "herald: own art untinted, stand-in tinted")
 	_check(sp._boss_phase(), "boss phase while the herald lives")
 	_check(not sp.boss_sequence_done(), "sequence not done while the herald lives")
 	_kill_bosses()
@@ -97,7 +97,7 @@ func _ready() -> void:
 	add_child(shade)
 	await get_tree().process_frame
 	_check(not shade.cloaked and shade.monitorable, "shade starts visible")
-	_check(shade._sprite != null and shade._sprite.modulate != Color.WHITE, "shade rides a tinted stand-in until enemy_shade.png exists")
+	_check(shade._sprite != null and (shade._sprite_tint == Color.WHITE) == ResourceLoader.exists(Enemy.PATH_SHADE), "shade: own art untinted, stand-in tinted")
 	var shade_hp: int = shade.hp
 	for i in 18:
 		shade._process(0.1)   # 1.8 s > visible window
@@ -116,6 +116,8 @@ func _ready() -> void:
 	shade.take_damage(5)
 	_check(shade.hp == shade_hp - 5, "visible shade takes damage")
 	probe.position = shade.position   # it kept flying while cloaked
+	await get_tree().process_frame    # HitCheck flattens the enemy list once per frame
+	probe.position = shade.position
 	_check(HitCheck.enemy_at(probe, Vector2(10, 10)) == shade, "hit safety net sees the visible shade")
 	shade.queue_free()
 	probe.queue_free()
@@ -151,6 +153,154 @@ func _ready() -> void:
 			pellets += 1
 	_check(pellets == 6 and not is_instance_valid(shell), "shell bursts into six pellets and is gone")
 	art.queue_free()
+	for c in get_children():
+		if c is EnemyBullet:
+			c.free()
+
+	# --- Wave two of new enemies: MINELAYER, SPLITTER + SHARD, PULSAR, HUNTER, BEAMER ---
+	var EN2 = load("res://scripts/Enemy.gd")
+	var ship := Area2D.new()   # stand-in target for aimed / homing shots
+	ship.monitoring = false    # bullets' own hit safety net skips a non-monitoring ship
+	ship.add_to_group(&"player")
+	ship.position = Vector2(700, 1100)
+	add_child(ship)
+	var art2: Node = EN2.new(); art2.type = 10; art2.position = Vector2(400, 200); add_child(art2)
+	await get_tree().process_frame
+	art2._fire()
+	var sh2: Node = get_child(get_child_count() - 1)
+	await get_tree().process_frame
+	_check(sh2 is EnemyBullet and is_equal_approx(sh2.speed, 240.0), "mortar shell keeps its slow speed (%.0f)" % sh2.speed)
+	sh2.free(); art2.free()
+	var ml: Node = EN2.new(); ml.type = 11; ml.position = Vector2(300, 250); add_child(ml)
+	await get_tree().process_frame
+	_check(ml.movement == &"horizontal", "minelayer crosses sideways")
+	ml._fire()
+	var mine: Node = get_child(get_child_count() - 1)
+	await get_tree().process_frame
+	_check(mine is EnemyBullet and mine.burst_after > 0.0 and mine.burst_count == 5 and is_equal_approx(mine.speed, 85.0), "minelayer drops a slow fused mine")
+	mine.free(); ml.free()
+	var spl: Node = EN2.new(); spl.type = 12; spl.position = Vector2(400, 300); add_child(spl)
+	await get_tree().process_frame
+	spl.take_damage(9999)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var shards: Array = []
+	for c in get_children():
+		if c is Enemy and c.type == Enemy.Type.SHARD:
+			shards.append(c)
+	_check(shards.size() == 2, "dead splitter leaves two shards (%d)" % shards.size())
+	_check(shards.size() == 2 and shards[0]._kick_x * shards[1]._kick_x < 0.0, "shards fly apart")
+	_check(shards.size() == 2 and shards[0].fire_pattern == &"none" and shards[0].enemy_size < 60.0, "shards are small and unarmed")
+	if shards.size() == 2:
+		var x0: float = shards[0].position.x
+		shards[0]._process(0.1)
+		_check(not is_equal_approx(shards[0].position.x, x0), "shard is flung sideways")
+	for c in shards:
+		c.free()
+	for c in get_children():
+		if c is Pickup or c is EnemyExplosion or c is ScorePopup:
+			c.free()
+	var pul: Node = EN2.new(); pul.type = 13; pul.position = Vector2(400, 400); add_child(pul)
+	await get_tree().process_frame
+	var nb: int = get_child_count()
+	pul._fire()
+	var ring: Array = get_children().slice(nb)
+	await get_tree().process_frame
+	_check(ring.size() == 8, "pulsar fires a ring of eight (%d)" % ring.size())
+	_check(ring.size() == 8 and is_equal_approx(ring[0].speed, 300.0), "ring pellets keep their own speed")
+	var turn0: float = pul._ring_turn
+	pul._fire()
+	_check(pul._ring_turn > turn0, "the ring turns between volleys")
+	for c in get_children():
+		if c is EnemyBullet:
+			c.free()
+	pul.free()
+	var hun: Node = EN2.new(); hun.type = 15; hun.position = Vector2(200, 200); add_child(hun)
+	await get_tree().process_frame
+	nb = get_child_count()
+	hun._fire()
+	var missiles: Array = get_children().slice(nb)
+	await get_tree().process_frame
+	_check(missiles.size() == 2 and missiles[0].homing_turn_rate > 0.0, "sector-20 hunter launches two homing missiles (%d)" % missiles.size())
+	if not missiles.is_empty():
+		var hm: Node = missiles[0]
+		var want: Vector2 = (ship.global_position - hm.global_position).normalized()
+		var dot0: float = hm.direction.dot(want)
+		for i in 20:
+			hm._process_motion(0.05)   # 1 s of flight inside the homing window
+		var dot1: float = hm.direction.dot((ship.global_position - hm.global_position).normalized())
+		_check(dot1 > dot0 and dot1 > 0.9, "missile curves onto the ship (%.2f -> %.2f)" % [dot0, dot1])
+		for i in 50:
+			hm._process_motion(0.05)   # past homing_secs
+		var d_before: Vector2 = hm.direction
+		ship.position = Vector2(50, 50)
+		if is_instance_valid(hm) and not hm.is_queued_for_deletion():
+			hm._process_motion(0.05)
+			_check(hm.direction.is_equal_approx(d_before), "missile flies straight after its homing window")
+	ship.position = Vector2(700, 1100)
+	for c in get_children():
+		if c is EnemyBullet:
+			c.free()
+	hun.free()
+	GameState.current_level = 24
+	var bm: Node = EN2.new(); bm.type = 16; bm.position = Vector2(300, -60); add_child(bm)
+	await get_tree().process_frame
+	_check(bm.fire_interval >= Enemy.BEAMER_MIN_INTERVAL, "beamer never cycles faster than %.1fs even at sector 24 (%.2f)" % [Enemy.BEAMER_MIN_INTERVAL, bm.fire_interval])
+	for i in 200:
+		bm._process(0.1)
+		if bm._hold_elapsed > 0.0:
+			break
+	var bx: float = bm.position.x
+	bm._fire_timer = 999.0
+	for i in 10:
+		bm._process(0.1)
+	_check(bm.position.x > bx, "beamer lines itself up over the ship")
+	bm._fire_timer = 0.0
+	bm._process(0.05)
+	_check(bm._beam_live(), "beamer starts a beam from the hold line")
+	var beam: Node = bm._beam
+	await get_tree().process_frame
+	_check(beam is EnemyBeam and not beam.is_firing() and not beam.monitorable, "beam is harmless while it charges")
+	var bx2: float = bm.position.x
+	bm._process(0.1)
+	_check(is_equal_approx(bm.position.x, bx2), "beamer stands still while its beam is out")
+	for i in 10:
+		beam._process(0.1)   # past charge_secs
+	await get_tree().process_frame
+	_check(beam.is_firing() and beam.monitorable and beam.is_in_group(&"enemy_bullets"), "beam turns live after the warning")
+	for i in 8:
+		if is_instance_valid(beam):
+			beam._process(0.1)
+	await get_tree().process_frame
+	_check(not is_instance_valid(beam) or beam.is_queued_for_deletion(), "beam ends after its fire time")
+	await get_tree().process_frame
+	bm._fire_timer = 0.0
+	bm._process(0.05)
+	var beam2: Node = bm._beam
+	_check(bm._beam_live(), "beamer charges a second beam")
+	bm.free()
+	if is_instance_valid(beam2):
+		beam2._process(0.1)
+	await get_tree().process_frame
+	_check(not is_instance_valid(beam2) or beam2.is_queued_for_deletion(), "killing the beamer during the wind-up cancels the beam")
+	# Bosses: Archon beam (one at a time), Herald homing volley
+	var ar: Node = load("res://scripts/Boss.gd").new(); ar.type = 6; add_child(ar)
+	var he: Node = load("res://scripts/Boss.gd").new(); he.type = 7; add_child(he)
+	await get_tree().process_frame
+	ar._pattern_beam()
+	var first_beam: Node = ar._beam
+	ar._pattern_beam()
+	_check(first_beam is EnemyBeam and ar._beam == first_beam and first_beam.from_boss, "archon fires one sweeping beam at a time")
+	nb = get_child_count()
+	he._pattern_homing(3)
+	var volley: Array = get_children().slice(nb)
+	_check(volley.size() == 3 and volley[0].from_boss and volley[0].homing_turn_rate > 0.0, "herald launches three homing missiles")
+	for c in get_children():
+		if c is EnemyBullet or c is EnemyBeam:
+			c.free()
+	ar.remove_from_group(&"bosses"); he.remove_from_group(&"bosses")
+	ar.free(); he.free()
+	ship.free()
 
 	# --- Ladder: 1-20 unchanged, 21-24 keep climbing ---
 	var EN = load("res://scripts/Enemy.gd")

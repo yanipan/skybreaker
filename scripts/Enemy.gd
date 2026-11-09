@@ -3,7 +3,8 @@ class_name Enemy
 ## Generic enemy. Type-driven configuration. Self-builds visual + collision.
 ## Sector 1 only — three placeholder archetypes (Grunt, Dodger, Tank).
 
-enum Type { GRUNT, DODGER, TANK, STRAFER, BOMBER, SWARMER, LANCER, BROODER, REAPER, SHADE, ARTILLERY }
+## SHARD is never in a level pool: it only comes out of a dying SPLITTER.
+enum Type { GRUNT, DODGER, TANK, STRAFER, BOMBER, SWARMER, LANCER, BROODER, REAPER, SHADE, ARTILLERY, MINELAYER, SPLITTER, PULSAR, SHARD, HUNTER, BEAMER }
 
 const EnemyBulletScript := preload("res://scripts/EnemyBullet.gd")
 const PickupScript := preload("res://scripts/Pickup.gd")
@@ -32,6 +33,18 @@ const TEX_REAPER: Texture2D = preload("res://assets/sprites/enemy_reaper.png")
 ## they borrow an existing hull and a tint; drop the PNG in and the tint goes.
 const PATH_SHADE: String = "res://assets/sprites/enemy_shade.png"
 const PATH_ARTILLERY: String = "res://assets/sprites/enemy_artillery.png"
+const PATH_MINELAYER: String = "res://assets/sprites/enemy_minelayer.png"
+const PATH_SPLITTER: String = "res://assets/sprites/enemy_splitter.png"
+const PATH_PULSAR: String = "res://assets/sprites/enemy_pulsar.png"
+const PATH_HUNTER: String = "res://assets/sprites/enemy_hunter.png"
+const PATH_BEAMER: String = "res://assets/sprites/enemy_beamer.png"
+const EnemyBeamScript := preload("res://scripts/EnemyBeam.gd")
+## BEAMER: hold line, hold time, and the slowest it may ever cycle its beam
+## (the sector fire-rate ladder must not turn it into a permanent wall).
+const BEAMER_HOLD_Y: float = 0.15
+const BEAMER_HOLD_SECS: float = 9.0
+const BEAMER_MIN_INTERVAL: float = 3.0
+const BEAMER_TRACK_SPEED: float = 70.0
 
 ## SHADE phase cycle: visible (fires) then cloaked (untouchable, no contact).
 const SHADE_VISIBLE_SECS: float = 1.7
@@ -52,6 +65,12 @@ var _phase_timer: float = 0.0
 var _hold_elapsed: float = 0.0
 ## Stand-in hull tint for types without their own art yet (WHITE = none).
 var _sprite_tint: Color = Color.WHITE
+## SHARD: sideways speed it was flung with (px/s, decays).
+var _kick_x: float = 0.0
+## PULSAR: running rotation of its ring volleys.
+var _ring_turn: float = 0.0
+## BEAMER: the beam it currently has out (null / freed = none).
+var _beam: EnemyBeam = null
 var hp: int
 var speed: float
 var enemy_size: float
@@ -320,6 +339,122 @@ func _configure() -> void:
 			money_drop_chance = 0.95
 			money_value = 60
 			fire_sfx = SFX_FIRE_BOMBER
+		Type.MINELAYER:
+			# Crosses the screen sideways like a Strafer and seeds slow mines
+			# behind it. Each mine drifts down and bursts into a small ring
+			# after its fuse, so the lane it crossed stays dangerous.
+			max_hp = 9
+			speed = 210.0
+			enemy_size = randf_range(80.0, 100.0)
+			enemy_color = Color(0.75, 1.0, 0.35)
+			movement = &"horizontal"
+			reward = 60
+			fire_pattern = &"mine"
+			fire_interval = 2.2
+			_fire_timer = randf_range(0.4, 0.9)
+			bullet_style = EnemyBullet.Style.ORB
+			contact_damage = 6
+			health_drop_chance = 0.025
+			power_drop_chance = 0.018
+			torpedo_drop_chance = 0.020
+			money_drop_chance = 0.80
+			money_value = 35
+			fire_sfx = SFX_FIRE_BOMBER
+		Type.SPLITTER:
+			# Crystal hull that cracks into two fast SHARDs when it dies. Kill
+			# it high on the screen or the shards are on top of you.
+			max_hp = 14
+			speed = 110.0
+			enemy_size = randf_range(95.0, 120.0)
+			enemy_color = Color(0.60, 0.90, 1.0)
+			movement = &"straight"
+			reward = 70
+			fire_pattern = &"aimed"
+			fire_interval = 2.4
+			_fire_timer = randf_range(0.8, 1.6)
+			bullet_style = EnemyBullet.Style.DART
+			contact_damage = 7
+			health_drop_chance = 0.030
+			power_drop_chance = 0.024
+			torpedo_drop_chance = 0.024
+			money_drop_chance = 0.85
+			money_value = 40
+			fire_sfx = SFX_FIRE_DODGER
+		Type.SHARD:
+			# Half of a dead SPLITTER: small, fast, no guns, flung sideways.
+			max_hp = 3
+			speed = 300.0
+			enemy_size = randf_range(46.0, 56.0)
+			enemy_color = Color(0.60, 0.90, 1.0)
+			movement = &"shard"
+			reward = 15
+			fire_pattern = &"none"
+			contact_damage = 4
+			health_drop_chance = 0.0
+			power_drop_chance = 0.0
+			torpedo_drop_chance = 0.0
+			money_drop_chance = 0.30
+			money_value = 10
+		Type.PULSAR:
+			# Slow drifting emitter. Every few seconds it fires a full ring
+			# of pellets; the ring turns a little each time so the gaps move.
+			max_hp = 12
+			speed = 75.0
+			enemy_size = randf_range(85.0, 105.0)
+			enemy_color = Color(1.0, 0.50, 0.90)
+			movement = &"straight"
+			reward = 80
+			fire_pattern = &"ring"
+			fire_interval = 4.4
+			_fire_timer = randf_range(1.0, 2.0)
+			bullet_style = EnemyBullet.Style.PELLET
+			contact_damage = 7
+			health_drop_chance = 0.040
+			power_drop_chance = 0.030
+			torpedo_drop_chance = 0.030
+			money_drop_chance = 0.90
+			money_value = 45
+			fire_sfx = SFX_FIRE_TANK
+		Type.HUNTER:
+			# Missile boat. Lobs slow homing missiles that curve after the
+			# ship for a couple of seconds, then fly straight. Sidestep late,
+			# or burn them with the beam.
+			max_hp = 10
+			speed = 120.0
+			enemy_size = randf_range(85.0, 105.0)
+			enemy_color = Color(1.0, 0.60, 0.30)
+			movement = &"sine"
+			reward = 65
+			fire_pattern = &"homing"
+			fire_interval = 3.6
+			_fire_timer = randf_range(0.8, 1.6)
+			bullet_style = EnemyBullet.Style.DART
+			contact_damage = 6
+			health_drop_chance = 0.030
+			power_drop_chance = 0.022
+			torpedo_drop_chance = 0.026
+			money_drop_chance = 0.85
+			money_value = 40
+			fire_sfx = SFX_FIRE_BOMBER
+		Type.BEAMER:
+			# Beam frigate. Parks at the top, lines itself up over the ship
+			# and fires a telegraphed beam straight down. Kill it during the
+			# wind-up and the beam never comes.
+			max_hp = 13
+			speed = 90.0
+			enemy_size = randf_range(95.0, 115.0)
+			enemy_color = Color(0.55, 0.85, 1.0)
+			movement = &"hold"
+			reward = 85
+			fire_pattern = &"beam"
+			fire_interval = 5.0
+			_fire_timer = 1.4
+			contact_damage = 8
+			health_drop_chance = 0.045
+			power_drop_chance = 0.034
+			torpedo_drop_chance = 0.034
+			money_drop_chance = 0.90
+			money_value = 50
 		Type.REAPER:
 			# Kamikaze ramship. No projectiles — its threat IS the ram. Locks
 			# onto the player's X each frame and accelerates downward to ram.
@@ -366,6 +501,8 @@ func _configure() -> void:
 	speed *= speed_mul
 	if fire_interval > 0.0:
 		fire_interval *= fire_mul
+		if fire_pattern == &"beam":
+			fire_interval = maxf(fire_interval, BEAMER_MIN_INTERVAL)
 		# First shot waits too, and never comes the instant a ship enters.
 		_fire_timer = max(_fire_timer * fire_mul, FIRST_SHOT_MIN)
 	# Late-game enemies hit harder on contact too — by Sector 20 a graze costs
@@ -486,6 +623,26 @@ func _build_sprite() -> void:
 			tex = _optional_tex(PATH_ARTILLERY, TEX_TANK)
 			if tex == TEX_TANK:
 				_sprite_tint = Color(1.0, 0.72, 0.38)
+		Type.MINELAYER:
+			tex = _optional_tex(PATH_MINELAYER, TEX_STRAFER)
+			if tex == TEX_STRAFER:
+				_sprite_tint = Color(0.75, 1.0, 0.35)
+		Type.SPLITTER, Type.SHARD:
+			tex = _optional_tex(PATH_SPLITTER, TEX_LANCER)
+			if tex == TEX_LANCER:
+				_sprite_tint = Color(0.55, 0.90, 1.0)
+		Type.PULSAR:
+			tex = _optional_tex(PATH_PULSAR, TEX_SWARMER)
+			if tex == TEX_SWARMER:
+				_sprite_tint = Color(1.0, 0.55, 0.90)
+		Type.HUNTER:
+			tex = _optional_tex(PATH_HUNTER, TEX_BOMBER)
+			if tex == TEX_BOMBER:
+				_sprite_tint = Color(1.0, 0.62, 0.32)
+		Type.BEAMER:
+			tex = _optional_tex(PATH_BEAMER, TEX_TANK)
+			if tex == TEX_TANK:
+				_sprite_tint = Color(0.50, 0.82, 1.0)
 		_:
 			tex = null
 	if tex == null:
@@ -527,16 +684,31 @@ func _process(delta: float) -> void:
 	if movement == &"hold":
 		# Artillery: descend to the hold line, hover there for a while, then
 		# carry on down and leave.
-		var hold_y: float = _viewport_size.y * ARTILLERY_HOLD_Y
+		var is_beamer: bool = type == Type.BEAMER
+		var hold_y: float = _viewport_size.y * (BEAMER_HOLD_Y if is_beamer else ARTILLERY_HOLD_Y)
+		var hold_secs: float = BEAMER_HOLD_SECS if is_beamer else ARTILLERY_HOLD_SECS
 		if position.y < hold_y and _hold_elapsed <= 0.0:
 			position.y = minf(hold_y, position.y + speed * delta)
 			if position.y >= hold_y:
 				_hold_elapsed = 0.001
-		elif _hold_elapsed < ARTILLERY_HOLD_SECS:
+		elif _hold_elapsed < hold_secs or _beam_live():
 			_hold_elapsed += delta
-			position.x = clampf(_spawn_x + sin(_time * 0.7) * 70.0, enemy_size * 0.5, _viewport_size.x - enemy_size * 0.5)
+			if is_beamer:
+				# Line up over the ship, but stand still while a beam is out
+				# so the warning line means what it shows.
+				if not _beam_live():
+					var ship := get_tree().get_first_node_in_group(&"player") as Node2D
+					if ship != null:
+						position.x = move_toward(position.x, ship.global_position.x, BEAMER_TRACK_SPEED * delta)
+			else:
+				position.x = clampf(_spawn_x + sin(_time * 0.7) * 70.0, enemy_size * 0.5, _viewport_size.x - enemy_size * 0.5)
 		else:
 			position.y += speed * 1.6 * delta
+	elif movement == &"shard":
+		# Flung sideways out of the dead SPLITTER, the kick bleeds off fast.
+		position.y += speed * delta
+		position.x = clampf(position.x + _kick_x * delta, 20.0, _viewport_size.x - 20.0)
+		_kick_x = move_toward(_kick_x, 0.0, 520.0 * delta)
 	elif movement == &"horizontal":
 		position.x += speed * delta * h_dir
 	elif movement == &"chase":
@@ -557,7 +729,9 @@ func _process(delta: float) -> void:
 
 	# Firing — only once on screen (and never while cloaked)
 	var on_screen: bool = position.y > 0.0 and position.y < _viewport_size.y
-	if fire_pattern != &"none" and on_screen and not cloaked:
+	if fire_pattern == &"beam" and (_hold_elapsed <= 0.0 or _hold_elapsed >= BEAMER_HOLD_SECS or _beam_live()):
+		pass   # beams only from the hold line, one at a time
+	elif fire_pattern != &"none" and on_screen and not cloaked:
 		_fire_timer -= delta
 		if _fire_timer <= 0.0:
 			_fire_timer = fire_interval
@@ -573,6 +747,10 @@ func _process(delta: float) -> void:
 
 func _light_volley() -> bool:
 	return GameState.current_level <= LIGHT_VOLLEY_UNTIL
+
+
+func _beam_live() -> bool:
+	return _beam != null and is_instance_valid(_beam) and not _beam.is_queued_for_deletion()
 
 
 ## SHADE phase cycle. Cloaked = not monitorable (bullets and the ship pass
@@ -644,6 +822,56 @@ func _fire() -> void:
 				bullet.damage = 5
 				bullet.style = EnemyBullet.Style.ACID
 				get_parent().add_child(bullet)
+		&"homing":
+			# One homing missile (two from sector 20 on), launched to the side
+			# so its curve is readable.
+			var count: int = 2 if GameState.current_level >= LADDER_TOP else 1
+			for hi in count:
+				var side: float = (-1.0 if hi == 0 else 1.0) * (1.0 if count > 1 else (1.0 if randf() < 0.5 else -1.0))
+				var hm: EnemyBullet = EnemyBulletScript.new()
+				hm.position = global_position + Vector2(side * enemy_size * 0.3, enemy_size * 0.3)
+				hm.direction = Vector2.DOWN.rotated(-side * 0.6)
+				hm.damage = 6
+				hm.style = EnemyBullet.Style.DART
+				hm.speed_override = 250.0
+				hm.radius_override = 7.0
+				hm.color_override = Color(1.0, 0.55, 0.20)
+				hm.homing_turn_rate = 1.6
+				hm.homing_secs = 2.6
+				get_parent().add_child(hm)
+		&"beam":
+			# Telegraphed beam straight down from the hull (EnemyBeam.gd).
+			var beam: EnemyBeam = EnemyBeamScript.new()
+			beam.emitter = self
+			beam.offset = Vector2(0.0, enemy_size * 0.35)
+			beam.damage = 8
+			beam.beam_color = Color(0.45, 0.85, 1.0)
+			get_parent().add_child(beam)
+			_beam = beam
+		&"mine":
+			# One slow mine dropped straight down; it bursts on a fuse.
+			var mine: EnemyBullet = EnemyBulletScript.new()
+			mine.position = global_position + Vector2(0, enemy_size * 0.3)
+			mine.direction = Vector2.DOWN
+			mine.damage = 6
+			mine.style = EnemyBullet.Style.ORB
+			mine.speed = 85.0
+			mine.burst_after = 3.2
+			mine.burst_count = 5
+			mine.burst_damage = 3
+			get_parent().add_child(mine)
+		&"ring":
+			# Full ring of pellets, rotated a little every volley.
+			var ring_n: int = 6 if _light_volley() else 8
+			_ring_turn += 0.26
+			for ri in ring_n:
+				var rb: EnemyBullet = EnemyBulletScript.new()
+				rb.position = global_position
+				rb.direction = Vector2.DOWN.rotated(TAU * float(ri) / float(ring_n) + _ring_turn)
+				rb.damage = 3
+				rb.style = EnemyBullet.Style.PELLET
+				rb.speed_override = 300.0
+				get_parent().add_child(rb)
 		&"shade_pair":
 			# Two aimed darts a hair apart, fired once per visible window.
 			var sdir := Vector2.DOWN
@@ -656,7 +884,7 @@ func _fire() -> void:
 				sb.direction = sdir.rotated(so)
 				sb.damage = 5
 				sb.style = EnemyBullet.Style.DART
-				sb.speed = 620.0
+				sb.speed_override = 620.0
 				get_parent().add_child(sb)
 		&"mortar":
 			# One slow shell lobbed at the player's current position; after
@@ -670,7 +898,7 @@ func _fire() -> void:
 			shell.direction = mdir
 			shell.damage = 6
 			shell.style = EnemyBullet.Style.SHELL
-			shell.speed = 240.0
+			shell.speed_override = 240.0
 			shell.burst_after = 1.0
 			shell.burst_count = 6
 			shell.burst_damage = 3
@@ -718,6 +946,17 @@ func _brooder_death_spawn() -> void:
 		get_parent().add_child.call_deferred(bullet)
 
 
+## Death-spawn for SPLITTER: two SHARDs, one flung each way. Deferred for the
+## same reason as the brooder swarm (take_damage runs in a physics callback).
+func _splitter_death_spawn() -> void:
+	for side in [-1.0, 1.0]:
+		var shard: Enemy = get_script().new()
+		shard.type = Type.SHARD
+		shard.position = global_position + Vector2(side * enemy_size * 0.3, 0.0)
+		shard._kick_x = side * 340.0
+		get_parent().add_child.call_deferred(shard)
+
+
 func _spawn_enemy_bullet(dir: Vector2, dmg: int) -> void:
 	var bullet: EnemyBullet = EnemyBulletScript.new()
 	bullet.position = global_position + Vector2(0, enemy_size * 0.5)
@@ -741,6 +980,8 @@ func take_damage(amount: int) -> void:
 		# threat is the post-mortem swarm. Other types just explode.
 		if type == Type.BROODER:
 			_brooder_death_spawn()
+		elif type == Type.SPLITTER:
+			_splitter_death_spawn()
 		_spawn_death_burst()
 		_spawn_score_popup()
 		_maybe_drop_pickup()

@@ -69,6 +69,8 @@ func _run() -> void:
 		_check(main_alive and peak_enemies > 0, "sector %d soaked %.0fs game time: peak %d enemies, %d enemy bullets" % [sector, t, peak_enemies, peak_bullets])
 	_check(seen_types.has(9), "SHADE spawned in real waves")
 	_check(seen_types.has(10), "ARTILLERY spawned in real waves")
+	for pair in [[11, "MINELAYER"], [12, "SPLITTER"], [13, "PULSAR"], [15, "HUNTER"], [16, "BEAMER"]]:
+		_check(seen_types.has(pair[0]), "%s spawned in real waves" % pair[1])
 	_check(seen_boss_types.has(6), "NULL ARCHON entered in sector 22")
 	_check(seen_boss_types.has(7), "THE HERALD entered in sector 24")
 	print("SectorSoak: %d failure(s), enemy types seen %s, boss types seen %s" % [_fails, str(seen_types.keys()), str(seen_boss_types.keys())])

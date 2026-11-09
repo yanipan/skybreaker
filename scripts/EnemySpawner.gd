@@ -351,8 +351,8 @@ func _spawn_wave() -> void:
 		var enemy: Enemy = EnemyScript.new()
 		enemy.type = t
 
-		if t == Enemy.Type.STRAFER:
-			# Strafers spawn at a screen edge and fly across.
+		if t == Enemy.Type.STRAFER or t == Enemy.Type.MINELAYER:
+			# Strafers and minelayers spawn at a screen edge and fly across.
 			if GameRng.randf() < 0.5:
 				enemy.position = Vector2(-60.0, y_offset + 200.0)
 				enemy.h_dir = 1

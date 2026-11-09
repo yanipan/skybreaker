@@ -34,24 +34,77 @@ static func overlap(a_pos: Vector2, a_half: Vector2, b: Node2D) -> bool:
 	return d.x <= a_half.x + bh.x and d.y <= a_half.y + bh.y
 
 
-static func _enemies(tree: SceneTree) -> Array:
+## Battery pass 9/11: every player shot asks this every frame. The enemy list
+## is flattened ONCE per frame into parallel arrays (node, centre, half
+## extents, cloaked), so the per-shot loop is plain float compares instead of
+## three property probes and two engine calls per enemy.
+static var _c_nodes: Array = []
+static var _c_x: PackedFloat32Array = []
+static var _c_y: PackedFloat32Array = []
+static var _c_hx: PackedFloat32Array = []
+static var _c_hy: PackedFloat32Array = []
+static var _player_cache: Node2D = null
+static var _player_frame: int = -1
+static var _player_half: Vector2 = Vector2(20, 20)
+
+
+static func _refresh(tree: SceneTree) -> void:
 	var f: int = Engine.get_process_frames()
-	if f != _cache_frame:
-		_cache_frame = f
-		_enemy_cache = tree.get_nodes_in_group(&"enemies")
+	if f == _cache_frame:
+		return
+	_cache_frame = f
+	_enemy_cache = tree.get_nodes_in_group(&"enemies")
+	_c_nodes.clear()
+	_c_x.clear(); _c_y.clear(); _c_hx.clear(); _c_hy.clear()
+	for e in _enemy_cache:
+		if not is_instance_valid(e) or e.is_queued_for_deletion():
+			continue
+		if "cloaked" in e and e.cloaked:
+			continue   # phased SHADE: nothing lands, not even the safety net
+		var h: Vector2 = half_extents(e)
+		var p: Vector2 = e.global_position
+		_c_nodes.append(e)
+		_c_x.append(p.x); _c_y.append(p.y); _c_hx.append(h.x); _c_hy.append(h.y)
+
+
+static func _enemies(tree: SceneTree) -> Array:
+	_refresh(tree)
 	return _enemy_cache
 
 
 ## First live enemy overlapping a player shot, or null.
 static func enemy_at(shot: Node2D, half: Vector2) -> Node2D:
-	for e in _enemies(shot.get_tree()):
-		if not is_instance_valid(e) or e.is_queued_for_deletion():
-			continue
-		if "cloaked" in e and e.cloaked:
-			continue   # phased SHADE: nothing lands, not even the safety net
-		if overlap(shot.global_position, half, e):
-			return e
+	_refresh(shot.get_tree())
+	var p: Vector2 = shot.global_position
+	for i in _c_nodes.size():
+		if absf(p.x - _c_x[i]) <= half.x + _c_hx[i] and absf(p.y - _c_y[i]) <= half.y + _c_hy[i]:
+			var e: Node2D = _c_nodes[i]
+			# The cache is one frame old at most: the enemy may have died or
+			# cloaked since it was built.
+			if is_instance_valid(e) and not e.is_queued_for_deletion() and not ("cloaked" in e and e.cloaked):
+				return e
 	return null
+
+
+## The ship, looked up once per frame for every enemy shot's safety net.
+static func player(tree: SceneTree) -> Node2D:
+	var f: int = Engine.get_process_frames()
+	if f != _player_frame or not is_instance_valid(_player_cache):
+		_player_frame = f
+		_player_cache = tree.get_first_node_in_group(&"player") as Node2D
+		if _player_cache != null:
+			_player_half = half_extents(_player_cache)
+	return _player_cache
+
+
+## True when a shot of half-size `r` at `pos` overlaps the ship found by
+## player() this frame (same rectangle test as overlap(), without re-probing
+## the ship's size for every shot).
+static func on_player(pos: Vector2, r: float) -> bool:
+	if _player_cache == null:
+		return false
+	var d: Vector2 = pos - _player_cache.global_position
+	return absf(d.x) <= r + _player_half.x and absf(d.y) <= r + _player_half.y
 
 
 ## Call every frame with whether the shot overlaps its target. `state` is the

@@ -29,15 +29,16 @@ Boot.tscn → StartScreen.tscn → Main.tscn (gameplay)
 | `Player.gd` | Area2D | Drag-to-move, auto-fire, weapon/shield/torpedo/energy logic. Self-constructs collision on `_ready` — no .tscn needed |
 | `Main.gd` | Node | Game loop, wave orchestration, level transitions |
 | `Levels.gd` | Resource | Level/wave definitions, 24 sectors in 6 acts (1-5, 6-10, 11-15, 16-19, 20-22, 23-24); bosses at 4, 8, 12, 16, 19, 22, 24 (pair) |
-| `Enemy.gd` | Node2D | Base enemy logic. 11 types; SHADE (phases, untouchable while cloaked) and ARTILLERY (holds at the top, fused mortar shells) since 9/11, both on tinted stand-in hulls until `enemy_shade.png` / `enemy_artillery.png` exist |
-| `Boss.gd` | Node2D | Boss phases and patterns. 8 types: BOSS1-5, FINAL, ARCHON (sector 22), HERALD (finale escort); ARCHON/HERALD use tinted stand-ins until `boss6.png` / `boss7.png` exist |
+| `Enemy.gd` | Node2D | Base enemy logic. 16 pooled types + SHARD. Added 9/11: SHADE (cloaks, untouchable), ARTILLERY (holds, fused mortar), MINELAYER (sideways, fused mines), SPLITTER (dies into 2 SHARDs), PULSAR (ring volleys), HUNTER (homing missiles), BEAMER (holds, telegraphed `EnemyBeam`). Each loads `assets/sprites/enemy_<name>.png` if present, else a tinted stand-in |
+| `Boss.gd` | Node2D | Boss phases and patterns. 8 types: BOSS1-5, FINAL, ARCHON (sector 22, sweeping beam, `boss6.png`), HERALD (finale escort, homing volleys, `boss7.png`) |
 | `EnemySpawner.gd` | Node | Spawns waves from Levels data; boss queue (`escort_boss` then `boss_type`), `boss_sequence_done()` / `ends_on_boss()` gate the stage end in Main |
 | `StarbaseShop.gd` | Node | Between-level shop (upgrade purchases) |
 | `Starbase.gd` | Node | Starbase scene controller |
 | `Cutscene.gd` | Node | Cutscene player; `CutsceneData.gd` holds data. Plays `assets/audio/narration/<image_file>.mp3` per beat (made by `scripts/tools/narration_tts.mjs`, Inworld voice Eldrin) over `assets/audio/music/cutscene_mystery.mp3` (made by `scripts/tools/make_cutscene_music.py`) |
 | `Sidekick.gd` | Node2D | Companion ship, persists across levels if alive; charged shield eats one whole hit |
 | `Bullet.gd` | Area2D | Player bullet (pooled) |
-| `EnemyBullet.gd` | Area2D | Enemy bullet |
+| `EnemyBullet.gd` | Area2D | Enemy bullet. Style defaults OVERWRITE speed/radius/colour: set `speed_override` etc. for custom values. `burst_after`/`burst_count` = fused shell or mine, `homing_turn_rate`/`homing_secs` = homing missile. Redraws only while its trail grows, while steering, or every 3rd frame for animated styles |
+| `EnemyBeam.gd` | Area2D | Enemy beam: warning line for `charge_secs`, then a damaging column for `fire_secs`; follows its emitter, cancelled if the emitter dies during the wind-up |
 | `Torpedo.gd` | Area2D | Player torpedo (secondary) |
 | `Missile.gd` | Area2D | Homing missile secondary |
 | `Beam.gd` | Node2D | Continuous beam weapon |
@@ -86,8 +87,9 @@ assets/sprites/
   playership.png + banking variants (left/right)
   sidekickship.png + banking variants
   enemy_grunt/dodger/bomber/brooder/lancer/reaper/strafer/swarmer/tank.png
-  (wanted: enemy_shade.png, enemy_artillery.png — prompts in docs/ART_PROMPTS_24.md)
-  boss1..boss5.png + finalboss.png (wanted: boss6.png Null Archon, boss7.png Herald)
+  enemy_shade/artillery/minelayer/splitter/pulsar/hunter/beamer.png (9/11, generated; see docs/ART_PROMPTS_24.md)
+  boss1..boss5.png + finalboss.png + boss6.png (Null Archon) + boss7.png (Herald)
+  All in-play sprites are transparent cut-outs: scripts/tools/cutout_sprite.py
   starbase.png
   bg/          — background tiles
   shop/        — shop UI assets
@@ -119,6 +121,11 @@ assets/fonts/
 - Max power level: 30 (20 → 25 → 30; levels 26-30 are real growth for the 24-sector ladder)
 - Max charge: 100 base, +40% per energy cell, max 8 cells; shield max 6, torpedo bay max 10
 - Death penalty: lose a life and restart the sector; weapons and gear are kept
+
+## Performance (measure, do not guess)
+- `godot --headless --fixed-fps 60 --path . res://scenes/tools/PerfProbe.tscn` prints CPU ms per frame on a busy sector 24 (ship untouchable, firing). 9/11: 4.30 ms -> 2.26 ms on the M-series Mac after the shot pass.
+- Rules that came out of it: never `queue_redraw()` every frame on anything that exists 100 times (shots draw once, pulse through `modulate`); flatten per-frame lookups (`HitCheck` caches enemies and the ship once per frame); share collision shapes; `run/max_fps=60`.
+- Headless measures scripts + physics + draw-command building, not GPU fill. Phone heat still needs a device check.
 
 ## Store / Release
 - `docs/STORE_SUBMISSION.md` — submission runbook

@@ -23,6 +23,11 @@ class_name Levels
 ## Difficulty curve: enemy pool grows, wave sizes grow, spawn cadence tightens.
 ## Levels 1-4 introduce types one at a time. 5-8 mix 2-3 types. 9-12 mix 4.
 ## 13-16 mix all 5 + tighter cadence. 17-19 are the gauntlet runs. 20-24
+## Enemy ids: 0 GRUNT 1 DODGER 2 TANK 3 STRAFER 4 BOMBER 5 SWARMER 6 LANCER
+## 7 BROODER 8 REAPER 9 SHADE 10 ARTILLERY 11 MINELAYER 12 SPLITTER 13 PULSAR
+## (14 SHARD is spawned by a dying SPLITTER, never pooled) 15 HUNTER 16 BEAMER.
+## First seen: HUNTER 13, PULSAR 14, MINELAYER 17, BEAMER 18, SPLITTER 19,
+## SHADE 20, ARTILLERY 21.
 ## (9/11 expansion) add SHADE and ARTILLERY and keep climbing past the old
 ## sector-20 ceiling (Enemy.gd extends the ladder, LATE_SECTOR_MUL at 23-24).
 
@@ -133,7 +138,7 @@ const ENTRIES: Array = [
 		"name": "Sector 13: Spore Field",
 		"theme_color": Color(0.95, 1.10, 0.70),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 4, 5],
+		"enemy_pool": [0, 1, 4, 5, 15],
 		"wave_size_min": 4, "wave_size_max": 6,
 		"spawn_interval": 2.8, "duration": 95.0, "has_boss": false,
 	},
@@ -141,7 +146,7 @@ const ENTRIES: Array = [
 		"name": "Sector 14: Brood Mother",
 		"theme_color": Color(1.05, 0.95, 0.55),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 7],   # First BROODER — death-spawn swarm
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 7, 13, 15],   # First BROODER — death-spawn swarm; first PULSAR — ring volleys
 		"wave_size_min": 4, "wave_size_max": 7,
 		"spawn_interval": 2.8, "duration": 100.0, "has_boss": false,
 	},
@@ -149,7 +154,7 @@ const ENTRIES: Array = [
 		"name": "Sector 15: The Spire",
 		"theme_color": Color(0.70, 1.30, 0.85),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 13, 15],
 		"wave_size_min": 5, "wave_size_max": 7,
 		"spawn_interval": 2.7, "duration": 100.0, "has_boss": false,
 	},
@@ -158,7 +163,7 @@ const ENTRIES: Array = [
 		"name": "Sector 16: Crystal Frontier",
 		"theme_color": Color(0.75, 0.90, 1.30),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 13, 15],
 		"wave_size_min": 5, "wave_size_max": 7,
 		"spawn_interval": 2.6, "duration": 105.0, "has_boss": true, "boss_type": 3,
 	},
@@ -166,7 +171,7 @@ const ENTRIES: Array = [
 		"name": "Sector 17: Prism Storm",
 		"theme_color": Color(0.85, 0.75, 1.30),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8],   # First REAPER — kamikaze rams
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 15],   # First REAPER — kamikaze rams; first MINELAYER — fused mines
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.5, "duration": 105.0, "has_boss": false,
 	},
@@ -174,7 +179,7 @@ const ENTRIES: Array = [
 		"name": "Sector 18: Shardfall",
 		"theme_color": Color(0.95, 0.70, 1.20),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 15, 16],
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.4, "duration": 110.0, "has_boss": false,
 	},
@@ -182,7 +187,7 @@ const ENTRIES: Array = [
 		"name": "Sector 19: Heart of Glass",
 		"theme_color": Color(1.20, 0.85, 1.20),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 15, 16],   # First SPLITTER — cracks into two shards
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.3, "duration": 110.0, "has_boss": true, "boss_type": 4,
 	},
@@ -193,7 +198,7 @@ const ENTRIES: Array = [
 		"name": "Sector 20: Heart Chamber",
 		"theme_color": Color(0.70, 1.10, 1.20),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 5, 6, 9],   # First SHADE — phases in and out
+		"enemy_pool": [0, 1, 2, 3, 5, 6, 9, 11, 13, 16],   # First SHADE — phases in and out
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.3, "duration": 110.0, "has_boss": false,
 	},
@@ -201,7 +206,7 @@ const ENTRIES: Array = [
 		"name": "Sector 21: Pulse Conduit",
 		"theme_color": Color(0.75, 1.00, 1.25),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 3, 4, 5, 6, 8, 9, 10],   # First ARTILLERY — mortar bursts
+		"enemy_pool": [0, 1, 3, 4, 5, 6, 8, 9, 10, 12, 13, 15],   # First ARTILLERY — mortar bursts
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.2, "duration": 115.0, "has_boss": false,
 	},
@@ -209,7 +214,7 @@ const ENTRIES: Array = [
 		"name": "Sector 22: The Null Gate",
 		"theme_color": Color(0.60, 0.95, 1.30),
 		"bg_texture_path": "",
-		"enemy_pool": [1, 2, 3, 5, 6, 7, 9, 10],
+		"enemy_pool": [1, 2, 3, 5, 6, 7, 9, 10, 11, 12, 15, 16],
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.2, "duration": 115.0, "has_boss": true, "boss_type": 6,
 	},
@@ -218,7 +223,7 @@ const ENTRIES: Array = [
 		"name": "Sector 23: Null Reach",
 		"theme_color": Color(1.25, 0.60, 0.65),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16],
 		"wave_size_min": 6, "wave_size_max": 9,
 		"spawn_interval": 2.1, "duration": 120.0, "has_boss": false,
 	},
@@ -226,7 +231,7 @@ const ENTRIES: Array = [
 		"name": "Sector 24: The Skybreaker",
 		"theme_color": Color(1.30, 0.55, 0.55),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16],
 		"wave_size_min": 6, "wave_size_max": 9,
 		"spawn_interval": 2.1, "duration": 120.0, "has_boss": true, "boss_type": 5,
 		# The finale is a boss PAIR: the Herald (a splinter of the Skybreaker

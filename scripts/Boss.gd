@@ -366,6 +366,8 @@ func _update_firing(delta: float) -> void:
 		Type.FINAL:
 			if _pattern_idx == 0:
 				_pattern_radial(16)
+				if _phase >= 2:
+					_pattern_homing(2)   # last third: missiles join the ring
 			elif _pattern_idx == 1:
 				_pattern_spiral()
 			else:
@@ -376,18 +378,56 @@ func _update_firing(delta: float) -> void:
 			elif _pattern_idx == 1:
 				_pattern_radial(14)
 			else:
+				# Its signature: a telegraphed beam that sweeps with the hull.
+				_pattern_beam()
 				_pattern_aimed_burst()
-				_pattern_fan()
 		Type.HERALD:
 			if _pattern_idx == 0:
 				_pattern_fan()
 			elif _pattern_idx == 1:
 				_pattern_radial(12)
 			else:
-				_pattern_shell_volley()
+				_pattern_homing(3)
 
 
 # --- Attack patterns ---
+
+## One telegraphed beam straight down from the hull. It follows the boss, so
+## the sideways drift sweeps it. Never two at once.
+var _beam: EnemyBeam = null
+
+func _pattern_beam() -> void:
+	if _beam != null and is_instance_valid(_beam) and not _beam.is_queued_for_deletion():
+		return
+	var beam: EnemyBeam = preload("res://scripts/EnemyBeam.gd").new()
+	beam.emitter = self
+	beam.offset = Vector2(0.0, boss_size * 0.30)
+	beam.damage = maxi(1, int(round(10.0 * bullet_dmg_mul)))
+	beam.width = 64.0
+	beam.charge_secs = 1.1
+	beam.fire_secs = 0.9
+	beam.beam_color = accent_color.lerp(primary_color, 0.5)
+	beam.from_boss = true
+	get_parent().add_child(beam)
+	_beam = beam
+
+
+## `count` homing missiles fanned out to the sides; they curve in for ~2.4 s.
+func _pattern_homing(count: int) -> void:
+	for i in count:
+		var k: float = 0.0 if count == 1 else float(i) / float(count - 1) * 2.0 - 1.0   # -1..1
+		var m: EnemyBullet = EnemyBulletScript.new()
+		m.position = global_position + Vector2(k * boss_size * 0.35, boss_size * 0.25)
+		m.direction = Vector2.DOWN.rotated(-k * 0.9)
+		m.damage = maxi(1, int(round(7.0 * bullet_dmg_mul)))
+		m.style = EnemyBullet.Style.DART
+		m.speed_override = 270.0
+		m.radius_override = 8.0
+		m.color_override = Color(1.0, 0.55, 0.20)
+		m.homing_turn_rate = 1.7
+		m.homing_secs = 2.4
+		m.from_boss = true
+		get_parent().add_child(m)
 
 func _pattern_aimed_burst() -> void:
 	var player := get_tree().get_first_node_in_group(&"player")

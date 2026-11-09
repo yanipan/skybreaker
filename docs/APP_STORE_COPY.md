@@ -72,7 +72,7 @@ Skybreaker is a shoot-'em-up with a real story underneath — the kind of story 
 WHAT'S INSIDE
 ━━━━━━━━━━━━━━━━━━━
 
-• 24 sectors, 11 enemy types, 7 bosses, 1 final two-boss encounter
+• 24 sectors, 16 enemy types, 7 bosses, 1 final two-boss encounter
 • 3 primary weapons × 25 upgrade levels, plus torpedoes
 • A fully-stocked starbase between sectors with a shopkeeper who slowly warms up to you
 • A sidekick wing-drone you can buy (or lose in combat)

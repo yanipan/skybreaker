@@ -31,6 +31,16 @@ enum Style { ORB, PELLET, DART, SHELL, SPARK, PLASMA, ACID }
 @export var burst_count: int = 0
 @export var burst_damage: int = 3
 @export var burst_speed: float = 330.0
+## _apply_style_defaults() rewrites speed / radius / colour for every style
+## except ORB, so a caller that wants its own value must say so here
+## (0 / transparent = keep the style default).
+@export var speed_override: float = 0.0
+@export var radius_override: float = 0.0
+@export var color_override: Color = Color(0, 0, 0, 0)
+## Homing missile (9/11): steers toward the ship at `homing_turn_rate`
+## rad/s for the first `homing_secs`, then flies straight. 0 = dumb shot.
+@export var homing_turn_rate: float = 0.0
+@export var homing_secs: float = 0.0
 
 ## Beam burn: a non-boss bullet must sit in the beam for beam_resist seconds
 ## before it pops. Rolled per bullet, so some pop on contact and some take a
@@ -45,7 +55,12 @@ const BEAM_HEAVY_MUL: float = 1.4
 var beam_resist: float = 0.0
 var beam_heat: float = 0.0
 
+static var _shape_cache: Dictionary = {}
 const TRAIL_LEN: int = 10
+const TRAIL_DT: float = 1.0 / 60.0   ## trail spacing = distance flown in one 60 fps frame
+var _frames: int = 0
+var _animated: bool = false           ## style whose body pulses / spins (needs periodic redraw)
+var _stagger: int = 0                 ## spreads the every-3rd-frame redraws across shots
 
 var _viewport_size: Vector2
 var _time: float = 0.0
@@ -56,6 +71,14 @@ func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
 	add_to_group(&"enemy_bullets")
 	_apply_style_defaults()
+	if speed_override > 0.0:
+		speed = speed_override
+	if radius_override > 0.0:
+		bullet_radius = radius_override
+	if color_override.a > 0.0:
+		bullet_color = color_override
+	_animated = style == Style.SPARK or style == Style.PLASMA or style == Style.ACID or style == Style.ORB
+	_stagger = randi() % 3
 	_roll_beam_resist()
 	_build_collision()
 	queue_redraw()
@@ -264,10 +287,16 @@ func _draw_simple_trail(peak_alpha: float) -> void:
 
 func _build_collision() -> void:
 	var shape := CollisionShape2D.new()
-	var circle := CircleShape2D.new()
 	# Slightly larger hit radius than the visual core so player feedback feels fair
-	# (especially for darts/sparks that draw thinner than they hit)
-	circle.radius = max(bullet_radius, 6.0)
+	# (especially for darts/sparks that draw thinner than they hit).
+	# One shared CircleShape2D per radius instead of a new resource per shot.
+	var radius: float = max(bullet_radius, 6.0)
+	var key: int = int(round(radius * 10.0))
+	var circle: CircleShape2D = _shape_cache.get(key)
+	if circle == null:
+		circle = CircleShape2D.new()
+		circle.radius = radius
+		_shape_cache[key] = circle
 	shape.shape = circle
 	add_child(shape)
 
@@ -277,6 +306,16 @@ var _stuck: Array = []
 func _process(delta: float) -> void:
 	_check_player_fallback()
 	_process_motion(delta)
+
+
+## Trail points in local space, oldest first, head (ZERO) last: what the old
+## per-frame shifting produced at 60 fps.
+func _rebuild_trail() -> void:
+	var n: int = mini(_frames, TRAIL_LEN)
+	var step: Vector2 = -direction * speed * TRAIL_DT
+	_trail.resize(n)
+	for i in n:
+		_trail[i] = step * float(n - 1 - i)
 
 
 ## Mortar shell pops: a ring of pellets, then the shell is gone.
@@ -289,7 +328,7 @@ func _burst() -> void:
 		p.direction = Vector2.RIGHT.rotated(ang)
 		p.damage = burst_damage
 		p.style = Style.PELLET
-		p.speed = burst_speed
+		p.speed_override = burst_speed
 		p.from_boss = from_boss
 		if parent != null:
 			parent.add_child.call_deferred(p)
@@ -298,12 +337,12 @@ func _burst() -> void:
 
 ## Physics safety net for hits on the ship (HitCheck.gd).
 func _check_player_fallback() -> void:
-	var p: Node2D = get_tree().get_first_node_in_group(&"player") as Node2D
+	var p: Node2D = HitCheck.player(get_tree())
 	if p == null or is_queued_for_deletion() or not p.monitoring:
 		_stuck.clear()
 		return
 	var r: float = max(bullet_radius, 6.0)
-	if HitCheck.stuck(HitCheck.overlap(global_position, Vector2(r, r), p), _stuck) and p.has_method("_on_area_entered"):
+	if HitCheck.stuck(HitCheck.on_player(global_position, r), _stuck) and p.has_method("_on_area_entered"):
 		HitCheck.note_fallback("enemy_bullet")
 		p._on_area_entered(self)
 
@@ -313,16 +352,27 @@ func _process_motion(delta: float) -> void:
 	if burst_after > 0.0 and _time >= burst_after and not is_queued_for_deletion():
 		_burst()
 		return
+	if homing_turn_rate > 0.0 and _time < homing_secs:
+		var ship: Node2D = get_tree().get_first_node_in_group(&"player") as Node2D
+		if ship != null:
+			var want: float = (ship.global_position - global_position).angle()
+			var cur: float = direction.angle()
+			direction = Vector2.RIGHT.rotated(rotate_toward(cur, want, homing_turn_rate * delta))
 	position += direction * speed * delta
 
-	# Trail samples are stored in local space behind the head along -direction.
-	var step: Vector2 = -direction * speed * delta
-	for i in _trail.size():
-		_trail[i] += step
-	_trail.append(Vector2.ZERO)
-	if _trail.size() > TRAIL_LEN:
-		_trail.pop_front()
-	queue_redraw()
+	# Battery pass 9/11. A shot flying straight has a trail that never changes
+	# in its own space (evenly spaced points behind the head), so it is built
+	# from the frame count instead of being shifted and redrawn every frame.
+	# Redraw happens: every frame while the tail is still growing or while a
+	# missile is steering, every 3rd frame (staggered) for the styles whose
+	# body animates, and never again for the static ones (pellet, dart, shell).
+	_frames += 1
+	var steering: bool = homing_turn_rate > 0.0 and _time < homing_secs
+	if _frames <= TRAIL_LEN or steering:
+		_rebuild_trail()
+		queue_redraw()
+	elif _animated and (_frames + _stagger) % 3 == 0:
+		queue_redraw()
 
 	var m: float = 64.0
 	if position.y < -m or position.y > _viewport_size.y + m \
