@@ -105,7 +105,15 @@ func _open_shop(player: Node) -> void:
 
 
 func _on_shop_closed() -> void:
-	get_tree().paused = false
+	# Playtest 9/11: leaving the shop dropped the player straight back into
+	# the fight. The game now stays frozen behind the same GET READY 3-2-1
+	# countdown CONTINUE uses, and Main unpauses when it ends. Without a
+	# Main scene (tool scenes) it just resumes.
+	var main: Node = get_tree().current_scene
+	if main != null and main.has_method("begin_resume_countdown"):
+		main.begin_resume_countdown()
+	else:
+		get_tree().paused = false
 	_shop_open = false
 	# Pop a friendly "thanks for shopping" hint label that fades as it floats
 	var bye := Label.new()

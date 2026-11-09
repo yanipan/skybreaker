@@ -919,6 +919,15 @@ func _update_death(delta: float) -> void:
 ## CONTINUE from the start screen: hold the tree paused under a dimmed
 ## 3-2-1-GO overlay so the player can settle their thumb before the action
 ## resumes. Timers run in process-always mode because the tree is paused.
+## Public entry for other systems that hold the tree paused and want the
+## player counted back in (the starbase shop on LEAVE). The countdown keeps
+## the tree paused and unpauses itself at GO.
+func begin_resume_countdown() -> void:
+	if _resume_countdown_active or _cutscene_active:
+		return   # whoever is running owns the pause and will release it
+	_begin_resume_countdown()
+
+
 func _begin_resume_countdown() -> void:
 	if _resume_countdown_active or _cutscene_active:
 		return
