@@ -447,8 +447,9 @@ func _build_ui() -> void:
 	_add_item("MISSILE POWER UP", "Boost missile firepower one tier.", &"power_missile", TEX_POWER)
 	_add_item("TORPEDO REFILL", "Top up your torpedo bay.", &"torp_refill", TEX_TORP)
 	_add_item("TORPEDO BAY", "Add one torpedo slot (+1 capacity).", &"torp_bay", TEX_TORP_BAY)
+	_add_item("TORPEDO WARHEAD", "Bigger torpedo: wider blast, more damage. 3 levels.", &"torp_power", TEX_TORP)
 	_add_item("THRUSTER UPGRADE", "Move faster — one of three tiers.", &"speed", TEX_SPEED)
-	_add_item("ENERGY CELL", "+40% weapon energy and +15% faster recharge. Up to 6 cells.", &"charge", TEX_ENERGY)
+	_add_item("ENERGY CELL", "+40% weapon energy and +15% faster recharge. Up to 8 cells.", &"charge", TEX_ENERGY)
 	_add_item("SIDEKICK", "Hire a wingmate ship. One at a time.", &"sidekick", TEX_SIDEKICK)
 
 	# Status / message line
@@ -605,6 +606,13 @@ func _price_for(kind: StringName) -> int:
 			if t_cap >= t_ladder.size():
 				return -1
 			return int(t_ladder[t_cap])
+		&"torp_power":
+			# Three warhead levels (Player.TORPEDO_TIER_MAX)
+			var tt: int = p.torpedo_tier if p != null else 0
+			var w_ladder: Array = [900, 1700, 2800]
+			if tt >= w_ladder.size():
+				return -1
+			return int(w_ladder[tt])
 		&"speed":
 			# Capped at tier 3
 			var st: int = p.speed_tier if p != null else 0
@@ -688,6 +696,8 @@ func _refresh_all() -> void:
 					suffix = "  [LVL %d/%d]" % [_weapon_level(p, 2), p.max_power_level]
 				&"torp_bay":
 					suffix = "  [%d/%d]" % [p.max_torpedoes, Player.TORPEDO_CAP]
+				&"torp_power":
+					suffix = "  [LVL %d/%d]" % [p.torpedo_tier, Player.TORPEDO_TIER_MAX]
 				&"speed":
 					suffix = "  [TIER %d/3]" % p.speed_tier
 				&"charge":
@@ -862,6 +872,10 @@ func _apply_purchase(kind: StringName) -> bool:
 				return false
 			p.max_torpedoes += 1
 			p.torpedo_count = p.max_torpedoes
+		&"torp_power":
+			if p.torpedo_tier >= Player.TORPEDO_TIER_MAX:
+				return false
+			p.torpedo_tier += 1
 		&"speed":
 			p.speed_tier = min(Player.SPEED_TIER_MAX, p.speed_tier + 1)
 		&"charge":

@@ -156,14 +156,28 @@ func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group(&"enemies"):
 		if area.has_method("take_damage"):
 			area.take_damage(damage_against(area))
-		# Bigger pop than a bullet, smaller than a torpedo
-		EventBus.screen_shake_requested.emit(4.0, 0.10)
+		# Bigger pop than a bullet, smaller than a torpedo. Playtest 9/11: a
+		# small fireball on every impact so missiles feel like they land
+		# (deferred: this runs inside a physics callback).
+		var burst: EnemyExplosion = preload("res://scripts/EnemyExplosion.gd").new()
+		burst.position = global_position
+		burst.burst_radius = IMPACT_BURST_RADIUS
+		burst.lifetime = 0.42
+		burst.spark_count = 9
+		burst.debris_count = 3
+		burst.smoke_count = 3
+		burst.base_color = Color(1.0, 0.62, 0.22)
+		get_parent().add_child.call_deferred(burst)
+		EventBus.screen_shake_requested.emit(5.5, 0.13)
 		queue_free()
 
 
 ## Playtest 9/11: missiles melted bosses too fast. A missile that lands on a
 ## boss deals BOSS_DAMAGE_MUL of its damage; regular enemies take it in full.
 const BOSS_DAMAGE_MUL: float = 0.9
+## Size of the fireball a missile leaves on impact (an enemy death burst is
+## enemy_size * 0.65, so ~36-90: this stays below the smallest of those).
+const IMPACT_BURST_RADIUS: float = 34.0
 
 func damage_against(target: Node) -> int:
 	if target.is_in_group(&"bosses"):

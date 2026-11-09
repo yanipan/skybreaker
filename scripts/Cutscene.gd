@@ -19,10 +19,12 @@ class_name Cutscene
 ##      transition (warp → next sector, or StartScreen transition for the
 ##      ending). Cutscene queue_free()s itself after emitting.
 ##
-## Nano Banana MP4 support: if `res://assets/cutscenes/<image_file>.mp4`
-## exists alongside the `.png`, the video plays instead of the still,
-## looping for the beat's duration. Falls back transparently to the still
-## when no clip is present — lets animation drops in without code changes.
+## Video clips (9/11): if `res://assets/cutscenes/<image_file>.ogv` exists
+## alongside the `.png`, the clip plays instead of the still and the beat
+## lasts at least as long as the clip. Godot only plays Ogg Theora, so
+## generated MP4s are converted with scripts/tools/clip_to_ogv.sh. The clip is
+## scaled to COVER the screen (like the stills), plays once and holds its last
+## frame. No clip = the still, with no code change.
 
 signal finished
 
@@ -44,6 +46,8 @@ const KB_SCALE_END: float = 1.08
 const KB_PAN_PX: float = 40.0
 ## A beat with narration stays up at least this long after the voice ends.
 const NARRATION_TAIL_SECONDS: float = 1.0
+## Width / height of the generated clips, used until the first frame is decoded.
+const VIDEO_FALLBACK_ASPECT: float = 720.0 / 1096.0
 
 var _beats: Array = []
 var _current_index: int = -1
@@ -179,12 +183,30 @@ func _make_image_rect() -> TextureRect:
 	return r
 
 
+## Scale a clip so it covers the whole screen without distortion (centre
+## crop), the same way the stills are shown. The texture size is only known
+## once the first frame is decoded, so this runs again a moment later.
+func _fit_video(v: VideoStreamPlayer, retry: bool = true) -> void:
+	var aspect: float = VIDEO_FALLBACK_ASPECT
+	var tex: Texture2D = v.get_video_texture()
+	if tex != null and tex.get_height() > 0 and tex.get_width() > 8:
+		aspect = float(tex.get_width()) / float(tex.get_height())
+	var w: float = max(_viewport_size.x, _viewport_size.y * aspect)
+	var h: float = w / aspect
+	v.size = Vector2(w, h)
+	v.position = (_viewport_size - v.size) * 0.5
+	if retry:
+		get_tree().create_timer(0.15, true).timeout.connect(func() -> void:
+			if is_instance_valid(v) and v.visible:
+				_fit_video(v, false))
+
+
 func _make_video_player() -> VideoStreamPlayer:
 	var v := VideoStreamPlayer.new()
 	v.size = _viewport_size
 	v.position = Vector2.ZERO
 	v.expand = true
-	v.loop = true
+	v.loop = false   # play once, hold the last frame until the beat ends
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.visible = false
 	return v
@@ -247,7 +269,7 @@ func _advance_to_beat(idx: int, is_first: bool) -> void:
 			_beat_duration = max(_beat_duration, spoken + NARRATION_TAIL_SECONDS)
 		elif am.has_method("stop_voice"):
 			am.stop_voice()
-	var mp4_path: String = CUTSCENE_DIR + image_file + ".mp4"
+	var mp4_path: String = CUTSCENE_DIR + image_file + ".ogv"
 	var png_path: String = CUTSCENE_DIR + image_file + ".png"
 
 	# Pick target slot (the one that's currently invisible).
@@ -270,6 +292,12 @@ func _advance_to_beat(idx: int, is_first: bool) -> void:
 		target_video.visible = true
 		target_video.modulate.a = 0.0
 		target_video.play()
+		_fit_video(target_video)
+		# The beat stays up for the whole clip (narration may already have
+		# stretched it further).
+		var clip_len: float = target_video.get_stream_length()
+		if clip_len > 0.0:
+			_beat_duration = max(_beat_duration, clip_len)
 		target_rect.visible = false
 	else:
 		target_video.visible = false

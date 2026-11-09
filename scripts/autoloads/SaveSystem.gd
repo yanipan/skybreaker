@@ -68,6 +68,7 @@ func save_game() -> void:
 		"carry_max_torpedoes": GameState.carry_max_torpedoes,
 		"carry_speed_tier": GameState.carry_speed_tier,
 		"carry_energy_cells": GameState.carry_energy_cells,
+		"carry_torpedo_tier": GameState.carry_torpedo_tier,
 		"carry_sidekick": GameState.carry_sidekick,
 		# --- Respawn slot (persists across one death per level) ---
 		"respawn_pending": GameState.respawn_pending,
@@ -81,6 +82,7 @@ func save_game() -> void:
 		"respawn_max_torpedoes": GameState.respawn_max_torpedoes,
 		"respawn_speed_tier": GameState.respawn_speed_tier,
 		"respawn_energy_cells": GameState.respawn_energy_cells,
+		"respawn_torpedo_tier": GameState.respawn_torpedo_tier,
 	}
 	# Write the staging file fully, close it, then swap it in. The real file
 	# is never opened for writing, so a kill mid-write leaves it intact.
@@ -169,6 +171,7 @@ func _apply_save_data() -> void:
 	GameState.carry_max_torpedoes = int(_save_data.get("carry_max_torpedoes", 2))
 	GameState.carry_speed_tier = int(_save_data.get("carry_speed_tier", 0))
 	GameState.carry_energy_cells = int(_save_data.get("carry_energy_cells", 0))
+	GameState.carry_torpedo_tier = int(_save_data.get("carry_torpedo_tier", 0))
 	GameState.carry_sidekick = bool(_save_data.get("carry_sidekick", false))
 	# --- Respawn slot ---
 	GameState.respawn_pending = bool(_save_data.get("respawn_pending", false))
@@ -182,6 +185,7 @@ func _apply_save_data() -> void:
 	GameState.respawn_max_torpedoes = int(_save_data.get("respawn_max_torpedoes", 2))
 	GameState.respawn_speed_tier = int(_save_data.get("respawn_speed_tier", 0))
 	GameState.respawn_energy_cells = int(_save_data.get("respawn_energy_cells", 0))
+	GameState.respawn_torpedo_tier = int(_save_data.get("respawn_torpedo_tier", 0))
 
 
 ## JSON parses numeric keys as strings ("0": 3) instead of ints (0: 3), so

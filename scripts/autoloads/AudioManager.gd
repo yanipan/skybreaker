@@ -156,13 +156,14 @@ func play_player_shot() -> void:
 	play_sfx(SFX_PLAYER_SHOT, -6.0)
 
 
-func play_sfx(stream: AudioStream, volume_db: float = 0.0) -> void:
+func play_sfx(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0) -> void:
 	if stream == null:
 		return
 	var player: AudioStreamPlayer = _sfx_players[_sfx_index]
 	_sfx_index = (_sfx_index + 1) % SFX_POOL_SIZE
 	player.stream = stream
 	player.volume_db = volume_db
+	player.pitch_scale = pitch   # pooled players: always set, 1.0 unless asked
 	player.play()
 
 

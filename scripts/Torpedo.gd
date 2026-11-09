@@ -11,6 +11,16 @@ const ExplosionScript := preload("res://scripts/Explosion.gd")
 @export var torpedo_color: Color = Color(1.0, 0.85, 0.2)
 @export var splash_radius: float = 360.0
 @export var splash_damage: int = 24
+## Warhead upgrade from the starbase shop (0 = stock, 3 = max). Set by
+## Player before the torpedo enters the tree; _ready scales the body, the
+## blast radius and the damage from the tables below.
+@export var tier: int = 0
+const TIER_MAX: int = 3
+const TIER_RADIUS_MUL: Array = [1.0, 1.2, 1.4, 1.65]
+const TIER_DAMAGE: Array = [24, 34, 46, 60]
+const TIER_BODY_MUL: Array = [1.0, 1.2, 1.4, 1.65]
+## Aura colour drawn around the orb, hotter per tier.
+const TIER_AURA: Array = [Color(1.0, 0.6, 0.15), Color(1.0, 0.45, 0.25), Color(1.0, 0.45, 0.95), Color(0.55, 0.9, 1.0)]
 
 var _viewport_size: Vector2
 var _time: float = 0.0
@@ -19,6 +29,10 @@ var _detonated: bool = false  ## Guards against multiple area_entered detonation
 
 func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
+	tier = clampi(tier, 0, TIER_MAX)
+	splash_radius *= float(TIER_RADIUS_MUL[tier])
+	splash_damage = int(TIER_DAMAGE[tier])
+	torpedo_size *= float(TIER_BODY_MUL[tier])
 	add_to_group(&"player_bullets")
 	add_to_group(&"player_torpedoes")  ## So Player can find an in-flight torpedo to manually detonate
 	_build_collision()
@@ -64,6 +78,13 @@ func _draw() -> void:
 	draw_circle(orb_pos, orb_r * 0.40, Color(1.0, 1.0, 0.95, 1.0))
 	# Tiny offset highlight for a sense of curvature
 	draw_circle(orb_pos + Vector2(-orb_r * 0.2, -orb_r * 0.2), orb_r * 0.18, Color(1, 1, 1, 0.9))
+	# Upgraded warheads: a coloured aura and one spinning energy arc per tier.
+	if tier > 0:
+		var aura: Color = TIER_AURA[tier]
+		draw_circle(orb_pos, orb_r * (2.4 + 0.3 * tier), Color(aura.r, aura.g, aura.b, 0.14 * pulse))
+		for i in tier:
+			var a0: float = _time * (5.0 + i * 1.7) + TAU * float(i) / float(tier)
+			draw_arc(orb_pos, orb_r * (1.75 + 0.28 * i), a0, a0 + 1.9, 14, Color(aura.r, aura.g, aura.b, 0.85), 2.5, true)
 
 
 func _build_collision() -> void:
@@ -102,7 +123,18 @@ func _detonate() -> void:
 	var explosion: Node2D = ExplosionScript.new()
 	explosion.position = position
 	explosion.radius = splash_radius
+	explosion.lifetime *= 1.0 + 0.12 * tier
+	explosion.spark_count += 8 * tier
+	explosion.debris_count += 4 * tier
 	get_parent().add_child(explosion)
+	# Upgraded warheads throw secondary fireballs through the blast area.
+	for i in tier * 2:
+		var sec: EnemyExplosion = preload("res://scripts/EnemyExplosion.gd").new()
+		sec.position = position + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(splash_radius * 0.2, splash_radius * 0.6)
+		sec.burst_radius = splash_radius * randf_range(0.14, 0.22)
+		sec.lifetime = 0.55 + 0.08 * tier
+		sec.base_color = TIER_AURA[tier]
+		get_parent().add_child.call_deferred(sec)
 
 	# Apply splash damage to every enemy within radius
 	var enemies := get_tree().get_nodes_in_group(&"enemies")
@@ -124,7 +156,10 @@ func _detonate() -> void:
 		if position.distance_to(b.global_position) <= splash_radius:
 			b.queue_free()
 
-	AudioManager.play_sfx(AudioManager.SFX_TORPEDO_EXPLOSION, -2.0)
+	# Louder and deeper per tier; from tier 2 a second, lower boom is layered in.
+	AudioManager.play_sfx(AudioManager.SFX_TORPEDO_EXPLOSION, -2.0 + 1.5 * tier, 1.0 - 0.07 * tier)
+	if tier >= 2:
+		AudioManager.play_sfx(AudioManager.SFX_SPACESHIP_EXPLODING, -7.0 + 1.5 * (tier - 2), 0.72)
 	AudioManager.haptic_heavy()
-	EventBus.screen_shake_requested.emit(14.0, 0.35)
+	EventBus.screen_shake_requested.emit(14.0 + 3.5 * tier, 0.35 + 0.07 * tier)
 	queue_free()

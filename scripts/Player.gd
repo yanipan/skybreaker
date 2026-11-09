@@ -54,6 +54,12 @@ const ENERGY_CELL_BONUS_PCT: float = 0.4
 const ENERGY_CELL_REGEN_PCT: float = 0.15
 ## Torpedo bay hard cap (base 2 + 6 bays from the shop).
 const TORPEDO_CAP: int = 10   ## 8 -> 10 with the 24-sector ladder (9/11)
+## Torpedo warhead upgrade bought at the starbase (0..3): bigger torpedo,
+## wider blast, more damage, deeper boom. See Torpedo.TIER_*.
+const TORPEDO_TIER_MAX: int = 3
+const SWITCH_SFX_GAP_MS: int = 220
+var _last_switch_ms: int = -100000
+var torpedo_tier: int = 0
 var energy_cells_bought: int = 0
 var _base_max_charge: float = 100.0   ## Snapshot of original max_charge for cell math
 @export var charge_drain_per_second: float = 50.0   ## How fast charge drains while fast-firing (~2s of fast fire)
@@ -160,6 +166,7 @@ func _ready() -> void:
 		_refresh_derived_power()
 		speed_tier = clamp(GameState.respawn_speed_tier, 0, SPEED_TIER_MAX)
 		energy_cells_bought = clamp(GameState.respawn_energy_cells, 0, ENERGY_CELL_MAX)
+		torpedo_tier = clampi(GameState.respawn_torpedo_tier, 0, TORPEDO_TIER_MAX)
 		_apply_energy_cells()
 		GameState.clear_respawn()
 	elif GameState.carry_active:
@@ -175,6 +182,7 @@ func _ready() -> void:
 		_refresh_derived_power()
 		speed_tier = clamp(GameState.carry_speed_tier, 0, SPEED_TIER_MAX)
 		energy_cells_bought = clamp(GameState.carry_energy_cells, 0, ENERGY_CELL_MAX)
+		torpedo_tier = clampi(GameState.carry_torpedo_tier, 0, TORPEDO_TIER_MAX)
 		_apply_energy_cells()
 		GameState.clear_carry()
 	else:
@@ -943,8 +951,9 @@ func _try_fire_torpedo() -> void:
 	_torpedo_grace_timer = torpedo_fire_grace
 	var torpedo: Torpedo = TorpedoScript.new()
 	torpedo.position = global_position + Vector2(0, -40)
+	torpedo.tier = torpedo_tier
 	get_parent().add_child(torpedo)
-	AudioManager.play_sfx(AudioManager.SFX_TORPEDO_FIRE, -4.0)
+	AudioManager.play_sfx(AudioManager.SFX_TORPEDO_FIRE, -4.0 + 1.0 * torpedo_tier, 1.0 - 0.06 * torpedo_tier)
 	AudioManager.haptic_medium()
 
 
@@ -1252,8 +1261,16 @@ func cycle_weapon() -> void:
 	_fire_cooldown = 0.0
 	if OS.is_debug_build():
 		print("Weapon switched to ", weapon_type, " (level ", power_level, ")")
-	AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -3.0)
-	AudioManager.haptic_medium()
+	# 9/11: the fire wheel switches by sliding, several times a second. The
+	# switch itself was already instant (cooldown reset above); what dragged
+	# was the feedback: a loud zap and a 50 ms buzz on every change. Now a
+	# soft, slightly higher click and a light tick, and no sound at all if
+	# the last switch was under SWITCH_SFX_GAP ago.
+	var now: int = Time.get_ticks_msec()
+	if now - _last_switch_ms >= SWITCH_SFX_GAP_MS:
+		AudioManager.play_sfx(AudioManager.SFX_POWERUP_ZAP, -11.0, 1.25)
+	_last_switch_ms = now
+	AudioManager.haptic_light()
 
 
 ## Sync the derived `power_level` field with whichever slot is currently

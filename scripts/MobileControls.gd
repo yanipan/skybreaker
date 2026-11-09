@@ -109,9 +109,15 @@ func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
 	_resolve_player()
 	_build_finger_ring()
-	_build_button_pad()
 	_build_torpedo_button()
 	_build_weapon_buttons()
+	# 9/11: the three round weapon buttons are replaced by ONE fire wheel.
+	# They stay in the tree, hidden, because the per-frame readout code still
+	# writes to their labels; weapon touches and drawing go through the
+	# wheel. The torpedo keeps its own visible button.
+	for wb in _weapon_btns:
+		wb.visible = false
+	_build_button_pad()
 	if GameState.joystick_enabled:
 		_build_joystick()
 	_build_pause_button()
@@ -148,6 +154,14 @@ func _build_finger_ring() -> void:
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
+	# A finger that started on the fire wheel stays the wheel's until it
+	# lifts, wherever it goes: keep switching wedges past the rim and never
+	# miss its release.
+	if _pad != null and is_instance_valid(_pad):
+		if event is InputEventScreenDrag and _pad_touch.has(event.index):
+			_pad_drag(event.index, event.position - _pad.position)
+		elif event is InputEventScreenTouch and not event.pressed and _pad_touch.has(event.index):
+			_pad_release(event.index)
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if _ring_index != -1 and event.index != _ring_index:
@@ -184,46 +198,130 @@ func _input(event: InputEvent) -> void:
 # targets. One invisible pad covers the whole cluster plus a margin; every
 # touch on it picks the nearest button. The buttons become visuals only.
 
-var _pad: Control = null
-var _pad_centers: Array = []
-var _pad_touch: Dictionary = {}   ## touch index (or -100 for mouse) -> slot 0..3
+var _pad: Control = null            ## the MobileFireWheel (one wheel, four wedges, 9/11)
+var _pad_centers: Array = []         ## wedge label centres [P, B, M, torpedo] in screen space
+## touch index (or -100 for the mouse) -> {"slot": wedge under it, "weapon": weapon it holds or -1}
+var _pad_touch: Dictionary = {}
 
-## Reach of the pad from the corner button's center. Static for tests.
+## Wheel radius and torpedo button radius as multiples of the button size.
+## Static for tests.
+const WHEEL_SIZE_MUL: float = 1.16
+const TORPEDO_SIZE_MUL: float = 0.42
+const WHEEL_TORPEDO_GAP: float = 12.0
+const TORPEDO_HIT_MUL: float = 1.45
+var _torpedo_hit: Control = null
+
+## How far a touch counts from the WHEEL centre.
 static func pad_reach(size: float) -> float:
-	return size * 1.42 + size * 0.95
+	return size * WHEEL_SIZE_MUL * MobileFireWheel.HIT_SLACK
+
+
+## [wheel centre, wheel radius, torpedo centre, torpedo radius]. The torpedo
+## keeps the corner pocket it always had; the wheel sits diagonally up and
+## inward from it with a small gap, whole circle on screen. Static so the
+## layout can be checked headless.
+static func wheel_layout(safe: Rect2, size: float, side: int) -> Array:
+	var r: float = size * WHEEL_SIZE_MUL
+	var tr: float = size * TORPEDO_SIZE_MUL
+	var right: bool = side == 1
+	var inward: float = -1.0 if right else 1.0
+	var tmargin: float = tr + 16.0
+	var tc := Vector2(
+		safe.position.x + safe.size.x - tmargin if right else safe.position.x + tmargin,
+		safe.position.y + safe.size.y - tmargin
+	)
+	var d: float = (r + tr + WHEEL_TORPEDO_GAP) / sqrt(2.0)
+	var c := tc + Vector2(inward * d, -d)
+	return [c, r, tc, tr]
 
 
 func _build_button_pad() -> void:
 	var size: float = _button_size()
-	_pad_centers = cluster_centers(_safe_area(), size, GameState.controls_side)
-	var corner: Vector2 = _pad_centers[3]
-	var reach: float = pad_reach(size)
-	_pad = Control.new()
-	_pad.name = "BUTTON_PAD"
-	_pad.set_script(preload("res://scripts/MobileControlsPad.gd"))
-	_pad.radius = reach
-	_pad.size = Vector2(reach, reach) * 2.0
-	_pad.position = corner - Vector2(reach, reach)
-	_pad.gui_input.connect(_on_pad_input)
-	add_child(_pad)
+	var lay: Array = wheel_layout(_safe_area(), size, GameState.controls_side)
+	var center: Vector2 = lay[0]
+	var r: float = lay[1]
+	var box: float = r * MobileFireWheel.HIT_SLACK
+	var wheel: MobileFireWheel = MobileFireWheel.new()
+	wheel.name = "FIRE_WHEEL"
+	wheel.radius = r
+	wheel.right_side = GameState.controls_side == 1
+	wheel.size = Vector2(box, box) * 2.0
+	wheel.position = center - Vector2(box, box)
+	wheel.gui_input.connect(_on_pad_input)
+	add_child(wheel)
+	_pad = wheel
+	_pad_centers = [wheel.slot_center(0), wheel.slot_center(1), wheel.slot_center(2), lay[2]]
+	_torpedo_center = lay[2]
+	_torpedo_radius = lay[3]
+
+
+func _wheel_slot(local_pos: Vector2, current: int) -> int:
+	var wheel: MobileFireWheel = _pad as MobileFireWheel
+	return MobileFireWheel.slot_at(local_pos - wheel.size * 0.5, wheel.radius, current, wheel.right_side)
 
 
 func _pad_press(key: int, local_pos: Vector2) -> void:
-	var slot: int = preload("res://scripts/MobileControlsPad.gd").nearest_slot(_pad.position + local_pos, _pad_centers)
-	_pad_touch[key] = slot
-	if slot == 3:
+	var slot: int = _wheel_slot(local_pos, -1)
+	_pad_touch[key] = {"slot": slot, "weapon": -1}
+	_pad_enter(key, slot)
+
+
+var _torpedo_center: Vector2 = Vector2.ZERO
+var _torpedo_radius: float = 50.0
+
+## The finger moved: switch as soon as it is on another wedge. A firing thumb
+## that curls onto the torpedo button fires ONE torpedo per visit and keeps
+## its gun going, so the flick never drops the main weapon.
+func _pad_drag(key: int, local_pos: Vector2) -> void:
+	if not _pad_touch.has(key):
+		return
+	var st: Dictionary = _pad_touch[key]
+	var screen_pos: Vector2 = _pad.position + local_pos
+	var d_torp: float = screen_pos.distance_to(_torpedo_center)
+	if bool(st.get("on_torpedo", false)):
+		if d_torp > _torpedo_radius * 1.25:
+			st["on_torpedo"] = false
+		return   # while on the torpedo button the wedge does not change
+	if d_torp <= _torpedo_radius * 0.9:
+		st["on_torpedo"] = true
 		_fire_torpedo()
-	else:
-		_set_weapon(slot, true)
+		return
+	var slot: int = _wheel_slot(local_pos, int(st["slot"]))
+	if slot == int(st["slot"]):
+		return
+	st["slot"] = slot
+	_pad_enter(key, slot)
+
+
+## Finger `key` just landed on (or slid onto) wedge `slot`.
+func _pad_enter(key: int, slot: int) -> void:
+	var st: Dictionary = _pad_touch[key]
+	(_pad as MobileFireWheel).flash(slot)
+	var old: int = int(st["weapon"])
+	if old == slot:
+		return
+	st["weapon"] = slot
+	# Press the new weapon BEFORE letting go of the old one so the ship never
+	# sees a frame with no weapon held.
+	_set_weapon(slot, true)
+	if old >= 0 and not _weapon_held_by_other(key, old):
+		_set_weapon(old, false)
+
+
+func _weapon_held_by_other(key: int, weapon: int) -> bool:
+	for k in _pad_touch:
+		if k != key and int(_pad_touch[k]["weapon"]) == weapon:
+			return true
+	return false
 
 
 func _pad_release(key: int) -> void:
 	if not _pad_touch.has(key):
 		return
-	var slot: int = _pad_touch[key]
+	var weapon: int = int(_pad_touch[key]["weapon"])
 	_pad_touch.erase(key)
-	if slot < 3 and not _pad_touch.values().has(slot):
-		_set_weapon(slot, false)
+	if weapon >= 0 and not _weapon_held_by_other(key, weapon):
+		_set_weapon(weapon, false)
 
 
 func _on_pad_input(event: InputEvent) -> void:
@@ -238,15 +336,20 @@ func _on_pad_input(event: InputEvent) -> void:
 			_pad_release(event.index)
 			_pad.accept_event()
 	elif event is InputEventScreenDrag:
-		# Own fingers stay put on their slot; a steering finger sliding
-		# through the corner is not ours and passes on to the ship.
+		# Our own finger sliding across the wheel switches wedges (also
+		# tracked in _input, which keeps following it past the rim). A
+		# steering finger passing through is not ours and goes to the ship.
 		if _pad_touch.has(event.index):
+			_pad_drag(event.index, event.position)
 			_pad.accept_event()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.device != InputEvent.DEVICE_ID_EMULATION:
 		if event.pressed:
 			_pad_press(-100, event.position)
 		else:
 			_pad_release(-100)
+		_pad.accept_event()
+	elif event is InputEventMouseMotion and _pad_touch.has(-100) and event.device != InputEvent.DEVICE_ID_EMULATION:
+		_pad_drag(-100, event.position)
 		_pad.accept_event()
 
 
@@ -260,12 +363,26 @@ func _pad_reset() -> void:
 # --- Torpedo button (bottom-right) ---
 
 func _build_torpedo_button() -> void:
-	var size: float = _button_size()
-	var center: Vector2 = cluster_centers(_safe_area(), size, GameState.controls_side)[3]
+	# 9/11: its own round button in the corner pocket beside the fire wheel
+	# (limited ammo and a one-shot tap: not something to slide onto by
+	# accident). Sized from the wheel layout.
+	var lay: Array = wheel_layout(_safe_area(), _button_size(), GameState.controls_side)
+	var center: Vector2 = lay[2]
+	var size: float = float(lay[3]) * 2.0
 	_torpedo_btn = _make_circle_button(center, size, &"TORPEDO")
-	_torpedo_btn.gui_input.connect(_on_torpedo_input)
-	# Visual only: touches are routed by the corner pad underneath.
+	# The drawn button is visual only. An invisible round pad around it takes
+	# the taps, 45% bigger than the button, so a thumb that lands near the
+	# corner still fires (the wheel is added later and wins where they meet).
 	_torpedo_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hit_r: float = float(lay[3]) * TORPEDO_HIT_MUL
+	_torpedo_hit = Control.new()
+	_torpedo_hit.name = "TORPEDO_HIT"
+	_torpedo_hit.set_script(preload("res://scripts/MobileControlsPad.gd"))
+	_torpedo_hit.radius = hit_r
+	_torpedo_hit.size = Vector2(hit_r, hit_r) * 2.0
+	_torpedo_hit.position = center - Vector2(hit_r, hit_r)
+	_torpedo_hit.gui_input.connect(_on_torpedo_input)
+	add_child(_torpedo_hit)
 	add_child(_torpedo_btn)
 
 	# Center label — large "T" icon
@@ -299,7 +416,8 @@ func _on_torpedo_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch and event.pressed:
 		_fire_torpedo()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and event.device != InputEvent.DEVICE_ID_EMULATION:
+		# (a touch also arrives as an emulated click: it must not fire twice)
 		_fire_torpedo()
 		get_viewport().set_input_as_handled()
 
@@ -394,6 +512,7 @@ func _on_joystick(u: Vector2, active: bool) -> void:
 func _over_controls(pos: Vector2) -> bool:
 	var nodes: Array = _weapon_btns.duplicate()
 	nodes.append(_torpedo_btn)
+	nodes.append(_torpedo_hit)
 	nodes.append(_pause_btn)
 	nodes.append(_joystick)
 	nodes.append(_pad)
@@ -636,6 +755,14 @@ func _process(delta: float) -> void:
 		#  * DETONATE — fast red pulse, always "ready"
 		#  * READY    — gentle cyan pulse, ready
 		#  * EMPTY    — dim, slow pulse, not ready
+		# Fire wheel readout: current weapon, levels, torpedo state and the
+		# wedge a finger is on (the newest touch wins).
+		if _pad != null and is_instance_valid(_pad) and _pad.has_method("set_state"):
+			var held_slot: int = -1
+			for k in _pad_touch:
+				held_slot = int(_pad_touch[k]["slot"])
+			_pad.set_state(wt, [int(levels.get(0, 1)), int(levels.get(1, 1)), int(levels.get(2, 1))], held_slot)
+
 		if _torpedo_btn != null:
 			var ready: bool = in_flight or tc > 0
 			_torpedo_btn.set_meta("ready", ready)
@@ -647,8 +774,8 @@ func _process(delta: float) -> void:
 				_torpedo_btn.set_meta("col_border", Color(1.0, 0.5, 0.5, 0.85))
 			else:
 				_torpedo_btn.set_meta("pulse", _ring_pulse)
-				_torpedo_btn.set_meta("col_glow", COL_CYAN)
-				_torpedo_btn.set_meta("col_border", COL_BORDER_DIM)
+				_torpedo_btn.set_meta("col_glow", MobileFireWheel.TORPEDO_COLOR)
+				_torpedo_btn.set_meta("col_border", Color(MobileFireWheel.TORPEDO_COLOR, 0.80 if tc > 0 else 0.30))
 			_torpedo_btn.queue_redraw()
 
 

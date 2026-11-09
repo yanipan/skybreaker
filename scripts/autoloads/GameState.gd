@@ -113,6 +113,7 @@ var respawn_max_shield: int = 1
 var respawn_max_torpedoes: int = 2
 var respawn_speed_tier: int = 0
 var respawn_energy_cells: int = 0
+var respawn_torpedo_tier: int = 0
 
 # Level progression — 1..24. Drives wave library, background, difficulty.
 # 9/11: 20 -> 24 (Acts 5 "The Heart" 20-22 and 6 "The Null Reach" 23-24).
@@ -145,6 +146,7 @@ var carry_max_shield: int = 1
 var carry_max_torpedoes: int = 2
 var carry_speed_tier: int = 0
 var carry_energy_cells: int = 0
+var carry_torpedo_tier: int = 0
 ## True if a sidekick was alive at the end of the previous sector. The next
 ## scene re-spawns one (refilled to full HP/shield) on _ready.
 var carry_sidekick: bool = false
@@ -162,6 +164,7 @@ func clear_carry() -> void:
 	carry_max_torpedoes = 2
 	carry_speed_tier = 0
 	carry_energy_cells = 0
+	carry_torpedo_tier = 0
 	carry_sidekick = false
 
 
@@ -177,6 +180,7 @@ func clear_respawn() -> void:
 	respawn_max_torpedoes = 2
 	respawn_speed_tier = 0
 	respawn_energy_cells = 0
+	respawn_torpedo_tier = 0
 
 
 ## Stash the player's current loadout, unreduced, for respawn after
@@ -198,6 +202,7 @@ func stash_respawn(p: Node) -> void:
 	respawn_max_torpedoes = int(p.max_torpedoes) if "max_torpedoes" in p else 2
 	respawn_speed_tier = int(p.speed_tier) if "speed_tier" in p else 0
 	respawn_energy_cells = int(p.energy_cells_bought) if "energy_cells_bought" in p else 0
+	respawn_torpedo_tier = int(p.torpedo_tier) if "torpedo_tier" in p else 0
 
 
 ## No-penalty snapshot of the live player into the carry slot. Used by the
@@ -224,6 +229,7 @@ func snapshot_player(p: Node) -> void:
 	carry_max_torpedoes = int(p.max_torpedoes) if "max_torpedoes" in p else 2
 	carry_speed_tier = int(p.speed_tier) if "speed_tier" in p else 0
 	carry_energy_cells = int(p.energy_cells_bought) if "energy_cells_bought" in p else 0
+	carry_torpedo_tier = int(p.torpedo_tier) if "torpedo_tier" in p else 0
 	# Sidekick (incl. one hired at the starbase) survives if currently in the field.
 	carry_sidekick = p.get_tree().get_first_node_in_group(&"sidekick") != null
 

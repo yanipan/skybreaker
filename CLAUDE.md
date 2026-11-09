@@ -39,13 +39,13 @@ Boot.tscn → StartScreen.tscn → Main.tscn (gameplay)
 | `Bullet.gd` | Area2D | Player bullet (pooled) |
 | `EnemyBullet.gd` | Area2D | Enemy bullet. Style defaults OVERWRITE speed/radius/colour: set `speed_override` etc. for custom values. `burst_after`/`burst_count` = fused shell or mine, `homing_turn_rate`/`homing_secs` = homing missile. Redraws only while its trail grows, while steering, or every 3rd frame for animated styles |
 | `EnemyBeam.gd` | Area2D | Enemy beam: warning line for `charge_secs`, then a damaging column for `fire_secs`; follows its emitter, cancelled if the emitter dies during the wind-up |
-| `Torpedo.gd` | Area2D | Player torpedo (secondary) |
-| `Missile.gd` | Area2D | Homing missile secondary |
+| `Torpedo.gd` | Area2D | Player torpedo (secondary). `tier` 0-3 = TORPEDO WARHEAD shop upgrade (`Player.torpedo_tier`, carried and saved): body x1.65, blast radius x1.65, damage 24 -> 60 at level 3, deeper and layered boom |
+| `Missile.gd` | Area2D | Homing missile primary; 90% damage to bosses; small fireball on every impact |
 | `Beam.gd` | Node2D | Continuous beam weapon |
 | `Pickup.gd` | Area2D | Money, health, power-up drops |
 | `Explosion.gd` / `EnemyExplosion.gd` | Node2D | Particle FX |
 | `WeaponMeters.gd` | Control | HUD weapon charge display |
-| `MobileControls.gd` | Control | Touch input layer |
+| `MobileControls.gd` | Control | Touch input layer. Since 9/11: ONE fire wheel (`MobileFireWheel.gd`, three 120-degree wedges P / B / M, touch or slide to switch without lifting) plus a separate red torpedo button in the corner pocket (a firing thumb can curl onto it: one torpedo per visit, gun keeps firing). A finger that starts on the wheel is tracked in `_input` until it lifts |
 | `ParallaxBg.gd` | Node2D | Scrolling background |
 | `Starfield.gd` | Node2D | Star particle layer |
 | `ScorePopup.gd` | Node2D | Floating score text |
@@ -121,6 +121,11 @@ assets/fonts/
 - Max power level: 30 (20 → 25 → 30; levels 26-30 are real growth for the 24-sector ladder)
 - Max charge: 100 base, +40% per energy cell, max 8 cells; shield max 6, torpedo bay max 10
 - Death penalty: lose a life and restart the sector; weapons and gear are kept
+
+## Story clips
+- A cutscene beat plays `assets/cutscenes/<image_file>.ogv` when it exists (one per cutscene: intro launch 10 s, acts 1-5 6 s each, ending 10 s). Godot plays only Ogg Theora: convert with `scripts/tools/clip_to_ogv.sh clip.mp4 out.ogv 5` (720 wide, quality 5, no audio, about 2 MB per 10 s).
+- Clips are generated from the existing stills (image-to-video) with the translate skill's `art.mjs --engine grok --video --image still.png --duration 6|10`; see docs/ART_PROMPTS_24.md. Always check frames before installing.
+- `scenes/tools/CutsceneVideoShot.tscn` (windowed) proves a clip plays, covers the screen and sets the beat length.
 
 ## Performance (measure, do not guess)
 - `godot --headless --fixed-fps 60 --path . res://scenes/tools/PerfProbe.tscn` prints CPU ms per frame on a busy sector 24 (ship untouchable, firing). 9/11: 4.30 ms -> 2.26 ms on the M-series Mac after the shot pass.
