@@ -45,11 +45,12 @@ func _ready() -> void:
 	_check(cs.size() == 4 and mc._pad != null, "pad built over the cluster")
 	var size: float = mc._button_size()
 	var corner: Vector2 = cs[3]
-	# Near-miss taps: 0.62 button-sizes from each weapon center, away from
-	# the corner (outside the round button, inside its wedge).
+	# Near-miss taps (fire wheel, 9/11): a tap in a wedge's direction just
+	# PAST the drawn rim still picks that weapon.
+	var centre: Vector2 = mc._pad.position + mc._pad.size * 0.5
 	for wt in [1, 2, 0]:
 		var c: Vector2 = cs[wt]
-		var pos: Vector2 = c + (c - corner).normalized() * size * 0.62
+		var pos: Vector2 = centre + (c - centre).normalized() * mc._pad.radius * 1.1
 		_touch(5, pos, true)
 		await _frames(2)
 		_check(p.weapon_type == wt, "near-miss tap off button %d still picks weapon %d (got %d)" % [wt, wt, p.weapon_type])

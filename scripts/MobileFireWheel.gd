@@ -26,7 +26,7 @@ const HUB_FRAC: float = 0.24
 ## A finger must travel this far past a wedge border before the wedge changes.
 const HYSTERESIS_DEG: float = 10.0
 ## Touches count this far outside the drawn rim.
-const HIT_SLACK: float = 1.12
+const HIT_SLACK: float = 1.25   # a thumb landing a little past the rim still counts
 const HALF_WEDGE_DEG: float = 60.0
 
 var radius: float = 140.0

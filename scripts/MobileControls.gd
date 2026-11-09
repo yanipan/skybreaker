@@ -205,7 +205,7 @@ var _pad_touch: Dictionary = {}
 
 ## Wheel radius and torpedo button radius as multiples of the button size.
 ## Static for tests.
-const WHEEL_SIZE_MUL: float = 1.16
+const WHEEL_SIZE_MUL: float = 1.0    # 1.16 -> 1.0 (9/11 playtest: "a bit smaller"), radius = one button size
 const TORPEDO_SIZE_MUL: float = 0.42
 const WHEEL_TORPEDO_GAP: float = 12.0
 const TORPEDO_HIT_MUL: float = 1.45
