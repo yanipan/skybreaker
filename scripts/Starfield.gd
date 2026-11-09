@@ -59,9 +59,9 @@ func _ready() -> void:
 
 ## Hand-picked palette per act, with a per-level shift so neighbors differ.
 ## Acts mirror Levels.gd: 1-5 Earth, 6-10 Outer Colonies, 11-15 Insectoid,
-## 16-19 Crystal, 20 Skybreaker.
+## 16-19 Crystal, 20-22 the Heart, 23-24 Null Reach + Skybreaker.
 func _pick_palette_for_level() -> void:
-	var lvl: int = clamp(level, 1, 20)
+	var lvl: int = clamp(level, 1, 24)
 	var act_palettes := [
 		# Act 1: cool blue Earth defense
 		{
@@ -91,7 +91,14 @@ func _pick_palette_for_level() -> void:
 			"nebula_bot": Color(0.30, 0.10, 0.55, 0.025),
 			"star": Color(0.95, 0.85, 1.0),
 		},
-		# Act 5: blood-red final
+		# Act 5: the Heart — near-black with cold cyan veins
+		{
+			"backdrop": Color(0.02, 0.05, 0.07),
+			"nebula_top": Color(0.30, 0.95, 1.0, 0.05),
+			"nebula_bot": Color(0.10, 0.45, 0.60, 0.03),
+			"star": Color(0.80, 1.0, 1.0),
+		},
+		# Act 6: blood-red Null Reach + finale
 		{
 			"backdrop": Color(0.10, 0.02, 0.03),
 			"nebula_top": Color(1.0, 0.20, 0.15, 0.06),
@@ -108,8 +115,10 @@ func _pick_palette_for_level() -> void:
 		act = 2
 	elif lvl <= 19:
 		act = 3
-	else:
+	elif lvl <= 22:
 		act = 4
+	else:
+		act = 5
 	var p: Dictionary = act_palettes[act]
 	_backdrop_color = p["backdrop"]
 	_nebula_top = p["nebula_top"]

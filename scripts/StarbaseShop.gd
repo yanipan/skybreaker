@@ -10,10 +10,10 @@ class_name StarbaseShop
 ##
 ## Items:
 ##   - Hull Repair        — refill HP                  flat 30
-##   - Stronger Shield    — +1 max_shield, max 5       100 / 200 / 350 / 500
+##   - Stronger Shield    — +1 max_shield, max 6       220 .. 1400
 ##   - Weapon Power Up    — +1 power_level             80 → 140 → 220 → 320 → 450 → ...
 ##   - Torpedo Refill     — refill torpedoes to max    flat 60
-##   - Torpedo Bay        — +1 max_torpedoes, max 8    320 .. 1800
+##   - Torpedo Bay        — +1 max_torpedoes, max 10   320 .. 2900
 ##   - Speed Boost        — +1 speed_tier, max 3       180 / 280 / 420
 ##   - Energy Cell        — +20 max_charge             120 (repeatable, raises ceiling)
 ##   - Switch Weapon      — cycle Phaser/Beam/Missile  40
@@ -584,9 +584,9 @@ func _price_for(kind: StringName) -> int:
 				return -1
 			return 80
 		&"shield":
-			# Caps at 5
+			# Caps at 6
 			var lvl: int = (p.max_shield - 1) if p != null else 0
-			var ladder: Array = [220, 420, 700, 1000]
+			var ladder: Array = [220, 420, 700, 1000, 1400]   # cap 6 (9/11: +1)
 			if lvl >= ladder.size():
 				return -1
 			return int(ladder[lvl])
@@ -601,7 +601,7 @@ func _price_for(kind: StringName) -> int:
 		&"torp_bay":
 			# Cap at Player.TORPEDO_CAP (base 2 + 6 bays)
 			var t_cap: int = (p.max_torpedoes - 2) if p != null else 0
-			var t_ladder: Array = [320, 520, 780, 1050, 1400, 1800]
+			var t_ladder: Array = [320, 520, 780, 1050, 1400, 1800, 2300, 2900]   # cap 10 (9/11: +2)
 			if t_cap >= t_ladder.size():
 				return -1
 			return int(t_ladder[t_cap])
@@ -616,7 +616,7 @@ func _price_for(kind: StringName) -> int:
 			# Cap at Player.ENERGY_CELL_MAX cells; price ramps so each cell
 			# is meaningfully more expensive than the last.
 			var cells: int = p.energy_cells_bought if p != null else 0
-			var c_ladder: Array = [300, 520, 800, 1200, 1650, 2200]
+			var c_ladder: Array = [300, 520, 800, 1200, 1650, 2200, 2800, 3500]   # cap 8 (9/11: +2)
 			if cells >= c_ladder.size():
 				return -1
 			return int(c_ladder[cells])
@@ -679,7 +679,7 @@ func _refresh_all() -> void:
 		if p != null:
 			match kind:
 				&"shield":
-					suffix = "  [LVL %d/5]" % p.max_shield
+					suffix = "  [LVL %d/6]" % p.max_shield
 				&"power_phaser":
 					suffix = "  [LVL %d/%d]" % [_weapon_level(p, 0), p.max_power_level]
 				&"power_beam":

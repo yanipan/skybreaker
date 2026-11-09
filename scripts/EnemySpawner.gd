@@ -257,7 +257,7 @@ func _spawn_boss() -> void:
 	var entry: Dictionary = _boss_queue.pop_front() if not _boss_queue.is_empty() else {"type": _boss_type_idx, "name": "", "hp_scale": 1.0}
 	_bosses_spawned += 1
 	var boss: Boss = BossScript.new()
-	boss.type = clamp(int(entry.get("type", _boss_type_idx)), 0, 5)
+	boss.type = clamp(int(entry.get("type", _boss_type_idx)), 0, Boss.Type.size() - 1)
 	boss.name_override = str(entry.get("name", ""))
 	boss.hp_scale = float(entry.get("hp_scale", 1.0))
 	boss.position = Vector2(_viewport_size.x * 0.5, -120.0)

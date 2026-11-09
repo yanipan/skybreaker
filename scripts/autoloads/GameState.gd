@@ -114,9 +114,10 @@ var respawn_max_torpedoes: int = 2
 var respawn_speed_tier: int = 0
 var respawn_energy_cells: int = 0
 
-# Level progression — 1..20. Drives wave library, background, difficulty.
+# Level progression — 1..24. Drives wave library, background, difficulty.
+# 9/11: 20 -> 24 (Acts 5 "The Heart" 20-22 and 6 "The Null Reach" 23-24).
 var current_level: int = 1
-const MAX_LEVEL: int = 20
+const MAX_LEVEL: int = 24
 
 # Current run state
 var current_ship_id: StringName = &"scout"

@@ -28,9 +28,9 @@ Boot.tscn → StartScreen.tscn → Main.tscn (gameplay)
 |--------|---------|------|
 | `Player.gd` | Area2D | Drag-to-move, auto-fire, weapon/shield/torpedo/energy logic. Self-constructs collision on `_ready` — no .tscn needed |
 | `Main.gd` | Node | Game loop, wave orchestration, level transitions |
-| `Levels.gd` | Resource | Level/wave definitions |
-| `Enemy.gd` | Node2D | Base enemy logic |
-| `Boss.gd` | Node2D | Boss phases and patterns |
+| `Levels.gd` | Resource | Level/wave definitions, 24 sectors in 6 acts (1-5, 6-10, 11-15, 16-19, 20-22, 23-24); bosses at 4, 8, 12, 16, 19, 22, 24 (pair) |
+| `Enemy.gd` | Node2D | Base enemy logic. 11 types; SHADE (phases, untouchable while cloaked) and ARTILLERY (holds at the top, fused mortar shells) since 9/11, both on tinted stand-in hulls until `enemy_shade.png` / `enemy_artillery.png` exist |
+| `Boss.gd` | Node2D | Boss phases and patterns. 8 types: BOSS1-5, FINAL, ARCHON (sector 22), HERALD (finale escort); ARCHON/HERALD use tinted stand-ins until `boss6.png` / `boss7.png` exist |
 | `EnemySpawner.gd` | Node | Spawns waves from Levels data; boss queue (`escort_boss` then `boss_type`), `boss_sequence_done()` / `ends_on_boss()` gate the stage end in Main |
 | `StarbaseShop.gd` | Node | Between-level shop (upgrade purchases) |
 | `Starbase.gd` | Node | Starbase scene controller |
@@ -55,7 +55,7 @@ Boot.tscn → StartScreen.tscn → Main.tscn (gameplay)
 ```gdscript
 GameState.money          # int — current run money
 GameState.lives          # int — 3 to start, max 5
-GameState.current_level  # int 1..20
+GameState.current_level  # int 1..24
 GameState.mission_score  # int — this mission only
 
 # Weapon IDs (StringName)
@@ -86,7 +86,8 @@ assets/sprites/
   playership.png + banking variants (left/right)
   sidekickship.png + banking variants
   enemy_grunt/dodger/bomber/brooder/lancer/reaper/strafer/swarmer/tank.png
-  boss1..boss5.png + finalboss.png
+  (wanted: enemy_shade.png, enemy_artillery.png — prompts in docs/ART_PROMPTS_24.md)
+  boss1..boss5.png + finalboss.png (wanted: boss6.png Null Archon, boss7.png Herald)
   starbase.png
   bg/          — background tiles
   shop/        — shop UI assets
@@ -101,7 +102,7 @@ assets/fonts/
 
 ## Weapons (Player)
 
-**Primary** — auto-fire, power levels 1–25 per weapon, charge drain/recharge system. Three types, cycled in flight (`Player.WeaponType`):
+**Primary** — auto-fire, power levels 1–30 per weapon (26-30 added 9/11: 9-bullet phaser and 6-missile salvo at L27+, violet VOID tier dmg 4 at L28+), charge drain/recharge system. Three types, cycled in flight (`Player.WeaponType`):
 - Phaser (`PHASER`) — bullets, baseline rate (6.9 base shots/sec, +0.49/level)
 - Plasma Beam (`BEAM`) — continuous laser, drains charge ~3x faster, boss killer
 - Homing Missiles (`MISSILE`) — slower fire, homing
@@ -110,13 +111,13 @@ assets/fonts/
 **Torpedoes** — separate button, limited ammo, max 2 base (refill in shop)
 
 **Upgrades (Starbase Shop):**
-- Hull repair, Shield (regen buffer), Engine (speed tier 0–3), Cargo (money ×), Magnet (pickup radius), Energy Cells (extend charge pool, max 4), per-weapon power ups, torpedo refill, sidekick
+- Hull repair, Shield (regen buffer, max 6), Engine (speed tier 0–3), Energy Cells (extend charge pool, max 8), per-weapon power ups, torpedo bay (max 10) + refill, sidekick
 
 ## Balance Notes (current tuning)
 - Fast fire rate: 6.9 shots/sec base (raised from 5.4 → 6.4 → 6.9 for phaser feel)
 - Fire rate bonus per level: 0.49/level (dropped from 0.62 to make L25 ≈ old L20)
-- Max power level: 25 (raised from 20; per-level formulas rescaled to match old L20 ceiling)
-- Max charge: 100 base, +50% per energy cell, max 4 cells (300 total)
+- Max power level: 30 (20 → 25 → 30; levels 26-30 are real growth for the 24-sector ladder)
+- Max charge: 100 base, +40% per energy cell, max 8 cells; shield max 6, torpedo bay max 10
 - Death penalty: lose a life and restart the sector; weapons and gear are kept
 
 ## Store / Release

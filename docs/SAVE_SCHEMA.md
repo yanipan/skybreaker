@@ -93,7 +93,7 @@ After this change lands, verify these end-to-end flows on a real mobile device (
 2. **Sector warp → quit during warp cinematic → relaunch Continue.** Arrives in next sector with carry gear.
 3. **Starbase shop purchase → quit from Starbase → relaunch Continue.** Money deducted persistently, upgrade applied to carry state.
 4. **Die → hit pause during death cinematic → quit → relaunch Continue.** Respawn slot preserved, arrives in same sector with 50% gear.
-5. **Finish sector 20 → game marks run complete → relaunch.** High score persisted, has_active_run=false so Continue is disabled, New Game starts fresh.
+5. **Finish sector 24 → game marks run complete → relaunch.** High score persisted, has_active_run=false so Continue is disabled, New Game starts fresh.
 6. **New Game twice.** The intro plays on every New Game (SKIP works); Continue and respawns within the run never replay it.
 7. **Mid-sector home swipe → return.** PAUSED overlay is showing, gameplay stays frozen until RESUME; killing the app while backgrounded and relaunching Continue restores the snapshot.
 

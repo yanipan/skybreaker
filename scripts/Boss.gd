@@ -8,7 +8,7 @@ class_name Boss
 ## drop loadout. Defeating a boss showers the player with goodies (multiple
 ## power-ups + cash + a torpedo) so the run feels meaningfully rewarded.
 
-enum Type { BOSS1, BOSS2, BOSS3, BOSS4, BOSS5, FINAL }
+enum Type { BOSS1, BOSS2, BOSS3, BOSS4, BOSS5, FINAL, ARCHON, HERALD }
 
 const EnemyBulletScript := preload("res://scripts/EnemyBullet.gd")
 const PickupScript := preload("res://scripts/Pickup.gd")
@@ -22,6 +22,11 @@ const TEX_BOSS3 := preload("res://assets/sprites/boss3.png")
 const TEX_BOSS4 := preload("res://assets/sprites/boss4.png")
 const TEX_BOSS5 := preload("res://assets/sprites/boss5.png")
 const TEX_BOSSF := preload("res://assets/sprites/finalboss.png")
+## 9/11 expansion bosses. Own art when boss6.png / boss7.png exist (see
+## docs/ART_PROMPTS_24.md); until then a tinted stand-in hull.
+const PATH_ARCHON: String = "res://assets/sprites/boss6.png"
+const PATH_HERALD: String = "res://assets/sprites/boss7.png"
+var _sprite_tint: Color = Color.WHITE
 
 @export var type: Type = Type.BOSS1
 ## Optional overrides for a boss used as another stage's escort (see
@@ -87,6 +92,14 @@ func _ready() -> void:
 ## Pick the texture for this boss type and add a Sprite2D scaled so the
 ## largest dimension matches boss_size. Falls back to procedural _draw if
 ## no texture is configured.
+static func _optional_tex(path: String, fallback: Texture2D) -> Texture2D:
+	if ResourceLoader.exists(path):
+		var t: Texture2D = load(path) as Texture2D
+		if t != null:
+			return t
+	return fallback
+
+
 func _build_sprite() -> void:
 	var tex: Texture2D = null
 	match type:
@@ -96,6 +109,14 @@ func _build_sprite() -> void:
 		Type.BOSS4: tex = TEX_BOSS4
 		Type.BOSS5: tex = TEX_BOSS5
 		Type.FINAL: tex = TEX_BOSSF
+		Type.ARCHON:
+			tex = _optional_tex(PATH_ARCHON, TEX_BOSS5)
+			if tex == TEX_BOSS5:
+				_sprite_tint = Color(0.55, 0.95, 1.0)
+		Type.HERALD:
+			tex = _optional_tex(PATH_HERALD, TEX_BOSSF)
+			if tex == TEX_BOSSF:
+				_sprite_tint = Color(0.80, 0.60, 1.0)
 	if tex == null:
 		return
 	_sprite = Sprite2D.new()
@@ -180,6 +201,30 @@ func _configure() -> void:
 			contact_damage = 26
 			reward = 3000
 			_drift_speed = 120.0
+		Type.ARCHON:
+			# Sector 22 gatekeeper: fast, spiral + dense radial, slightly
+			# quicker cadence than any earlier boss.
+			boss_name = "NULL ARCHON"
+			max_hp = 1600
+			boss_size = 420.0
+			primary_color = Color(0.45, 0.85, 1.0)
+			accent_color = Color(0.85, 1.0, 1.0)
+			armor = 7
+			contact_damage = 24
+			fire_cd_mul = 0.9
+			reward = 2000
+			_drift_speed = 165.0
+		Type.HERALD:
+			# Finale escort: a splinter of the Skybreaker that comes first.
+			boss_name = "THE HERALD"
+			max_hp = 1500
+			boss_size = 400.0
+			primary_color = Color(0.80, 0.55, 1.0)
+			accent_color = Color(1.0, 0.85, 1.0)
+			armor = 7
+			contact_damage = 24
+			reward = 1800
+			_drift_speed = 145.0
 	# Scale meaningfully by current level so a boss met later is much meaner
 	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
 	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
@@ -323,6 +368,21 @@ func _update_firing(delta: float) -> void:
 				_pattern_radial(16)
 			elif _pattern_idx == 1:
 				_pattern_spiral()
+			else:
+				_pattern_shell_volley()
+		Type.ARCHON:
+			if _pattern_idx == 0:
+				_pattern_spiral()
+			elif _pattern_idx == 1:
+				_pattern_radial(14)
+			else:
+				_pattern_aimed_burst()
+				_pattern_fan()
+		Type.HERALD:
+			if _pattern_idx == 0:
+				_pattern_fan()
+			elif _pattern_idx == 1:
+				_pattern_radial(12)
 			else:
 				_pattern_shell_volley()
 
@@ -529,7 +589,7 @@ func _draw() -> void:
 	var body_color: Color = primary_color.lerp(Color(1, 1, 1), _hit_flash)
 	if _sprite != null:
 		# Sprite handles the body — just keep hit flash + smoke overlay alive.
-		_sprite.modulate = Color(1.0, 1.0, 1.0).lerp(Color(2.5, 2.5, 2.5), _hit_flash)
+		_sprite.modulate = _sprite_tint.lerp(Color(2.5, 2.5, 2.5), _hit_flash)
 	else:
 		match type:
 			Type.BOSS1:

@@ -1,6 +1,6 @@
 extends Object
 class_name Levels
-## Static level data table — 20 levels of Skybreaker.
+## Static level data table — 24 levels of Skybreaker.
 ## Each level entry drives the spawner, the background, and the win condition.
 ##
 ## Fields per level:
@@ -22,7 +22,9 @@ class_name Levels
 ##
 ## Difficulty curve: enemy pool grows, wave sizes grow, spawn cadence tightens.
 ## Levels 1-4 introduce types one at a time. 5-8 mix 2-3 types. 9-12 mix 4.
-## 13-16 mix all 5 + tighter cadence. 17-20 are the gauntlet runs.
+## 13-16 mix all 5 + tighter cadence. 17-19 are the gauntlet runs. 20-24
+## (9/11 expansion) add SHADE and ARTILLERY and keep climbing past the old
+## sector-20 ceiling (Enemy.gd extends the ladder, LATE_SECTOR_MUL at 23-24).
 
 const ENTRIES: Array = [
 	# --- ACT 1: Earth Defense (Levels 1-5) ---
@@ -184,19 +186,53 @@ const ENTRIES: Array = [
 		"wave_size_min": 5, "wave_size_max": 8,
 		"spawn_interval": 2.3, "duration": 110.0, "has_boss": true, "boss_type": 4,
 	},
-	# --- ACT 5: The Skybreaker (Level 20) ---
+	# --- ACT 5: The Heart (Levels 20-22) ---
+	# 9/11 expansion: the Skybreaker's own body. SHADE (9) appears first, then
+	# ARTILLERY (10). The Null Archon guards the way out at 22.
 	{
-		"name": "Sector 20: The Skybreaker",
+		"name": "Sector 20: Heart Chamber",
+		"theme_color": Color(0.70, 1.10, 1.20),
+		"bg_texture_path": "",
+		"enemy_pool": [0, 1, 2, 3, 5, 6, 9],   # First SHADE — phases in and out
+		"wave_size_min": 5, "wave_size_max": 8,
+		"spawn_interval": 2.3, "duration": 110.0, "has_boss": false,
+	},
+	{
+		"name": "Sector 21: Pulse Conduit",
+		"theme_color": Color(0.75, 1.00, 1.25),
+		"bg_texture_path": "",
+		"enemy_pool": [0, 1, 3, 4, 5, 6, 8, 9, 10],   # First ARTILLERY — mortar bursts
+		"wave_size_min": 5, "wave_size_max": 8,
+		"spawn_interval": 2.2, "duration": 115.0, "has_boss": false,
+	},
+	{
+		"name": "Sector 22: The Null Gate",
+		"theme_color": Color(0.60, 0.95, 1.30),
+		"bg_texture_path": "",
+		"enemy_pool": [1, 2, 3, 5, 6, 7, 9, 10],
+		"wave_size_min": 5, "wave_size_max": 8,
+		"spawn_interval": 2.2, "duration": 115.0, "has_boss": true, "boss_type": 6,
+	},
+	# --- ACT 6: The Null Reach (Levels 23-24) ---
+	{
+		"name": "Sector 23: Null Reach",
+		"theme_color": Color(1.25, 0.60, 0.65),
+		"bg_texture_path": "",
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+		"wave_size_min": 6, "wave_size_max": 9,
+		"spawn_interval": 2.1, "duration": 120.0, "has_boss": false,
+	},
+	{
+		"name": "Sector 24: The Skybreaker",
 		"theme_color": Color(1.30, 0.55, 0.55),
 		"bg_texture_path": "",
-		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
 		"wave_size_min": 6, "wave_size_max": 9,
-		"spawn_interval": 2.2, "duration": 120.0, "has_boss": true, "boss_type": 5,
-		# Playtest 9/11: the finale is a boss PAIR. The Prism Warden (a
-		# Crystal-Prism hull at 70% HP) guards the gate; THE SKYBREAKER
-		# itself enters a few seconds after the warden falls. The sector ends
-		# the moment the Skybreaker dies (no filler waves after the boss).
-		"escort_boss": {"type": 3, "name": "PRISM WARDEN", "hp_scale": 0.7},
+		"spawn_interval": 2.1, "duration": 120.0, "has_boss": true, "boss_type": 5,
+		# The finale is a boss PAIR: the Herald (a splinter of the Skybreaker
+		# at 75% HP) comes first, THE SKYBREAKER itself enters a few seconds
+		# after it falls, and the sector ends the moment the Skybreaker dies.
+		"escort_boss": {"type": 7, "name": "", "hp_scale": 0.75},
 		"ends_on_boss": true,
 	},
 ]

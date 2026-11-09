@@ -114,12 +114,12 @@ func _ready() -> void:
 	_check(Pickup.ENEMY_POWER_DROP_SCALE < 1.0 and Pickup.ASTEROID_POWER_DROP_SCALE < 1.0, "power drop rates scaled down")
 	p.energy_cells_bought = 0
 	var r0: float = p.regen_mul()
-	for i in 6:
+	for i in Player.ENERGY_CELL_MAX:   # 8 since the 24-sector ladder (9/11)
 		_check(p.buy_energy_cell(), "energy cell %d buyable" % (i + 1))
-	_check(not p.buy_energy_cell(), "7th energy cell refused")
-	_check(p.regen_mul() > r0 + 0.8, "6 cells regen x%.2f" % p.regen_mul())
-	_check(is_equal_approx(p.max_charge, 100.0 * 3.4), "6 cells capacity %.0f" % p.max_charge)
-	_check(Player.TORPEDO_CAP == 8, "torpedo cap is 8")
+	_check(not p.buy_energy_cell(), "9th energy cell refused")
+	_check(p.regen_mul() > r0 + 1.1, "8 cells regen x%.2f" % p.regen_mul())
+	_check(is_equal_approx(p.max_charge, 100.0 * 4.2), "8 cells capacity %.0f" % p.max_charge)
+	_check(Player.TORPEDO_CAP == 10, "torpedo cap is 10")
 	GameState.current_level = saved_lvl
 	print("BALANCE TEST DONE fails=%d" % _fails)
 	get_tree().quit(_fails)

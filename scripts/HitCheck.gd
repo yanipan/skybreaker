@@ -45,7 +45,11 @@ static func _enemies(tree: SceneTree) -> Array:
 ## First live enemy overlapping a player shot, or null.
 static func enemy_at(shot: Node2D, half: Vector2) -> Node2D:
 	for e in _enemies(shot.get_tree()):
-		if is_instance_valid(e) and not e.is_queued_for_deletion() and overlap(shot.global_position, half, e):
+		if not is_instance_valid(e) or e.is_queued_for_deletion():
+			continue
+		if "cloaked" in e and e.cloaked:
+			continue   # phased SHADE: nothing lands, not even the safety net
+		if overlap(shot.global_position, half, e):
 			return e
 	return null
 

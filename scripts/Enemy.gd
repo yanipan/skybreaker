@@ -3,7 +3,7 @@ class_name Enemy
 ## Generic enemy. Type-driven configuration. Self-builds visual + collision.
 ## Sector 1 only — three placeholder archetypes (Grunt, Dodger, Tank).
 
-enum Type { GRUNT, DODGER, TANK, STRAFER, BOMBER, SWARMER, LANCER, BROODER, REAPER }
+enum Type { GRUNT, DODGER, TANK, STRAFER, BOMBER, SWARMER, LANCER, BROODER, REAPER, SHADE, ARTILLERY }
 
 const EnemyBulletScript := preload("res://scripts/EnemyBullet.gd")
 const PickupScript := preload("res://scripts/Pickup.gd")
@@ -28,11 +28,30 @@ const TEX_SWARMER: Texture2D = preload("res://assets/sprites/enemy_swarmer.png")
 const TEX_LANCER: Texture2D = preload("res://assets/sprites/enemy_lancer.png")
 const TEX_BROODER: Texture2D = preload("res://assets/sprites/enemy_brooder.png")
 const TEX_REAPER: Texture2D = preload("res://assets/sprites/enemy_reaper.png")
+## 9/11 expansion types. Until their own art lands (see docs/ART_PROMPTS_24.md)
+## they borrow an existing hull and a tint; drop the PNG in and the tint goes.
+const PATH_SHADE: String = "res://assets/sprites/enemy_shade.png"
+const PATH_ARTILLERY: String = "res://assets/sprites/enemy_artillery.png"
+
+## SHADE phase cycle: visible (fires) then cloaked (untouchable, no contact).
+const SHADE_VISIBLE_SECS: float = 1.7
+const SHADE_CLOAKED_SECS: float = 1.2
+const SHADE_CLOAK_ALPHA: float = 0.22
+## ARTILLERY holds at this fraction of the screen height, for this long.
+const ARTILLERY_HOLD_Y: float = 0.22
+const ARTILLERY_HOLD_SECS: float = 7.5
 
 @export var type: Type = Type.GRUNT
 
 # Filled in by _configure() based on type
 var max_hp: int
+## SHADE: true while phased out (untouchable). Read by HitCheck.
+var cloaked: bool = false
+var _phase_timer: float = 0.0
+## ARTILLERY: seconds spent on the hold line (0 = still descending).
+var _hold_elapsed: float = 0.0
+## Stand-in hull tint for types without their own art yet (WHITE = none).
+var _sprite_tint: Color = Color.WHITE
 var hp: int
 var speed: float
 var enemy_size: float
@@ -52,8 +71,10 @@ const FIRST_SHOT_MIN: float = 0.9
 ## tank spread 3 -> 2). Was 4; the pirate sectors (6-7) were a wall of bomber
 ## fans (playtest 7/11), so full volleys now start at the Act 2 boss stage.
 const LIGHT_VOLLEY_UNTIL: int = 7
-## Extra hull / ram damage for enemies in the last two sectors (19-20).
+## Extra hull / ram damage for enemies in the last two sectors.
 const LATE_SECTOR_MUL: float = 1.08
+## Sector at which the original difficulty ladder reached its top (t = 1.0).
+const LADDER_TOP: int = 20
 var _fire_timer: float = 0.0
 var fire_sfx: AudioStream = null
 var bullet_style: int = 0   ## EnemyBullet.Style — set per type so each enemy has distinct shots
@@ -254,6 +275,51 @@ func _configure() -> void:
 			money_drop_chance = 0.95
 			money_value = 50
 			fire_sfx = SFX_FIRE_BOMBER
+		Type.SHADE:
+			# Phase-shifter from the Skybreaker's own body. Cycles between a
+			# visible window (fires a twin aimed dart) and a cloak in which it
+			# cannot be hit or touched. Teaches the player to hold fire and
+			# punish the window.
+			max_hp = 7
+			speed = 150.0
+			enemy_size = randf_range(60.0, 80.0)
+			enemy_color = Color(0.65, 0.40, 1.0)
+			movement = &"sine"
+			reward = 55
+			fire_pattern = &"shade_pair"
+			fire_interval = SHADE_VISIBLE_SECS + SHADE_CLOAKED_SECS
+			_fire_timer = 0.6
+			bullet_style = EnemyBullet.Style.DART
+			contact_damage = 6
+			health_drop_chance = 0.020
+			power_drop_chance = 0.016
+			torpedo_drop_chance = 0.018
+			money_drop_chance = 0.75
+			money_value = 30
+			fire_sfx = SFX_FIRE_DODGER
+			_phase_timer = SHADE_VISIBLE_SECS
+		Type.ARTILLERY:
+			# Siege hull. Descends to the top of the screen, holds there and
+			# lobs slow mortar shells at the player's position that burst
+			# into a ring of pellets. Leaves after its hold time so it can't
+			# camp forever.
+			max_hp = 22
+			speed = 60.0
+			enemy_size = randf_range(110.0, 140.0)
+			enemy_color = Color(1.0, 0.75, 0.35)
+			movement = &"hold"
+			reward = 90
+			fire_pattern = &"mortar"
+			fire_interval = 2.6
+			_fire_timer = 1.2
+			bullet_style = EnemyBullet.Style.SHELL
+			contact_damage = 9
+			health_drop_chance = 0.060
+			power_drop_chance = 0.045
+			torpedo_drop_chance = 0.045
+			money_drop_chance = 0.95
+			money_value = 60
+			fire_sfx = SFX_FIRE_BOMBER
 		Type.REAPER:
 			# Kamikaze ramship. No projectiles — its threat IS the ram. Locks
 			# onto the player's X each frame and accelerates downward to ram.
@@ -277,7 +343,10 @@ func _configure() -> void:
 	# fewer hits to kill, slower fire — and ramp up to ~1.4x HP / 1.18x speed
 	# by Sector 20. The fire interval shrinks by ~25% over the same range.
 	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
-	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)  # 0..1
+	# The ladder was tuned on 20 sectors; t = 1.0 at sector 20 and keeps
+	# climbing linearly to ~1.21 at sector 24 (9/11 expansion), so sectors
+	# 1-20 play exactly as before and 21-24 are harder than anything was.
+	var t: float = float(lvl - 1) / float(LADDER_TOP - 1)
 	# Late-game tuning: fewer enemies per wave (Levels.gd) but each one is now
 	# ~2.9x HP at Sector 20 (was 2.2x). Result: same time-on-screen pressure
 	# with much lower spawn count, which is far easier on phone GPU/physics.
@@ -287,8 +356,12 @@ func _configure() -> void:
 	# damage get LATE_SECTOR_MUL on top of the ladder; fire rate is unchanged.
 	var late_mul: float = LATE_SECTOR_MUL if lvl >= GameState.MAX_LEVEL - 1 else 1.0
 	hp_mul *= late_mul
-	var fire_t: float = t * t * (3.0 - 2.0 * t)  # smoothstep
+	var fire_t: float = clampf(t, 0.0, 1.0)
+	fire_t = fire_t * fire_t * (3.0 - 2.0 * fire_t)  # smoothstep, 1.0 from sector 20 on
 	var fire_mul: float = lerp(EARLY_FIRE_MUL, 0.45, fire_t)
+	if lvl > LADDER_TOP:
+		# Past the old ceiling the fire rate tightens another 12% by sector 24.
+		fire_mul *= lerp(1.0, 0.88, float(lvl - LADDER_TOP) / float(GameState.MAX_LEVEL - LADDER_TOP))
 	max_hp = max(1, int(round(float(max_hp) * hp_mul)))
 	speed *= speed_mul
 	if fire_interval > 0.0:
@@ -375,6 +448,15 @@ func _build_collision() -> void:
 
 ## Pick a texture for this type, if one exists. Otherwise leave _sprite null
 ## and the procedural _draw fallback will run.
+## Own art when the file exists, otherwise the stand-in hull (tinted).
+static func _optional_tex(path: String, fallback: Texture2D) -> Texture2D:
+	if ResourceLoader.exists(path):
+		var t: Texture2D = load(path) as Texture2D
+		if t != null:
+			return t
+	return fallback
+
+
 func _build_sprite() -> void:
 	var tex: Texture2D = null
 	match type:
@@ -396,12 +478,21 @@ func _build_sprite() -> void:
 			tex = TEX_BROODER
 		Type.REAPER:
 			tex = TEX_REAPER
+		Type.SHADE:
+			tex = _optional_tex(PATH_SHADE, TEX_DODGER)
+			if tex == TEX_DODGER:
+				_sprite_tint = Color(0.55, 0.35, 0.95)
+		Type.ARTILLERY:
+			tex = _optional_tex(PATH_ARTILLERY, TEX_TANK)
+			if tex == TEX_TANK:
+				_sprite_tint = Color(1.0, 0.72, 0.38)
 		_:
 			tex = null
 	if tex == null:
 		return
 	_sprite = Sprite2D.new()
 	_sprite.texture = tex
+	_sprite.modulate = _sprite_tint
 	# Sprites are authored at 1024x1024 — scale to roughly enemy_size, slightly bigger
 	# so the readable silhouette matches the collision footprint.
 	var s: float = (enemy_size / float(tex.get_width())) * 1.6
@@ -419,16 +510,34 @@ func _build_sprite() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_update_smoke(delta)
+	if type == Type.SHADE:
+		_update_phase(delta)
+	var alpha: float = SHADE_CLOAK_ALPHA if cloaked else 1.0
 	if _hit_flash > 0.0:
 		_hit_flash = max(0.0, _hit_flash - delta * 8.0)
 		queue_redraw()
 		if _sprite != null:
 			# Brighten the sprite toward white during the flash
 			var k: float = 1.0 + _hit_flash * 2.5
-			_sprite.modulate = Color(k, k, k, 1.0)
-	elif _sprite != null and _sprite.modulate != Color(1, 1, 1, 1):
-		_sprite.modulate = Color(1, 1, 1, 1)
-	if movement == &"horizontal":
+			_sprite.modulate = Color(_sprite_tint.r * k, _sprite_tint.g * k, _sprite_tint.b * k, alpha)
+	elif _sprite != null:
+		var rest := Color(_sprite_tint.r, _sprite_tint.g, _sprite_tint.b, alpha)
+		if _sprite.modulate != rest:
+			_sprite.modulate = rest
+	if movement == &"hold":
+		# Artillery: descend to the hold line, hover there for a while, then
+		# carry on down and leave.
+		var hold_y: float = _viewport_size.y * ARTILLERY_HOLD_Y
+		if position.y < hold_y and _hold_elapsed <= 0.0:
+			position.y = minf(hold_y, position.y + speed * delta)
+			if position.y >= hold_y:
+				_hold_elapsed = 0.001
+		elif _hold_elapsed < ARTILLERY_HOLD_SECS:
+			_hold_elapsed += delta
+			position.x = clampf(_spawn_x + sin(_time * 0.7) * 70.0, enemy_size * 0.5, _viewport_size.x - enemy_size * 0.5)
+		else:
+			position.y += speed * 1.6 * delta
+	elif movement == &"horizontal":
 		position.x += speed * delta * h_dir
 	elif movement == &"chase":
 		# Reaper-style ram: accelerates down + drifts horizontally toward the
@@ -446,9 +555,9 @@ func _process(delta: float) -> void:
 		if movement == &"sine":
 			position.x = _spawn_x + sin(_time * 4.0) * 120.0
 
-	# Firing — only once on screen
+	# Firing — only once on screen (and never while cloaked)
 	var on_screen: bool = position.y > 0.0 and position.y < _viewport_size.y
-	if fire_pattern != &"none" and on_screen:
+	if fire_pattern != &"none" and on_screen and not cloaked:
 		_fire_timer -= delta
 		if _fire_timer <= 0.0:
 			_fire_timer = fire_interval
@@ -464,6 +573,24 @@ func _process(delta: float) -> void:
 
 func _light_volley() -> bool:
 	return GameState.current_level <= LIGHT_VOLLEY_UNTIL
+
+
+## SHADE phase cycle. Cloaked = not monitorable (bullets and the ship pass
+## through) and take_damage is ignored; HitCheck skips cloaked enemies too.
+func _update_phase(delta: float) -> void:
+	_phase_timer -= delta
+	if _phase_timer > 0.0:
+		return
+	if cloaked:
+		cloaked = false
+		monitorable = true
+		_phase_timer = SHADE_VISIBLE_SECS
+		# Fire shortly after reappearing: the window is the whole point.
+		_fire_timer = minf(_fire_timer, 0.25)
+	else:
+		cloaked = true
+		monitorable = false
+		_phase_timer = SHADE_CLOAKED_SECS
 
 
 func _fire() -> void:
@@ -517,6 +644,37 @@ func _fire() -> void:
 				bullet.damage = 5
 				bullet.style = EnemyBullet.Style.ACID
 				get_parent().add_child(bullet)
+		&"shade_pair":
+			# Two aimed darts a hair apart, fired once per visible window.
+			var sdir := Vector2.DOWN
+			var sp := get_tree().get_first_node_in_group(&"player")
+			if sp != null:
+				sdir = (sp.global_position - global_position).normalized()
+			for so in [-0.07, 0.07]:
+				var sb: EnemyBullet = EnemyBulletScript.new()
+				sb.position = global_position + Vector2(0, enemy_size * 0.4)
+				sb.direction = sdir.rotated(so)
+				sb.damage = 5
+				sb.style = EnemyBullet.Style.DART
+				sb.speed = 620.0
+				get_parent().add_child(sb)
+		&"mortar":
+			# One slow shell lobbed at the player's current position; after
+			# its fuse it bursts into a ring of pellets (EnemyBullet.burst_*).
+			var mdir := Vector2.DOWN
+			var mp := get_tree().get_first_node_in_group(&"player")
+			if mp != null:
+				mdir = (mp.global_position - global_position).normalized()
+			var shell: EnemyBullet = EnemyBulletScript.new()
+			shell.position = global_position + Vector2(0, enemy_size * 0.45)
+			shell.direction = mdir
+			shell.damage = 6
+			shell.style = EnemyBullet.Style.SHELL
+			shell.speed = 240.0
+			shell.burst_after = 1.0
+			shell.burst_count = 6
+			shell.burst_damage = 3
+			get_parent().add_child(shell)
 		&"lance":
 			# Lancer fires one fast aimed dart down the player's bearing. The
 			# 3.4s fire_interval already bakes in a long wind-up so this reads
@@ -541,8 +699,8 @@ func _fire() -> void:
 ## from take_damage() right before queue_free(). The number of drones scales
 ## with level so late-game brooders are scarier than early-game ones.
 func _brooder_death_spawn() -> void:
-	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
-	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
+	var lvl: int = clamp(GameState.current_level, 1, LADDER_TOP)
+	var t: float = float(lvl - 1) / float(LADDER_TOP - 1)
 	var drone_count: int = int(round(lerp(6.0, 12.0, t)))
 	for i in drone_count:
 		var ang_t: float = float(i) / float(drone_count - 1)   # 0..1
@@ -570,6 +728,8 @@ func _spawn_enemy_bullet(dir: Vector2, dmg: int) -> void:
 
 
 func take_damage(amount: int) -> void:
+	if cloaked:
+		return   # a phased SHADE cannot be hurt
 	hp -= amount
 	_hit_flash = 1.0
 	queue_redraw()

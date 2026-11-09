@@ -25,6 +25,12 @@ enum Style { ORB, PELLET, DART, SHELL, SPARK, PLASMA, ACID }
 ## boss fire, so the encounter still requires real dodging — set to true in
 ## Boss._spawn_bullet.
 @export var from_boss: bool = false
+## Mortar fuse (9/11, ARTILLERY): after `burst_after` seconds the shell
+## pops into `burst_count` pellets in a ring and frees itself. 0 = no fuse.
+@export var burst_after: float = 0.0
+@export var burst_count: int = 0
+@export var burst_damage: int = 3
+@export var burst_speed: float = 330.0
 
 ## Beam burn: a non-boss bullet must sit in the beam for beam_resist seconds
 ## before it pops. Rolled per bullet, so some pop on contact and some take a
@@ -273,6 +279,23 @@ func _process(delta: float) -> void:
 	_process_motion(delta)
 
 
+## Mortar shell pops: a ring of pellets, then the shell is gone.
+func _burst() -> void:
+	var parent: Node = get_parent()
+	for i in burst_count:
+		var ang: float = TAU * float(i) / float(burst_count) + 0.3
+		var p: EnemyBullet = get_script().new()
+		p.position = global_position
+		p.direction = Vector2.RIGHT.rotated(ang)
+		p.damage = burst_damage
+		p.style = Style.PELLET
+		p.speed = burst_speed
+		p.from_boss = from_boss
+		if parent != null:
+			parent.add_child.call_deferred(p)
+	queue_free()
+
+
 ## Physics safety net for hits on the ship (HitCheck.gd).
 func _check_player_fallback() -> void:
 	var p: Node2D = get_tree().get_first_node_in_group(&"player") as Node2D
@@ -287,6 +310,9 @@ func _check_player_fallback() -> void:
 
 func _process_motion(delta: float) -> void:
 	_time += delta
+	if burst_after > 0.0 and _time >= burst_after and not is_queued_for_deletion():
+		_burst()
+		return
 	position += direction * speed * delta
 
 	# Trail samples are stored in local space behind the head along -direction.

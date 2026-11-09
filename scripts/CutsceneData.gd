@@ -8,10 +8,10 @@ extends Node
 ## Trigger convention:
 ##   * INTRO plays ONCE on first-ever entry to sector 1, gated by
 ##     GameState.intro_seen. Triggered in Main._ready.
-##   * ACT_1..ACT_4 play immediately after the player completes sectors
-##     5, 10, 15, 19 — intercepted inside Main._check_level_complete
+##   * ACT_1..ACT_5 play immediately after the player completes sectors
+##     5, 10, 15, 19, 21 — intercepted inside Main._check_level_complete
 ##     before the warp transition starts.
-##   * ENDING plays after the player completes sector 20, the final
+##   * ENDING plays after the player completes sector 24, the final
 ##     sector. After ending, the run state is wiped and the player is
 ##     bounced back to StartScreen.
 ##
@@ -49,7 +49,9 @@ const ACT_1_KEY: StringName = &"act1"
 const ACT_2_KEY: StringName = &"act2"
 const ACT_3_KEY: StringName = &"act3"
 const ACT_4_KEY: StringName = &"act4"
-## Plays after player completes sector 20, the final sector.
+## Plays after sector 21: the heart is empty, the Skybreaker climbed out.
+const ACT_5_KEY: StringName = &"act5"
+## Plays after player completes sector 24, the final sector.
 const ENDING_KEY: StringName = &"ending"
 
 ## Map of "which sector completion triggers which cutscene key" — read
@@ -59,7 +61,8 @@ const TRIGGERS: Dictionary = {
 	10: ACT_2_KEY,
 	15: ACT_3_KEY,
 	19: ACT_4_KEY,
-	20: ENDING_KEY,
+	21: ACT_5_KEY,
+	24: ENDING_KEY,
 }
 
 
@@ -100,6 +103,12 @@ static func beats_for(key: StringName) -> Array:
 				_beat("cutscene_04_act4_01_heart_chamber", "Inside the heart.\nAncient. Listening."),
 				_beat("cutscene_04_act4_02_grandmother_hologram", "It knows your name.\nIt was built from hers.", 6.0),
 				_beat("cutscene_04_act4_03_chamber_waking", "\"If you're reading this, kill it.\nI'm sorry.\"", 6.0),
+			]
+		ACT_5_KEY:
+			return [
+				_beat("cutscene_05_act5_01_empty_heart", "The heart is empty.\nIt was never asleep."),
+				_beat("cutscene_05_act5_02_skybreaker_rising", "It climbed out while you fought.\nTrailing the dead behind it.", 5.5),
+				_beat("cutscene_05_act5_03_null_reach", "Past the last beacon there is no map.\nFollow it anyway.", 5.5),
 			]
 		ENDING_KEY:
 			return [

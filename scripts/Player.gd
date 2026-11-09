@@ -49,16 +49,16 @@ var _stick_active: bool = false
 @export var max_charge: float = 100.0        ## Total charge pool (base, before energy cells)
 ## Energy cells purchased from the shop. Each cell adds +40% to base max_charge
 ## and +15% to energy regen. Cap 6 cells = 3.4x capacity, 1.9x regen.
-const ENERGY_CELL_MAX: int = 6
+const ENERGY_CELL_MAX: int = 8   ## 6 -> 8 with the 24-sector ladder (9/11)
 const ENERGY_CELL_BONUS_PCT: float = 0.4
 const ENERGY_CELL_REGEN_PCT: float = 0.15
 ## Torpedo bay hard cap (base 2 + 6 bays from the shop).
-const TORPEDO_CAP: int = 8
+const TORPEDO_CAP: int = 10   ## 8 -> 10 with the 24-sector ladder (9/11)
 var energy_cells_bought: int = 0
 var _base_max_charge: float = 100.0   ## Snapshot of original max_charge for cell math
 @export var charge_drain_per_second: float = 50.0   ## How fast charge drains while fast-firing (~2s of fast fire)
 @export var recharge_per_second: float = 40.0       ## How fast charge regenerates when not firing (~2.5s to refill)
-@export var max_power_level: int = 25  ## 20→25: five extra climb levels without raising the top-end power ceiling (all per-level formulas were rescaled to match the old L20 values at the new L25)
+@export var max_power_level: int = 30  ## 25→30 (9/11, 24 sectors): levels 26-30 are real growth past the old ceiling — a 6th missile and a 9-bullet phaser spread at L27+, the violet VOID bullet tier at L28+
 
 # --- Torpedo ---
 @export var max_torpedoes: int = 2
@@ -1176,12 +1176,20 @@ func _fire_missile_pattern() -> void:
 		_spawn_missile(Vector2(6, -40), Vector2.UP, dmg)
 		_spawn_missile(Vector2(-18, -30), Vector2.UP, dmg)
 		_spawn_missile(Vector2(18, -30), Vector2.UP, dmg)
-	else:
+	elif power_level <= 26:
 		_spawn_missile(Vector2(0, -42), Vector2.UP, dmg)
 		_spawn_missile(Vector2(-12, -36), Vector2.UP, dmg)
 		_spawn_missile(Vector2(12, -36), Vector2.UP, dmg)
 		_spawn_missile(Vector2(-22, -28), Vector2.UP, dmg)
 		_spawn_missile(Vector2(22, -28), Vector2.UP, dmg)
+	else:
+		# L27+ (9/11 expansion) — six-missile salvo
+		_spawn_missile(Vector2(-6, -44), Vector2.UP, dmg)
+		_spawn_missile(Vector2(6, -44), Vector2.UP, dmg)
+		_spawn_missile(Vector2(-14, -36), Vector2.UP, dmg)
+		_spawn_missile(Vector2(14, -36), Vector2.UP, dmg)
+		_spawn_missile(Vector2(-24, -28), Vector2.UP, dmg)
+		_spawn_missile(Vector2(24, -28), Vector2.UP, dmg)
 
 
 func _spawn_missile(local_offset: Vector2, dir: Vector2, dmg: int) -> void:
@@ -1342,10 +1350,21 @@ func _fire_bullet() -> void:
 		_spawn_bullet(Vector2(22, -30), Vector2.UP.rotated(0.22))
 		_spawn_bullet(Vector2(-30, -24), Vector2.UP.rotated(-0.38))
 		_spawn_bullet(Vector2(30, -24), Vector2.UP.rotated(0.38))
-	else:
-		# L17+ — maximum spread, 8 bullets across a wide arc
+	elif power_level <= 26:
+		# L17-26 — 8 bullets across a wide arc
 		_spawn_bullet(Vector2(-6, -38), Vector2.UP)
 		_spawn_bullet(Vector2(6, -38), Vector2.UP)
+		_spawn_bullet(Vector2(-16, -34), Vector2.UP.rotated(-0.12))
+		_spawn_bullet(Vector2(16, -34), Vector2.UP.rotated(0.12))
+		_spawn_bullet(Vector2(-26, -30), Vector2.UP.rotated(-0.26))
+		_spawn_bullet(Vector2(26, -30), Vector2.UP.rotated(0.26))
+		_spawn_bullet(Vector2(-32, -24), Vector2.UP.rotated(-0.42))
+		_spawn_bullet(Vector2(32, -24), Vector2.UP.rotated(0.42))
+	else:
+		# L27+ (9/11 expansion) — 9 bullets: the 8-arc plus a center lance
+		_spawn_bullet(Vector2(0, -44), Vector2.UP)
+		_spawn_bullet(Vector2(-8, -38), Vector2.UP.rotated(-0.04))
+		_spawn_bullet(Vector2(8, -38), Vector2.UP.rotated(0.04))
 		_spawn_bullet(Vector2(-16, -34), Vector2.UP.rotated(-0.12))
 		_spawn_bullet(Vector2(16, -34), Vector2.UP.rotated(0.12))
 		_spawn_bullet(Vector2(-26, -30), Vector2.UP.rotated(-0.26))
@@ -1389,5 +1408,9 @@ func _bullet_tier_for_level(level: int) -> Dictionary:
 		return {"color": Color(1.00, 0.55, 0.20), "damage": 2}    # orange
 	elif level <= 23:
 		return {"color": Color(1.00, 0.35, 0.65), "damage": 3}    # pink
-	else:
+	elif level <= 27:
 		return {"color": Color(1.00, 1.00, 1.00), "damage": 3}    # white-hot
+	else:
+		# L28-30 (9/11 expansion): the only per-shot damage step past the
+		# old ceiling, kept to the last three levels of the climb.
+		return {"color": Color(0.75, 0.55, 1.00), "damage": 4}    # void violet
