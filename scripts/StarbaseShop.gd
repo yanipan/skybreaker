@@ -82,7 +82,8 @@ func _style_shop_button(b: Button) -> void:
 # "change weapon" visual until the missile asset is provided.
 const TEX_REPAIR := preload("res://assets/sprites/shop/buyhullrepair.png")
 const TEX_SHIELD := preload("res://assets/sprites/shop/buyshieldupgrade.png")
-const TEX_POWER := preload("res://assets/sprites/shop/butweaponpowerup.png")
+const TEX_MISSILE := preload("res://assets/sprites/shop/buymissiles.png")
+const TEX_WARHEAD := preload("res://assets/sprites/shop/buytorpedowarhead.png")
 const TEX_TORP := preload("res://assets/sprites/shop/buytorpedo.png")
 const TEX_TORP_BAY := preload("res://assets/sprites/shop/buytorpedobay.png")
 const TEX_SPEED := preload("res://assets/sprites/shop/upgradeshipspeed.png")
@@ -444,10 +445,10 @@ func _build_ui() -> void:
 	# now that the player can cycle weapons in-flight with middle mouse button.
 	_add_item("PHASER POWER UP", "Boost phaser firepower one tier.", &"power_phaser", TEX_PHASER)
 	_add_item("BEAM POWER UP", "Boost beam firepower one tier.", &"power_beam", TEX_BEAM)
-	_add_item("MISSILE POWER UP", "Boost missile firepower one tier.", &"power_missile", TEX_POWER)
+	_add_item("MISSILE POWER UP", "Boost missile firepower one tier.", &"power_missile", TEX_MISSILE)
 	_add_item("TORPEDO REFILL", "Top up your torpedo bay.", &"torp_refill", TEX_TORP)
 	_add_item("TORPEDO BAY", "Add one torpedo slot (+1 capacity).", &"torp_bay", TEX_TORP_BAY)
-	_add_item("TORPEDO WARHEAD", "Bigger torpedo: wider blast, more damage. 3 levels.", &"torp_power", TEX_TORP)
+	_add_item("TORPEDO WARHEAD", "Bigger torpedo: wider blast, more damage. 3 levels.", &"torp_power", TEX_WARHEAD)
 	_add_item("THRUSTER UPGRADE", "Move faster — one of three tiers.", &"speed", TEX_SPEED)
 	_add_item("ENERGY CELL", "+40% weapon energy and +15% faster recharge. Up to 8 cells.", &"charge", TEX_ENERGY)
 	_add_item("SIDEKICK", "Hire a wingmate ship. One at a time.", &"sidekick", TEX_SIDEKICK)
