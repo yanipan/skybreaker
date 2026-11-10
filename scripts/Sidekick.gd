@@ -358,7 +358,7 @@ func _on_area_entered(area: Area2D) -> void:
 		take_damage(dmg2)
 		# Bosses take a fixed ram hit, not an instant kill.
 		if area.has_method("take_damage"):
-			area.take_damage(25 if area.is_in_group(&"bosses") else 999)
+			area.take_damage(25 if (area.is_in_group(&"bosses") or area.is_in_group(&"boss_parts")) else 999)
 
 
 # --- Draw — shield bubble + small power dots ---

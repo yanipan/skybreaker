@@ -14,6 +14,11 @@ const EnemyBulletScript := preload("res://scripts/EnemyBullet.gd")
 const PickupScript := preload("res://scripts/Pickup.gd")
 const EnemyExplosionScript := preload("res://scripts/EnemyExplosion.gd")
 const ScorePopupScript := preload("res://scripts/ScorePopup.gd")
+const BossPartScript := preload("res://scripts/BossPart.gd")
+
+## Multi-part bosses (docs/BOSS_DESIGNS.md): while any part with
+## shields_core lives, the core takes only this share of each hit.
+const SHIELDED_CORE_MUL: float = 0.15
 
 # Boss textures — backgrounds already stripped by removewhite.ps1
 const TEX_BOSS1 := preload("res://assets/sprites/boss1.png")
@@ -75,12 +80,23 @@ var _hp_label: Label = null
 # and the texture is shown instead. Hit flash modulates the sprite directly.
 var _sprite: Sprite2D = null
 
+## Breakable parts (BossPart children). Empty for single-body bosses.
+var _parts: Array = []
+## Core hitbox half size; read by HitCheck.half_extents. Defaults from boss_size.
+var hit_half: Vector2 = Vector2.ZERO
+## Iron Tortoise: true once every shell plate is gone.
+var shell_broken: bool = false
+var _shield_ping: float = 0.0   ## Visual: shield shimmer flash on a blocked hit
+
 
 func _ready() -> void:
 	_viewport_size = get_viewport_rect().size
 	_configure()
+	if hit_half == Vector2.ZERO:
+		hit_half = Vector2(boss_size * 0.425, boss_size * 0.375)
 	_build_collision()
 	_build_sprite()
+	_build_parts()
 	_build_hp_bar()
 	add_to_group(&"enemies")
 	add_to_group(&"bosses")
@@ -153,7 +169,8 @@ func _configure() -> void:
 			_drift_speed = 140.0
 		Type.BOSS2:
 			boss_name = "IRON TORTOISE"
-			max_hp = 560
+			# Core only: 3 shell plates (75 each) + 4 optional turrets sit on top.
+			max_hp = 380
 			boss_size = 360.0
 			primary_color = Color(0.45, 0.50, 0.55)
 			accent_color = Color(0.90, 0.30, 0.20)
@@ -238,9 +255,166 @@ func _configure() -> void:
 func _build_collision() -> void:
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
-	rect.size = Vector2(boss_size * 0.85, boss_size * 0.75)
+	rect.size = hit_half * 2.0
 	shape.shape = rect
 	add_child(shape)
+
+
+# --- Parts (multi-part bosses) ---
+
+func _build_parts() -> void:
+	match type:
+		Type.BOSS2:
+			_build_tortoise_parts()
+
+
+## Scale a base part HP by the same level ladder and hp_scale as the core.
+func _part_hp(base: int) -> int:
+	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
+	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
+	return maxi(1, int(round(float(base) * lerp(1.0, 1.60, t) * hp_scale)))
+
+
+func add_part(kind: int, id: StringName, at: Vector2, half: Vector2, base_hp: int, part_armor: int) -> BossPart:
+	var p: BossPart = BossPartScript.new()
+	p.boss = self
+	p.kind = kind
+	p.part_id = id
+	p.position = at
+	p.hit_half = half
+	p.max_hp = _part_hp(base_hp)
+	p.armor = part_armor
+	p.contact_damage = contact_damage
+	p.color = primary_color
+	p.glow = accent_color
+	add_child(p)
+	_parts.append(p)
+	return p
+
+
+func live_parts() -> Array:
+	var out: Array = []
+	for p in _parts:
+		if is_instance_valid(p) and p.alive:
+			out.append(p)
+	return out
+
+
+func core_shielded() -> bool:
+	for p in _parts:
+		if is_instance_valid(p) and p.alive and p.shields_core:
+			return true
+	return false
+
+
+## Parts may fire only once the boss is in position and alive.
+func can_attack() -> bool:
+	return _entry_done and hp > 0
+
+
+## Part fire interval multiplier: phases speed parts up like the core.
+func part_cd_mul() -> float:
+	var k: float = 1.0
+	if _phase == 1:
+		k = 0.85
+	elif _phase == 2:
+		k = 0.70
+	return k * fire_cd_mul
+
+
+func part_fire(p: BossPart) -> void:
+	var at: Vector2 = p.global_position
+	match p.pattern:
+		&"aimed":
+			var d: Vector2 = p.aim_dir()
+			_spawn_bullet_at(at + d * p.hit_half.x, d, 5, EnemyBullet.Style.DART)
+		&"aimed2":
+			var d2: Vector2 = p.aim_dir()
+			for off in [-0.10, 0.10]:
+				_spawn_bullet_at(at + d2 * p.hit_half.x, d2.rotated(off), 5, EnemyBullet.Style.DART)
+		&"shell3":
+			for off in [-0.28, 0.0, 0.28]:
+				var d3: Vector2 = Vector2.DOWN.rotated(off)
+				_spawn_bullet_at(at + d3 * p.hit_half.y, d3, 6, EnemyBullet.Style.SHELL)
+		&"orb_ring":
+			for i in 6:
+				var a: float = TAU / 6.0 * float(i) + _time
+				_spawn_bullet_at(at, Vector2.RIGHT.rotated(a), 5, EnemyBullet.Style.ORB)
+
+
+## A hit forwarded from a part with core_transfer (weak points, segments).
+func take_part_hit(_p: BossPart, amount: int) -> void:
+	_apply_core_damage(amount)
+
+
+func on_part_destroyed(p: BossPart) -> void:
+	GameState.add_score(maxi(50, p.reward_money))
+	if type == Type.BOSS2 and p.shields_core and not shell_broken and not core_shielded():
+		_crack_shell()
+
+
+## Iron Tortoise: the last shell plate is gone. The soft body is exposed,
+## armor drops, it moves faster and its main cannon fires at full rate.
+func _crack_shell() -> void:
+	shell_broken = true
+	armor = 1
+	_drift_speed *= 1.6
+	_fire_timer = 0.6
+	EventBus.screen_shake_requested.emit(14.0, 0.6)
+	var burst: EnemyExplosion = EnemyExplosionScript.new()
+	burst.position = global_position
+	burst.burst_radius = boss_size * 0.45
+	burst.spark_count = 26
+	burst.debris_count = 16
+	burst.smoke_count = 8
+	burst.base_color = accent_color
+	get_parent().add_child.call_deferred(burst)
+	_banner("SHELL CRACKED!")
+
+
+## Short floating callout over the boss (phase changes).
+func _banner(text: String) -> void:
+	var l := Label.new()
+	l.text = text
+	l.top_level = true
+	l.add_theme_font_size_override("font_size", 30)
+	l.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
+	l.add_theme_color_override("font_outline_color", Color.BLACK)
+	l.add_theme_constant_override("outline_size", 6)
+	l.size = Vector2(_viewport_size.x, 40)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.position = Vector2(0.0, global_position.y + boss_size * 0.55 + 40.0)
+	l.z_index = 20
+	add_child(l)
+	var tw := l.create_tween()
+	tw.tween_property(l, "position:y", l.position.y - 50.0, 1.4)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 1.4).set_delay(0.6)
+	tw.tween_callback(l.queue_free)
+
+
+## Iron Tortoise (sector 8): three shell plates guard the core (it takes 15%
+## while any stands), four leg turrets fire on their own. Total HP roughly
+## matches the old 560 single body; the turrets are optional but every one
+## destroyed thins the fire and pays money.
+func _build_tortoise_parts() -> void:
+	var s: float = boss_size / 360.0
+	hit_half = Vector2(46, 46) * s
+	# Shell plates: two flanks + a front plate that also blocks the beam
+	for spec in [[&"plate_l", Vector2(-74, -6)], [&"plate_r", Vector2(74, -6)], [&"plate_f", Vector2(0, 74)]]:
+		var pl: BossPart = add_part(BossPart.Kind.PLATE, spec[0], spec[1] * s, Vector2(38, 34) * s, 75, 3)
+		pl.shields_core = true
+		pl.reward_money = 80
+		pl.color = Color(0.36, 0.30, 0.44)
+		pl.glow = Color(0.55, 1.0, 0.35)
+	# Leg turrets: upper pair aimed darts, lower pair shell fans
+	for spec in [[&"turret_ul", Vector2(-118, -104), &"aimed", 2.4], [&"turret_ur", Vector2(118, -104), &"aimed", 2.4],
+			[&"turret_ll", Vector2(-128, 96), &"shell3", 3.2], [&"turret_lr", Vector2(128, 96), &"shell3", 3.2]]:
+		var tu: BossPart = add_part(BossPart.Kind.TURRET, spec[0], spec[1] * s, Vector2(30, 30) * s, 55, 2)
+		tu.pattern = spec[2]
+		tu.fire_cd = spec[3]
+		tu.reward_money = 60
+		tu.color = Color(0.30, 0.28, 0.34)
+		tu.glow = Color(0.55, 1.0, 0.35)
 
 
 func _build_hp_bar() -> void:
@@ -284,6 +458,8 @@ func _process(delta: float) -> void:
 
 
 func _update_hit_flash(delta: float) -> void:
+	if _shield_ping > 0.0:
+		_shield_ping = max(0.0, _shield_ping - delta * 4.0)
 	if _hit_flash > 0.0:
 		_hit_flash = max(0.0, _hit_flash - delta * 6.0)
 
@@ -336,6 +512,8 @@ func _update_firing(delta: float) -> void:
 	elif _phase == 2:
 		base_cd = 0.35
 	_fire_timer = base_cd * fire_cd_mul
+	if type == Type.BOSS2 and not shell_broken:
+		_fire_timer *= 1.6   # turrets carry the fight while the shell holds
 	_pattern_idx = (_pattern_idx + 1) % 3
 	match type:
 		Type.BOSS1:
@@ -474,8 +652,12 @@ func _pattern_spiral() -> void:
 
 
 func _spawn_bullet(dir: Vector2, dmg: int, style: int) -> void:
+	_spawn_bullet_at(global_position + dir * (boss_size * 0.45), dir, dmg, style)
+
+
+func _spawn_bullet_at(at: Vector2, dir: Vector2, dmg: int, style: int) -> void:
 	var bullet: EnemyBullet = EnemyBulletScript.new()
-	bullet.position = global_position + dir * (boss_size * 0.45)
+	bullet.position = at
 	bullet.direction = dir
 	bullet.damage = maxi(1, int(round(float(dmg) * bullet_dmg_mul)))
 	bullet.style = style
@@ -487,7 +669,19 @@ func _spawn_bullet(dir: Vector2, dmg: int, style: int) -> void:
 
 func take_damage(amount: int) -> void:
 	# Armor reduces incoming damage but minimum 1 still chips through
-	var net: int = max(1, amount - armor)
+	_apply_core_damage(max(1, amount - armor))
+
+
+func _apply_core_damage(net: int) -> void:
+	if hp <= 0:
+		return
+	if core_shielded():
+		# Shell plates up: only a sliver lands (torpedo splash, beam halo)
+		var sliver: float = float(net) * SHIELDED_CORE_MUL
+		net = int(sliver) + (1 if randf() < sliver - floor(sliver) else 0)
+		_shield_ping = 1.0
+		if net <= 0:
+			return
 	hp -= net
 	_hit_flash = 1.0
 	if hp <= 0:
@@ -495,6 +689,8 @@ func take_damage(amount: int) -> void:
 
 
 func _die() -> void:
+	for p in live_parts():
+		p.destroy(true)
 	GameState.add_score(reward)
 	GameState.mission_kills += 1
 	# Big multi-stage explosion
@@ -644,6 +840,11 @@ func _draw() -> void:
 				_draw_boss5(body_color)
 			Type.FINAL:
 				_draw_final(body_color)
+	# Shield bubble over the core while plates hold; flares on a blocked hit
+	if not _parts.is_empty() and core_shielded():
+		var sr: float = maxf(hit_half.x, hit_half.y) * 1.35
+		var sa: float = 0.18 + 0.10 * sin(_time * 3.0) + 0.45 * _shield_ping
+		draw_arc(Vector2.ZERO, sr, 0.0, TAU, 40, Color(accent_color.r, accent_color.g, accent_color.b, sa), 3.0 + 3.0 * _shield_ping, true)
 	# Smoke overlay
 	for puff in _smoke:
 		var k: float = 1.0 - (puff.age / puff.life)

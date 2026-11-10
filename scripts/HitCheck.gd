@@ -19,6 +19,8 @@ static var _cache_frame: int = -1
 
 
 static func half_extents(n: Node) -> Vector2:
+	if "hit_half" in n and n.hit_half != Vector2.ZERO:
+		return n.hit_half   # Boss core / BossPart: explicit box
 	if "boss_size" in n:
 		return Vector2(n.boss_size * 0.425, n.boss_size * 0.375)
 	if "enemy_size" in n:

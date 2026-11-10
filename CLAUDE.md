@@ -31,6 +31,7 @@ Boot.tscn → StartScreen.tscn → Main.tscn (gameplay)
 | `Levels.gd` | Resource | Level/wave definitions, 24 sectors in 6 acts (1-5, 6-10, 11-15, 16-19, 20-22, 23-24); bosses at 4, 8, 12, 16, 19, 22, 24 (pair) |
 | `Enemy.gd` | Node2D | Base enemy logic. 16 pooled types + SHARD. Added 9/11: SHADE (cloaks, untouchable), ARTILLERY (holds, fused mortar), MINELAYER (sideways, fused mines), SPLITTER (dies into 2 SHARDs), PULSAR (ring volleys), HUNTER (homing missiles), BEAMER (holds, telegraphed `EnemyBeam`). Each loads `assets/sprites/enemy_<name>.png` if present, else a tinted stand-in |
 | `Boss.gd` | Node2D | Boss phases and patterns. 8 types: BOSS1-5, FINAL, ARCHON (sector 22, sweeping beam, `boss6.png`), HERALD (finale escort, homing volleys, `boss7.png`) |
+| `BossPart.gd` | Area2D | Breakable boss part (turret, plate, segment, weak point): own HP or `core_transfer` to the core, in `enemies` + `boss_parts` (not `bosses`). Boss: `add_part`, `part_fire(part)` by `pattern`, `core_shielded()` (core takes 15% while a `shields_core` part lives), `hit_half` box read by HitCheck. IRON TORTOISE is multi-part (10/11). Designs + roadmap: `docs/BOSS_DESIGNS.md`. Tests: `BossPartsTest.tscn`, look check `BossShot.tscn` (windowed) |
 | `EnemySpawner.gd` | Node | Spawns waves from Levels data; boss queue (`escort_boss` then `boss_type`), `boss_sequence_done()` / `ends_on_boss()` gate the stage end in Main |
 | `StarbaseShop.gd` | Node | Between-level shop (upgrade purchases) |
 | `Starbase.gd` | Node | Starbase scene controller |

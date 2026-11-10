@@ -180,7 +180,7 @@ const BOSS_DAMAGE_MUL: float = 0.9
 const IMPACT_BURST_RADIUS: float = 34.0
 
 func damage_against(target: Node) -> int:
-	if target.is_in_group(&"bosses"):
+	if target.is_in_group(&"bosses") or target.is_in_group(&"boss_parts"):
 		return maxi(1, int(round(float(damage) * BOSS_DAMAGE_MUL)))
 	return damage
 

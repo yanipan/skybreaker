@@ -222,7 +222,7 @@ func _on_area_entered(area: Area2D) -> void:
 		# take a fixed ram hit, otherwise one touch (shield up = 0 hull
 		# damage) would delete a 320 HP boss.
 		if area.has_method("take_damage"):
-			area.take_damage(25 if area.is_in_group(&"bosses") else 999)
+			area.take_damage(25 if (area.is_in_group(&"bosses") or area.is_in_group(&"boss_parts")) else 999)
 		return
 
 
