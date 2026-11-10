@@ -237,10 +237,17 @@ func _take_damage(amount: int) -> void:
 	# nothing. Before, any hit zeroed the whole bar, so a level-5 shield
 	# blocked exactly one hit, same as level 1, and the upgrade did nothing.
 	# A pip only blocks once it is fully recharged.
+	# 10/11: a HEAVY hit (GameState.is_heavy_hit) costs two pips; with only
+	# one pip left that pip still blocks half of it.
 	var remaining: int = amount
-	if shield >= 1.0:
-		shield = maxf(0.0, shield - 1.0)
+	var heavy: bool = GameState.is_heavy_hit(amount)
+	if heavy and shield >= 2.0:
+		shield = maxf(0.0, shield - 2.0)
 		remaining = 0
+	elif shield >= 1.0:
+		shield = maxf(0.0, shield - 1.0)
+		remaining = int(ceil(float(amount) * 0.5)) if heavy else 0
+	if remaining < amount:
 		if shield < 1.0:
 			_shield_break_flicker = 1.0
 		if AudioManager.SFX_SHIELD_HIT != null:

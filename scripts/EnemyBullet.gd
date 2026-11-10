@@ -30,6 +30,9 @@ enum Style { ORB, PELLET, DART, SHELL, SPARK, PLASMA, ACID }
 @export var burst_after: float = 0.0
 @export var burst_count: int = 0
 @export var burst_damage: int = 3
+## True once the sector damage multiplier was applied (burst pellets inherit
+## an already scaled burst_damage, so they must not scale again).
+var damage_scaled: bool = false
 @export var burst_speed: float = 330.0
 ## _apply_style_defaults() rewrites speed / radius / colour for every style
 ## except ORB, so a caller that wants its own value must say so here
@@ -70,6 +73,10 @@ var _trail: Array = []  ## Recent local-space offsets for the tail
 func _ready() -> void:
 	_viewport_size = get_viewport().get_visible_rect().size
 	add_to_group(&"enemy_bullets")
+	if not damage_scaled:
+		damage = GameState.scale_enemy_damage(damage)
+		burst_damage = GameState.scale_enemy_damage(burst_damage)
+		damage_scaled = true
 	_apply_style_defaults()
 	if speed_override > 0.0:
 		speed = speed_override
@@ -327,6 +334,7 @@ func _burst() -> void:
 		p.position = global_position
 		p.direction = Vector2.RIGHT.rotated(ang)
 		p.damage = burst_damage
+		p.damage_scaled = true
 		p.style = Style.PELLET
 		p.speed_override = burst_speed
 		p.from_boss = from_boss

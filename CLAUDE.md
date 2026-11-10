@@ -122,6 +122,7 @@ assets/fonts/
 - Max power level: 30 (20 → 25 → 30; levels 26-30 are real growth for the 24-sector ladder)
 - Max charge: 100 base, +40% per energy cell, max 8 cells; shield max 6, torpedo bay max 10
 - Death penalty: lose a life and restart the sector; weapons and gear are kept
+- Enemy fire damage (10/11): base values 3-10 per attack (grunt 3, aimed 4, tank/hunter/mine/mortar 6, beamer 8, lancer 9, boss beam 10), scaled by `GameState.enemy_damage_mul()` = x1.0 sector 1 -> x1.35 sector 24, applied once in `EnemyBullet._ready` / `EnemyBeam._ready` (burst pellets carry `damage_scaled`). HEAVY hits (base >= 8, `GameState.is_heavy_hit`) cost 2 shield pips; with 1 pip left half the hit reaches the hull. `GameState.difficulty_damage_mul` is the hook for future difficulty levels (not saved yet). Test `EnemyDamageTest.tscn`
 
 ## Story clips
 - A cutscene beat plays `assets/cutscenes/<image_file>.ogv` when it exists (one per cutscene: intro launch 10 s, acts 1-5 6 s each, ending 10 s). Godot plays only Ogg Theora: convert with `scripts/tools/clip_to_ogv.sh clip.mp4 out.ogv 5` (720 wide, quality 5, no audio, about 2 MB per 10 s).

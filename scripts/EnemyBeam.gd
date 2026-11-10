@@ -31,6 +31,7 @@ var _shape: CollisionShape2D
 
 func _ready() -> void:
 	add_to_group(&"enemy_bullets")
+	damage = GameState.scale_enemy_damage(damage)
 	z_index = 2
 	_length = get_viewport().get_visible_rect().size.y + 200.0
 	_shape = CollisionShape2D.new()

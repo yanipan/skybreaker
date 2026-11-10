@@ -120,6 +120,30 @@ var respawn_torpedo_tier: int = 0
 var current_level: int = 1
 const MAX_LEVEL: int = 24
 
+## Enemy fire damage (10/11). Bullets, mines, beams and boss shots grow gently
+## with the sector: x1.0 in sector 1 to x1.35 in sector 24, rounded per shot.
+const ENEMY_DMG_TOP: float = 1.35
+## Hits at or above this BASE damage (Lancer 9, Beamer 8, boss beams 10, big
+## rams) cost TWO shield pips; with one pip left, it blocks half the hit.
+const HEAVY_HIT_BASE: int = 8
+## Hook for the future difficulty levels (e.g. easy 0.8, hard 1.25). Not saved yet.
+var difficulty_damage_mul: float = 1.0
+
+
+func enemy_damage_mul() -> float:
+	var t: float = clampf(float(current_level - 1) / float(MAX_LEVEL - 1), 0.0, 1.0)
+	return lerpf(1.0, ENEMY_DMG_TOP, t) * difficulty_damage_mul
+
+
+func scale_enemy_damage(base: int) -> int:
+	return maxi(1, int(round(float(base) * enemy_damage_mul())))
+
+
+## True for a hit that should cost two shield pips (threshold scales with the
+## same multiplier, so the same attacks count as heavy in every sector).
+func is_heavy_hit(amount: int) -> bool:
+	return float(amount) >= float(HEAVY_HIT_BASE) * enemy_damage_mul() - 0.5
+
 # Current run state
 var current_ship_id: StringName = &"scout"
 var current_primary_weapon_id: StringName = &"vulcan"
