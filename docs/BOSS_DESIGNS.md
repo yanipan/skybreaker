@@ -224,6 +224,9 @@ thresholds, no lane fully blocked).
   multi-part: 3 shell plates (core takes 15% while any stands), 4 leg turrets, "SHELL CRACKED!"
   = armor 1 + faster + full-rate cannon. Tests: `BossPartsTest.tscn` (20), look check
   `BossShot.tscn` (windowed). Parts are drawn in code; real part art can replace them later.
+- 10/11: old bosses return as MINI-BOSSES mid-sector (Yaniv's idea): s6 Hornet Queen, s10 Iron Tortoise,
+  s14 Hive Mother, s17 Crystal Prism, s21 Void Reaper, s23 Null Archon. Score reward is 25% of the full
+  boss (100-500), small next to the server's 16000 per-sector ceiling.
 - New bosses in sectors that have no boss today need the server's per-sector score ceiling
   (`skybreaker/api/lb.php`) raised first, or honest runs get flagged. Upgrading the existing
   boss sectors (4, 8, 12, 16, 19, 22, 24) needs no server change.

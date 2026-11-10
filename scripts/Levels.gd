@@ -19,6 +19,9 @@ class_name Levels
 ##                    guards the stage; the main boss enters after it dies
 ##   ends_on_boss     true = the stage ends right after the last boss dies,
 ##                    whatever the timer says (used by the finale)
+##   mini_boss        Optional on non-boss sectors {type, at, hp_scale, name}:
+##                    an already-beaten boss returns `at` (0-1) into the sector,
+##                    smaller (Boss.mini); the sector cannot end while it lives
 ##
 ## Difficulty curve: enemy pool grows, wave sizes grow, spawn cadence tightens.
 ## Levels 1-4 introduce types one at a time. 5-8 mix 2-3 types. 9-12 mix 4.
@@ -83,7 +86,7 @@ const ENTRIES: Array = [
 		# fire right after the Act 1 boss. Thinned, and volleys stay light
 		# through Sector 7 (Enemy.LIGHT_VOLLEY_UNTIL).
 		"wave_size_min": 3, "wave_size_max": 5,
-		"spawn_interval": 3.6, "duration": 80.0, "has_boss": false,
+		"spawn_interval": 3.6, "duration": 80.0, "has_boss": false, "mini_boss": {"type": 0, "at": 0.5, "hp_scale": 0.60},
 	},
 	{
 		"name": "Sector 7: Asteroid Drift",
@@ -115,7 +118,7 @@ const ENTRIES: Array = [
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 2, 3, 4, 6],
 		"wave_size_min": 4, "wave_size_max": 7,
-		"spawn_interval": 2.8, "duration": 90.0, "has_boss": false,
+		"spawn_interval": 2.8, "duration": 90.0, "has_boss": false, "mini_boss": {"type": 1, "at": 0.5, "hp_scale": 0.55},
 	},
 	# --- ACT 3: Insectoid Swarm (Levels 11-15) ---
 	{
@@ -148,7 +151,7 @@ const ENTRIES: Array = [
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 2, 3, 4, 5, 7, 13, 15],   # First BROODER — death-spawn swarm; first PULSAR — ring volleys
 		"wave_size_min": 4, "wave_size_max": 7,
-		"spawn_interval": 2.8, "duration": 100.0, "has_boss": false,
+		"spawn_interval": 2.8, "duration": 100.0, "has_boss": false, "mini_boss": {"type": 2, "at": 0.5, "hp_scale": 0.55},
 	},
 	{
 		"name": "Sector 15: The Spire",
@@ -173,7 +176,7 @@ const ENTRIES: Array = [
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 15],   # First REAPER — kamikaze rams; first MINELAYER — fused mines
 		"wave_size_min": 5, "wave_size_max": 8,
-		"spawn_interval": 2.5, "duration": 105.0, "has_boss": false,
+		"spawn_interval": 2.5, "duration": 105.0, "has_boss": false, "mini_boss": {"type": 3, "at": 0.5, "hp_scale": 0.50},
 	},
 	{
 		"name": "Sector 18: Shardfall",
@@ -208,7 +211,7 @@ const ENTRIES: Array = [
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 3, 4, 5, 6, 8, 9, 10, 12, 13, 15],   # First ARTILLERY — mortar bursts
 		"wave_size_min": 5, "wave_size_max": 8,
-		"spawn_interval": 2.2, "duration": 115.0, "has_boss": false,
+		"spawn_interval": 2.2, "duration": 115.0, "has_boss": false, "mini_boss": {"type": 4, "at": 0.5, "hp_scale": 0.50},
 	},
 	{
 		"name": "Sector 22: The Null Gate",
@@ -225,7 +228,7 @@ const ENTRIES: Array = [
 		"bg_texture_path": "",
 		"enemy_pool": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16],
 		"wave_size_min": 6, "wave_size_max": 9,
-		"spawn_interval": 2.1, "duration": 120.0, "has_boss": false,
+		"spawn_interval": 2.1, "duration": 120.0, "has_boss": false, "mini_boss": {"type": 6, "at": 0.5, "hp_scale": 0.45},
 	},
 	{
 		"name": "Sector 24: The Skybreaker",

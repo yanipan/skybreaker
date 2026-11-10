@@ -39,6 +39,12 @@ var _sprite_tint: Color = Color.WHITE
 ## the per-type base and the level ladder.
 @export var name_override: String = ""
 @export var hp_scale: float = 1.0
+## Mid-sector MINI-BOSS (Levels.gd `mini_boss`): an already-beaten boss comes
+## back smaller, a little slower to fire, with a small reward and drops.
+@export var mini: bool = false
+const MINI_SIZE: float = 0.78
+const MINI_FIRE_CD: float = 1.25
+const MINI_REWARD: float = 0.25
 
 # Configured per-type in _configure()
 var max_hp: int = 100
@@ -250,6 +256,11 @@ func _configure() -> void:
 	hp = max_hp
 	if name_override != "":
 		boss_name = name_override
+	if mini:
+		boss_size *= MINI_SIZE
+		fire_cd_mul *= MINI_FIRE_CD
+		reward = int(round(float(reward) * MINI_REWARD))
+		contact_damage = int(round(float(contact_damage) * 0.8))
 
 
 func _build_collision() -> void:
@@ -713,6 +724,18 @@ func _die() -> void:
 	# meaningfully levels the player regardless of which weapon they're
 	# currently using. WEAPON_CHANGE pickup is gone (player switches manually
 	# now via middle mouse button).
+	if mini:
+		# Mini-boss: a torpedo, a health patch and pocket money. No power-up
+		# (the soft power cap and the sector economy stay as tuned).
+		_drop(Pickup.Type.HEALTH_MEDIUM, Vector2(-40, 20))
+		_drop(Pickup.Type.TORPEDO, Vector2(40, 20))
+		_drop_money(150, Vector2(0, 40))
+		EventBus.screen_shake_requested.emit(12.0, 0.6)
+		if _hp_bar != null: _hp_bar.queue_free()
+		if _hp_bar_bg != null: _hp_bar_bg.queue_free()
+		if _hp_label != null: _hp_label.queue_free()
+		queue_free()
+		return
 	_drop(Pickup.Type.HEALTH_FULL, Vector2(-60, 20))
 	# 6/11: one power-up for the weakest weapon (was one of each); the
 	# difference is paid in money so the starbase shop matters.

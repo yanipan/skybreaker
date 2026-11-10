@@ -59,6 +59,12 @@ var _boss_spawn_time: float = -1.0
 var _boss_spawned: bool = false
 var _boss_enabled: bool = false
 var _boss_type_idx: int = 0
+## Mid-sector mini-boss (Levels.gd `mini_boss`): an old boss returns. Waves
+## thin out while it lives and the sector cannot end until it dies.
+var _mini_cfg: Dictionary = {}
+var _mini_time: float = -1.0
+var _mini_spawned: bool = false
+var _mini_boss: Node = null
 ## Bosses still to enter, in order. Each is {type, name, hp_scale}. A stage
 ## with an escort_boss has two entries; the next one enters
 ## BOSS_FOLLOWUP_DELAY seconds after the previous boss dies.
@@ -123,6 +129,10 @@ func _ready() -> void:
 			_boss_queue.append({"type": int(escort.get("type", 0)), "name": str(escort.get("name", "")),
 					"hp_scale": float(escort.get("hp_scale", 1.0))})
 		_boss_queue.append({"type": _boss_type_idx, "name": "", "hp_scale": 1.0})
+	else:
+		_mini_cfg = _level_data.get("mini_boss", {})
+		if not _mini_cfg.is_empty():
+			_mini_time = dur * float(_mini_cfg.get("at", 0.5))
 	# Starbase — normally never on boss stages, ~45% chance otherwise from
 	# level 2 onward. BUT we always guarantee a shop on the stage immediately
 	# preceding a boss so the player can stock up. This guarantee even
@@ -163,6 +173,8 @@ func _process(delta: float) -> void:
 		_drop_sidekick()
 	if _boss_enabled and not _boss_spawned and _mission_time >= _boss_spawn_time:
 		_spawn_boss()
+	elif not _mini_cfg.is_empty() and not _mini_spawned and _mission_time >= _mini_time:
+		_spawn_mini_boss()
 	elif _boss_spawned and not _boss_queue.is_empty():
 		# A boss fell and another is queued: short beat, then the next enters.
 		if get_tree().get_nodes_in_group(&"bosses").is_empty():
@@ -175,7 +187,7 @@ func _process(delta: float) -> void:
 					_spawn_boss()
 	if _starbase_enabled and not _starbase_spawned and _mission_time >= _starbase_time:
 		_spawn_starbase()
-	if _asteroids_enabled:
+	if _asteroids_enabled and not _mini_alive():   # no rocks during a mini-boss
 		_asteroid_timer -= delta
 		if _asteroid_timer <= 0.0:
 			_spawn_asteroid()
@@ -269,10 +281,32 @@ func _spawn_boss() -> void:
 			" queued=", _boss_queue.size(), " — fodder <=", BOSS_WAVE_MAX, " every ", _boss_wave_interval(), "s")
 
 
+## An already-beaten boss returns mid-sector at a fraction of its size and HP.
+func _spawn_mini_boss() -> void:
+	_mini_spawned = true
+	var boss: Boss = BossScript.new()
+	boss.type = clamp(int(_mini_cfg.get("type", 0)), 0, Boss.Type.size() - 1)
+	boss.mini = true
+	boss.hp_scale = float(_mini_cfg.get("hp_scale", 0.5))
+	boss.name_override = str(_mini_cfg.get("name", ""))
+	boss.position = Vector2(_viewport_size.x * 0.5, -120.0)
+	get_parent().add_child(boss)
+	_mini_boss = boss
+	EventBus.boss_spawned.emit(boss)
+	_timer = max(_timer, _boss_wave_interval())
+	print("MINI-BOSS spawned: type=", boss.type, " name=", boss.boss_name, " hp=", boss.max_hp)
+
+
+func _mini_alive() -> bool:
+	return _mini_boss != null and is_instance_valid(_mini_boss) and not _mini_boss.is_queued_for_deletion()
+
+
 ## True while a boss is on screen or the next queued boss is about to enter:
 ## waves stay small and slow for the whole encounter, including the beat
 ## between an escort and the main boss.
 func _boss_phase() -> bool:
+	if _mini_alive():
+		return true
 	if not _boss_spawned:
 		return false
 	return not _boss_queue.is_empty() or not get_tree().get_nodes_in_group(&"bosses").is_empty()
@@ -282,7 +316,8 @@ func _boss_phase() -> bool:
 ## boss report true so Main can treat the timer as the only gate.
 func boss_sequence_done() -> bool:
 	if not _boss_enabled:
-		return true
+		# A mini-boss that has entered must die before the timer can end the sector
+		return not _mini_alive()
 	if not _boss_spawned or not _boss_queue.is_empty():
 		return false
 	return get_tree().get_nodes_in_group(&"bosses").is_empty()
