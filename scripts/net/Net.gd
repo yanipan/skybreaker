@@ -9,20 +9,21 @@ extends Node
 ## `message` and call send()/broadcast().
 
 signal peer_joined(peer_id: int)
-signal peer_left(peer_id: int)
+## deliberate = the phone said goodbye (left the game); false = the link died.
+signal peer_left(peer_id: int, deliberate: bool)
 signal connected
 signal disconnected
 signal message(peer_id: int, msg: Array)   ## peer_id = 0 on the client side
 
 enum Mode { OFF, SERVER, CLIENT }
-const PROTO: int = 5
+const PROTO: int = 6
 const DEFAULT_PORT: int = 24620
 const CH_RELIABLE: int = 0
 const CH_FAST: int = 1
 
 ## Message kinds. Server -> phone
 enum M {
-	HELLO,        ## [HELLO, proto, your_peer_id, seat, start_sector]
+	HELLO,        ## [HELLO, proto, your_peer_id, seat, start_sector, token]  token = proof of the seat for a reconnect
 	SPAWN,        ## [SPAWN, id, kind, params:Dictionary]
 	SNAP,         ## [SNAP, server_time, ids:PackedInt32Array, xy:PackedFloat32Array, flags:PackedByteArray (1 = cloaked), hp:PackedByteArray (0-255 of max)]
 	SHOT,         ## [SHOT, params:Dictionary]  enemy bullet launch state
@@ -44,8 +45,10 @@ enum M {
 	LOBBY,        ## [LOBBY, players:Array of [peer, seat, name], needed]  who is in the room before the run
 	GO,           ## [GO, start_sector, seed]  everyone is here: load the game and answer READY
 	REFUSED,      ## [REFUSED, reason]  "version" = update the game to play co-op
+	RESUME,       ## [RESUME, level, between_sectors, shop_open, down]  answer to a reconnect: where the room is now
+	LINK,         ## [LINK, peer, state]  a partner's connection: 0 = lost (may return), 1 = back, 2 = gone for good
 	# Phone -> server
-	JOIN = 50,    ## [JOIN, proto, name]
+	JOIN = 50,    ## [JOIN, proto, name] or, reconnecting, [JOIN, proto, name, old_peer_id, token]
 	SHIP,         ## [SHIP, state:Dictionary]  pos, alive, weapon, power, firing
 	HITS,         ## [HITS, Dictionary id -> damage]
 	CLAIM,        ## [CLAIM, pickup_id]
@@ -101,6 +104,12 @@ var fake_loss: float = 0.0
 var bytes_out: int = 0
 var bytes_in: int = 0
 
+## Client: where the room is (kept for reconnecting).
+var last_address: String = ""
+var last_port: int = 0
+## Disconnect code a phone sends when it leaves on purpose.
+const BYE: int = 1
+
 var _host: ENetConnection = null
 var _server_peer: ENetPacketPeer = null          ## client side
 var _peers: Dictionary = {}                      ## server side: id -> ENetPacketPeer
@@ -148,7 +157,39 @@ func connect_to(address: String, port: int = DEFAULT_PORT) -> int:
 		_host = null
 		return ERR_CANT_CONNECT
 	mode = Mode.CLIENT
+	last_address = address
+	last_port = port
 	return OK
+
+
+## Client: the link is known to be dead (the app was in the background): drop
+## it now instead of waiting for the timeout. Emits `disconnected`.
+func drop_link() -> void:
+	if mode != Mode.CLIENT or _server_peer == null:
+		return
+	_server_peer.peer_disconnect_now(0)
+	if _host != null:
+		_host.flush()
+	_server_peer = null
+	server_connected = false
+	_delayed.clear()
+	disconnected.emit()
+
+
+## Server: a phone reconnected on a new connection (`new_id`) and proved it
+## owns seat `old_id`: from now on that connection IS old_id. A stale old
+## connection is cut without a peer_left.
+func rebind(new_id: int, old_id: int) -> void:
+	var p: ENetPacketPeer = _peers.get(new_id)
+	if p == null or new_id == old_id:
+		return
+	var old: ENetPacketPeer = _peers.get(old_id)
+	if old != null:
+		_ids.erase(old)
+		old.peer_disconnect_now(0)
+	_peers.erase(new_id)
+	_peers[old_id] = p
+	_ids[p] = old_id
 
 
 func stop() -> void:
@@ -156,7 +197,7 @@ func stop() -> void:
 		for p in _peers.values():
 			p.peer_disconnect_now()
 		if _server_peer != null:
-			_server_peer.peer_disconnect_now()
+			_server_peer.peer_disconnect_now(BYE)   # leaving on purpose: no reconnect window
 		_host.flush()
 		_host.destroy()
 	_host = null
@@ -258,6 +299,7 @@ func _process(delta: float) -> void:
 					peer_joined.emit(id)
 				else:
 					server_connected = true
+					peer.set_timeout(0, 4000, 8000)   # notice a dead link within 8 s, then reconnect
 					connected.emit()
 			ENetConnection.EVENT_DISCONNECT:
 				if mode == Mode.SERVER:
@@ -265,7 +307,7 @@ func _process(delta: float) -> void:
 					_ids.erase(peer)
 					_peers.erase(gone)
 					if gone != 0:
-						peer_left.emit(gone)
+						peer_left.emit(gone, int(ev[2]) == BYE)
 				else:
 					_server_peer = null
 					server_connected = false

@@ -20,6 +20,8 @@ var god: bool = false   ## --god: this ship cannot be hit
 var solo: bool = false  ## --solo [--sector=N]: plain SINGLE-PLAYER run with the same helper (perf baseline)
 var solo_sector: int = 1
 var perf: bool = false  ## --perf: print script time per frame while flying
+var drop_at: float = -1.0   ## --drop_at=T [--drop_secs=N]: cut the link T s in, stay away N s (reconnect demo)
+var drop_secs: float = 0.5
 var no_rescue: bool = false  ## --no_rescue: the autopilot ignores the partner's pod
 var dev_money: int = -1   ## --money=N: start the co-op run with N credits (solo money is restored after)
 
@@ -36,6 +38,8 @@ func _ready() -> void:
 			"money": dev_money = int(kv[1])
 			"die_at": die_at = float(kv[1])
 			"no_rescue": no_rescue = true
+			"drop_at": drop_at = float(kv[1])
+			"drop_secs": drop_secs = float(kv[1])
 			"perf": perf = true
 			"god": god = true
 			"solo": solo = true
@@ -79,13 +83,15 @@ func _ready() -> void:
 			return
 	GameState.current_level = c.start_sector
 	print("CoopDev ", pilot, ": peer ", Net.my_peer, " seat ", Net.seat, " start sector ", c.start_sector)
-	if autopilot or shot_every > 0.0 or perf:
+	if autopilot or shot_every > 0.0 or perf or drop_at >= 0.0:
 		var h: Node = load("res://scripts/net/CoopDevPilot.gd").new()
 		h.pilot = pilot
 		h.autopilot = autopilot
 		h.shot_every = shot_every
 		h.die_at = die_at
 		h.no_rescue = no_rescue
+		h.drop_at = drop_at
+		h.drop_secs = drop_secs
 		h.perf = perf
 		h.god = god
 		get_tree().root.add_child(h)   # outlives the per-sector scene reloads

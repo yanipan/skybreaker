@@ -199,7 +199,12 @@ func _coop_setup() -> void:
 	c.game_over.connect(_coop_on_game_over)
 	c.partner_state.connect(_coop_on_partner_state)
 	c.revived.connect(_coop_on_revived)
-	Net.disconnected.connect(_coop_on_disconnected)
+	c.link_failed.connect(_coop_on_disconnected)
+	c.link_lost.connect(_coop_notice.bind("CoopLinkNotice", "RECONNECTING...", 0.30))
+	c.link_restored.connect(_coop_notice.bind("CoopLinkNotice", "", 0.30))
+	c.partner_link.connect(_coop_on_partner_link)
+	if c.reconnecting:
+		_coop_notice("CoopLinkNotice", "RECONNECTING...", 0.30)
 	# Shared shop: the server opens and closes it for both phones.
 	var shop: Node = load("res://scripts/net/CoopShop.gd").new()
 	shop.name = "CoopShop"
@@ -216,6 +221,9 @@ func _coop_on_sector_started(level: int) -> void:
 	if level == _coop_level or _coop_over:
 		return
 	print("CO-OP: behind the server (", _coop_level, " -> ", level, "), jumping")
+	if _coop_down:
+		_coop_down = false   # a downed ship flies again in a new sector
+		GameState.lives = 1
 	GameState.current_level = level
 	GameState.pending_warp_entry = true
 	Engine.time_scale = 1.0
@@ -317,6 +325,35 @@ func _coop_on_game_over(won: bool) -> void:
 
 func _coop_on_disconnected() -> void:
 	_coop_end("CONNECTION LOST")
+
+
+func _coop_on_partner_link(_peer: int, state: int) -> void:
+	_coop_notice("CoopPartnerNotice", ["PARTNER RECONNECTING...", "", "PARTNER LEFT THE RUN"][clampi(state, 0, 2)], 0.115)
+	if state == 2:
+		get_tree().create_timer(4.0).timeout.connect(_coop_notice.bind("CoopPartnerNotice", "", 0.115))
+
+
+## A one-line co-op notice at `y_frac` of the screen; empty text removes it.
+func _coop_notice(node_name: String, text: String, y_frac: float) -> void:
+	var l := get_node_or_null(node_name) as Label
+	if text == "":
+		if l != null:
+			l.queue_free()
+		return
+	if l == null:
+		l = Label.new()
+		l.name = node_name
+		l.process_mode = Node.PROCESS_MODE_ALWAYS
+		l.add_theme_font_size_override("font_size", 28)
+		l.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
+		l.add_theme_color_override("font_outline_color", Color.BLACK)
+		l.add_theme_constant_override("outline_size", 6)
+		l.size = Vector2(_viewport_size.x, 40)
+		l.position = Vector2(0, _viewport_size.y * y_frac)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.z_index = 4000
+		add_child(l)
+	l.text = text
 
 
 ## Co-op is over for this phone: say why and show both pilots' scores, then

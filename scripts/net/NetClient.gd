@@ -26,6 +26,10 @@ signal revived(peer: int, by: int)
 signal lobby_changed(players: Array, needed: int)   ## players = [[peer, seat, name], ...]
 signal go(start_sector: int, run_seed: int)
 signal refused(reason: String)
+signal link_lost                              ## the connection died mid-run; reconnecting
+signal link_restored                          ## back in the same seat
+signal link_failed                            ## gave up (or the room is gone): the run is over for this phone
+signal partner_link(peer: int, state: int)    ## 0 = partner lost its link, 1 = back, 2 = gone for good
 
 const INTERP: float = 0.10
 const SHIP_EVERY: float = 1.0 / 30.0
@@ -54,14 +58,94 @@ var _buf: Dictionary = {}       ## id -> Array of [server_t, Vector2]
 var _offset: float = -INF       ## server clock - local clock (best estimate)
 var _shots: Array = []          ## pending [server_t, params]
 var _ship_t: float = 0.0
+## Reconnect. The server keeps a lost phone's seat for 60 s; this phone tries
+## again every RETRY_EVERY for give_up_after seconds, proving the seat with
+## the token from HELLO.
+const RETRY_EVERY: float = 3.0
+const BACKGROUND_DROP_SECS: float = 3.0   ## in the background longer than this = assume the link is dead
+var give_up_after: float = 45.0
+var first_retry_after: float = 0.5        ## test hook: stay away longer
+var reconnecting: bool = false
+var reconnects: int = 0
+var shop_is_open: bool = false
+var _token: int = 0
+var _seat_peer: int = 0
+var _in_run: bool = false                 ## between the first SECTOR and GAME_OVER
+var _lost_for: float = 0.0
+var _retry_t: float = 0.0
+var _paused_at: int = 0
 var stats := {"spawns": 0, "shots": 0, "kills": 0, "my_kills": 0, "grants": 0, "my_grants": 0, "snaps": 0}
 
 
 func _ready() -> void:
 	Net.message.connect(_on_msg)
-	Net.connected.connect(func() -> void: Net.send(0, [Net.M.JOIN, Net.PROTO, player_name]))
+	Net.connected.connect(_send_join)
+	Net.disconnected.connect(_on_disconnected)
 	if Net.server_connected:
+		_send_join()
+
+
+func _send_join() -> void:
+	if reconnecting:
+		Net.send(0, [Net.M.JOIN, Net.PROTO, player_name, _seat_peer, _token])
+	else:
 		Net.send(0, [Net.M.JOIN, Net.PROTO, player_name])
+
+
+func _on_disconnected() -> void:
+	if reconnecting:
+		return   # a retry that did not get through; _process tries again
+	if not _in_run:
+		link_failed.emit()
+		return
+	reconnecting = true
+	_lost_for = 0.0
+	_retry_t = first_retry_after
+	print("NetClient: link lost, reconnecting")
+	link_lost.emit()
+
+
+func _give_up() -> void:
+	reconnecting = false
+	_in_run = false
+	print("NetClient: could not get back into the room")
+	link_failed.emit()
+
+
+## The app went to the background: phones stop the process, the server drops
+## the silent link, and this side would only notice many seconds later.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_paused_at = Time.get_ticks_msec()
+	elif what == NOTIFICATION_APPLICATION_RESUMED and _paused_at > 0:
+		var away: float = (Time.get_ticks_msec() - _paused_at) / 1000.0
+		_paused_at = 0
+		if _in_run and not reconnecting and away >= BACKGROUND_DROP_SECS:
+			Net.drop_link()
+
+
+## The server put this phone back in its seat: [RESUME, level, between, shop_open, down].
+## Everything seen before the gap may be stale, so the world is rebuilt from
+## the SPAWNs the server sends right after this.
+func _resume(level: int, between: bool, server_shop: bool, server_down: bool) -> void:
+	reconnecting = false
+	reconnects += 1
+	print("NetClient: back in the room (sector ", level, ")")
+	link_restored.emit()
+	_clear()
+	reset_clock()
+	if shop_is_open and not server_shop:
+		shop_is_open = false
+		shop_closed.emit()   # it closed while this phone was away
+	if level != GameState.current_level:
+		_on_msg(0, [Net.M.SECTOR, level, 0])   # the room moved on: jump there
+		return
+	var st: Dictionary = ship_state.call() if ship_state.is_valid() else _default_ship_state()
+	if not server_down and not bool(st.get("a", true)):
+		revived.emit(Net.my_peer, 0)   # rescued while away
+	Net.send(0, [Net.M.READY, level])
+	if between:
+		_on_msg(0, [Net.M.SECTOR_CLEAR, level])
 
 
 ## A freshly loaded Main (or a test world) becomes the place puppets live.
@@ -111,14 +195,23 @@ func _on_msg(_peer: int, msg: Array) -> void:
 			Net.my_peer = int(msg[2])
 			Net.seat = int(msg[3])
 			start_sector = int(msg[4]) if msg.size() > 4 else 1
-			welcomed.emit(Net.my_peer, Net.seat)
+			_seat_peer = Net.my_peer
+			_token = int(msg[5]) if msg.size() > 5 else 0
+			if not reconnecting:
+				welcomed.emit(Net.my_peer, Net.seat)
+		Net.M.RESUME:
+			_resume(int(msg[1]), bool(msg[2]), bool(msg[3]), bool(msg[4]))
+		Net.M.LINK:
+			partner_link.emit(int(msg[1]), int(msg[2]))
 		Net.M.SECTOR:
+			_in_run = true
 			_clear()
 			GameState.current_level = int(msg[1])
 			sector_started.emit(int(msg[1]))
 		Net.M.SECTOR_CLEAR:
 			sector_cleared.emit(int(msg[1]))
 		Net.M.GAME_OVER:
+			_in_run = false
 			last_result = {"won": bool(msg[1]), "sector": int(msg[2]) if msg.size() > 2 else GameState.current_level,
 					"players": msg[3] if msg.size() > 3 and msg[3] is Array else []}
 			game_over.emit(bool(msg[1]))
@@ -142,6 +235,7 @@ func _on_msg(_peer: int, msg: Array) -> void:
 		Net.M.ALERT:
 			alert.emit(str(msg[1]))
 		Net.M.SHOP_OPEN:
+			shop_is_open = true
 			shop_opened.emit(int(msg[1]), int(msg[2]))
 		Net.M.SHOP_STATE:
 			shop_state.emit(int(msg[1]), bool(msg[2]))
@@ -150,6 +244,7 @@ func _on_msg(_peer: int, msg: Array) -> void:
 		Net.M.SHOP_TIMER:
 			shop_timer.emit(float(msg[1]))
 		Net.M.SHOP_CLOSE:
+			shop_is_open = false
 			reset_clock()
 			shop_closed.emit()
 		Net.M.REVIVE:
@@ -161,6 +256,8 @@ func _on_msg(_peer: int, msg: Array) -> void:
 			go.emit(int(msg[1]), int(msg[2]))
 		Net.M.REFUSED:
 			refused.emit(str(msg[1]))
+			if reconnecting:
+				_give_up()   # the seat is gone (too late, or the run ended)
 
 
 ## The server clock stood still (shop) while this phone's clock did not: drop
@@ -316,6 +413,16 @@ func _snap(t: float, ids: PackedInt32Array, xy: PackedFloat32Array, fl: PackedBy
 
 
 func _process(delta: float) -> void:
+	if reconnecting:
+		_lost_for += delta
+		if _lost_for >= give_up_after:
+			_give_up()
+			return
+		_retry_t -= delta
+		if _retry_t <= 0.0 and not Net.server_connected:
+			_retry_t = RETRY_EVERY
+			Net.connect_to(Net.last_address, Net.last_port)
+		return
 	if not Net.is_client() or _offset == -INF:
 		return
 	var rt: float = render_time()

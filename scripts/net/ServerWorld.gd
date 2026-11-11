@@ -26,6 +26,10 @@ var shop_timer: float = 0.0
 var room_code: String = ""
 var lobby_timeout: float = 600.0
 const EMPTY_SECS: float = 45.0
+## A phone whose link died keeps its seat this long (--reconnect_secs).
+var reconnect_secs: float = 60.0
+const PENDING_SECS: float = 6.0     ## A new connection must say who it is within this
+var _pending: Dictionary = {}       ## connection id -> seconds waiting for its JOIN (no seat yet)
 var _lobby_age: float = 0.0
 var _empty_for: float = 0.0
 var _go_sent: bool = false
@@ -51,7 +55,7 @@ var _shop_ready: Dictionary = {}     ## peer -> bool
 var _shop_deadline: float = -1.0
 var _shop_resume_t: float = -1.0
 ## Stats for tests / logs
-var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0, "shops": 0, "downs": 0, "revives": 0}
+var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0, "shops": 0, "resumes": 0, "downs": 0, "revives": 0}
 
 
 func _ready() -> void:
@@ -65,7 +69,7 @@ func _ready() -> void:
 	Net.peer_joined.connect(_on_join)
 	Net.peer_left.connect(_on_left)
 	Net.message.connect(_on_msg)
-	var err: int = Net.start_server(port, expected)
+	var err: int = Net.start_server(port, expected + 2)   # spare slots: a reconnect can arrive before the dead link is noticed
 	print("ServerWorld: listening on ", port, " err=", err, " expecting ", expected, " seed=", run_seed)
 	if err != OK:
 		get_tree().quit(2)
@@ -86,6 +90,7 @@ func _parse_args() -> void:
 			"shop_timer": shop_timer = float(kv[1])
 			"room": room_code = kv[1]
 			"lobby_timeout": lobby_timeout = float(kv[1])
+			"reconnect_secs": reconnect_secs = float(kv[1])
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
 	if run_seed == 0:
@@ -95,6 +100,11 @@ func _parse_args() -> void:
 # --- Peers ---
 
 func _on_join(peer: int) -> void:
+	if _started or seats.size() >= expected:
+		# The run is on (only a reconnect can take a seat) or the room is full:
+		# no seat until its JOIN says who it is.
+		_pending[peer] = 0.0
+		return
 	# Lowest free seat (someone may have left the waiting room).
 	var taken: Array = []
 	for q in seats:
@@ -104,7 +114,8 @@ func _on_join(peer: int) -> void:
 		seat += 1
 	# out = gone for good (left, disconnected); down = no lives left, can be
 	# rescued through its pod and returns anyway at the next sector.
-	seats[peer] = {"seat": seat, "name": "", "alive": true, "out": false, "down": false}
+	seats[peer] = {"seat": seat, "name": "", "alive": true, "out": false, "down": false, "away": false, "away_t": 0.0,
+			"token": randi_range(1, 2147483646)}
 	var s := Area2D.new()
 	s.name = "Ship%d" % peer
 	s.monitoring = false
@@ -114,18 +125,32 @@ func _on_join(peer: int) -> void:
 	s.set_meta("peer", peer)
 	add_child(s)   # NOT under world: never replicated
 	ships[peer] = s
-	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, seat, start_sector])
+	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, seat, start_sector, seats[peer]["token"]])
 	print("ServerWorld: peer ", peer, " joined as seat ", seat)
 
 
-func _on_left(peer: int) -> void:
-	print("ServerWorld: peer ", peer, " left")
-	if seats.has(peer):
-		seats[peer]["out"] = true
-		seats[peer]["alive"] = false
+func _on_left(peer: int, deliberate: bool = false) -> void:
+	if _pending.erase(peer) or not seats.has(peer):
+		return
 	if ships.has(peer):
 		ships[peer].remove_from_group(&"player")
+	seats[peer]["alive"] = false
+	# The shop never waits for a phone that is not there.
 	_shop_ready.erase(peer)
+	if _started and not _over and not deliberate and not seats[peer]["out"] and reconnect_secs > 0.0:
+		# The link died (tunnel, app in the background): keep the seat, the
+		# run goes on, the phone may come back (_resume) within reconnect_secs.
+		seats[peer]["away"] = true
+		seats[peer]["away_t"] = 0.0
+		Net.broadcast([Net.M.LINK, peer, 0])
+		print("ServerWorld: peer ", peer, " lost its link, seat kept for ", reconnect_secs, " s")
+		_check_shop_done()
+		return
+	print("ServerWorld: peer ", peer, " left")
+	seats[peer]["out"] = true
+	seats[peer]["away"] = false
+	if _started and not _over:
+		Net.broadcast([Net.M.LINK, peer, 2])
 	_check_shop_done()
 	_check_over()
 	if not _started:
@@ -138,7 +163,63 @@ func _on_left(peer: int) -> void:
 		_send_lobby()
 
 
+## A phone is back on a new connection, already rebound to its old id: tell
+## it where the room is now and resend the world.
+func _resume(peer: int) -> void:
+	var s: Dictionary = seats[peer]
+	s["away"] = false
+	s["away_t"] = 0.0
+	stats.resumes += 1
+	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, int(s["seat"]), start_sector, s["token"]])
+	Net.send(peer, [Net.M.RESUME, GameState.current_level, _clear_t >= 0.0, _shop_open, bool(s["down"])])
+	_send_sync(peer)
+	if _shop_open and _shop_base != null and is_instance_valid(_shop_base):
+		_shop_ready[peer] = false
+		Net.send(peer, [Net.M.SHOP_OPEN, int(_shop_base.get_meta("nid")), 0])
+		Net.broadcast([Net.M.SHOP_STATE, peer, false], true, peer)
+	Net.broadcast([Net.M.LINK, peer, 1], true, peer)
+	print("ServerWorld: peer ", peer, " resumed its seat")
+
+
+## Reconnect windows and connections that never said who they are.
+func _tick_links(delta: float) -> void:
+	for c in _pending.keys():
+		_pending[c] = float(_pending[c]) + delta
+		if float(_pending[c]) >= PENDING_SECS:
+			_pending.erase(c)
+			Net.kick(c)
+	if not _started or _over:
+		return
+	for p in seats:
+		if seats[p]["away"]:
+			seats[p]["away_t"] = float(seats[p]["away_t"]) + delta
+			if float(seats[p]["away_t"]) >= reconnect_secs:
+				seats[p]["away"] = false
+				seats[p]["out"] = true
+				Net.broadcast([Net.M.LINK, p, 2])
+				print("ServerWorld: peer ", p, " did not come back, gone for good")
+				_check_over()
+				if _over:
+					return
+
+
 func _on_msg(peer: int, msg: Array) -> void:
+	if _pending.has(peer):
+		if int(msg[0]) != Net.M.JOIN:
+			return
+		var old: int = int(msg[3]) if msg.size() > 4 else 0
+		if int(msg[1]) == Net.PROTO and _started and not _over and seats.has(old) and not seats[old]["out"] \
+				and int(msg[4]) == int(seats[old]["token"]):
+			_pending.erase(peer)
+			Net.rebind(peer, old)
+			_resume(old)
+		else:
+			print("ServerWorld: connection ", peer, " refused (no seat for it)")
+			Net.send(peer, [Net.M.REFUSED, "version" if int(msg[1]) != Net.PROTO else "gone"])
+			Net.kick(peer)
+		return
+	if not seats.has(peer):
+		return
 	match int(msg[0]):
 		Net.M.JOIN:
 			if int(msg[1]) != Net.PROTO:
@@ -230,8 +311,8 @@ func _send_lobby() -> void:
 ## Every seat still in the run has its scene loaded.
 func _all_ready() -> bool:
 	for p in seats:
-		if not seats[p]["out"] and not seats[p].get("ready", false):
-			return false
+		if not seats[p]["out"] and not seats[p]["away"] and not seats[p].get("ready", false):
+			return false   # a phone that lost its link holds nobody up; it catches up when it is back
 	return true
 
 
@@ -382,6 +463,8 @@ func _clear_world() -> void:
 
 
 func _process(delta: float) -> void:
+	if not _over:
+		_tick_links(delta)
 	if not _started and not _over:
 		# Waiting room: do not live for ever.
 		_lobby_age += delta

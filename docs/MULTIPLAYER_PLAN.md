@@ -79,7 +79,8 @@ Effort: phase 1-2 about a week, the rest 3-5 weeks.
 | 3e co-op result screen (both scores at the end of a run) | done 11/11 (RUN OVER / RUN COMPLETE, sector reached, both pilots, team total) |
 | 4a lobby service (`server/lobby/lobby.js`) + the room's waiting room | done 11/11 on the Mac, LobbyTest 27 |
 | 4b lobby screens: CO-OP button, Play now, Play with a friend (code + QR), Join with code, waiting room, 3-2-1 | done 11/11, seen in two real windows through the lobby |
-| 4c still open | reconnect after a dropped connection / app in the background; AI partner when Play now finds nobody (phase 7); in-game branded QR scanner (needs two real phones) and a branded QR; the web page behind the invite link (shimonster.com/skybreaker/join/<code> does not exist yet); the hint under the QR still says "types the code" |
+| 4c reconnect (done 11/11) | link lost mid-run: seat kept 60 s, phone retries 45 s with its HELLO token, same peer id after `Net.rebind`, RESUME + SYNC rebuilds the world, catches up on sector / shop / rescue; background > 3 s forces a reconnect; shop and next sector do not wait for an away phone; leaving on purpose (BYE) skips the window. `run_reconnect_test.sh` 3 scenarios + two real windows. Not proven on a real phone or a real network switch (Wi-Fi to mobile data changes the address: handled the same way, untested) |
+| 4c still open | AI partner when Play now finds nobody (phase 7); in-game branded QR scanner (needs two real phones) and a branded QR; the web page behind the invite link (shimonster.com/skybreaker/join/<code> does not exist yet); the hint under the QR still says "types the code" |
 | 5 GCP | not started |
 | 6 balance for two, store notes | not started |
 | 7 AI partners | not started |
@@ -96,7 +97,7 @@ Open design question: shop timer for matched games (proposal 30 s after the firs
 | Correctness under bad network (bots) | 60-120 ms each way, 2-5% loss: every kill and pickup counted once, no enemy shot lost, full 24-sector run won |
 | Room server | 360-390 MB RAM; 13-17% of one core on sector 18, 28% on sector 24 while two clients ran on the same Mac. Not optimised (loads all art, 60 Hz tick). |
 | NOT measured | a real phone (CPU and GPU), a real mobile network, a cloud VM, how it FEELS to a human (nobody has flown it), enemy motion smoothness in motion (only still frames and the interpolation unit test) |
-| Known weak spots | the phone's clock estimate follows a server hiccup slowly (0.04 s per second), so enemies can jitter for a few seconds after one; no reconnect; enemies aim at where a ship was one network delay ago |
+| Known weak spots | the phone's clock estimate follows a server hiccup slowly (0.04 s per second), so enemies can jitter for a few seconds after one; enemies aim at where a ship was one network delay ago |
 
 ## Files (planned)
 `scripts/net/Net.gd` (autoload), `scripts/net/Proto.gd` (codec), `scripts/net/ServerWorld.gd`

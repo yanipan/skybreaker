@@ -30,6 +30,16 @@ var _hits_in_shop: int = 0
 var die_at: float = -1.0
 var give_up_after: float = 600.0   ## --timeout=N seconds (a full 24-sector run needs more)
 var no_rescue: bool = false
+## --drop_at=T cuts the link T seconds into the run and stays away --drop_secs
+## (then NetClient reconnects); --drop_in_shop cuts it when the shop opens;
+## --give_up=N = how long the bot keeps trying.
+var drop_at: float = -1.0
+var drop_secs: float = 0.5
+var drop_in_shop: bool = false
+var give_up: float = 45.0
+var _dropped: bool = false
+var _links: Array = []      ## partner LINK states seen
+var _link_failed: bool = false
 var _down: bool = false
 var _died: bool = false
 var _mission_t: float = -1.0
@@ -44,6 +54,8 @@ func _ready() -> void:
 		if kv.size() == 1:
 			if kv[0] == "no_rescue":   # flags have no value
 				no_rescue = true
+			if kv[0] == "drop_in_shop":
+				drop_in_shop = true
 			continue
 		if kv.size() != 2:
 			continue
@@ -57,6 +69,9 @@ func _ready() -> void:
 			"shop_secs": shop_secs = float(kv[1])
 			"die_at": die_at = float(kv[1])
 			"timeout": give_up_after = float(kv[1])
+			"drop_at": drop_at = float(kv[1])
+			"drop_secs": drop_secs = float(kv[1])
+			"give_up": give_up = float(kv[1])
 	get_window().content_scale_size = FIELD
 	get_window().size = FIELD
 	world = Node2D.new()
@@ -71,6 +86,12 @@ func _ready() -> void:
 	nc.world = world
 	nc.player_name = bot_name
 	nc.ship_state = func() -> Dictionary: return {"p": ship.position, "a": not _down, "w": 0, "l": 5, "f": not _down, "n": bot_name}
+	nc.first_retry_after = drop_secs
+	nc.give_up_after = give_up
+	nc.partner_link.connect(func(_p: int, st: int) -> void: _links.append(st))
+	nc.link_failed.connect(func() -> void:
+		_link_failed = true
+		_on_over(false))
 	nc.revived.connect(func(peer: int, by: int) -> void:
 		if peer == Net.my_peer:
 			_down = false
@@ -92,6 +113,10 @@ func _ready() -> void:
 	nc.shop_opened.connect(func(_b: int, _d: int) -> void:
 		_in_shop = true
 		_shops += 1
+		if drop_in_shop and not _dropped:
+			_dropped = true
+			Net.drop_link()
+			return
 		get_tree().create_timer(shop_secs).timeout.connect(func() -> void: Net.send(0, [Net.M.SHOP_READY, true])))
 	nc.shop_closed.connect(func() -> void: _in_shop = false)
 	nc.game_over.connect(_on_over)
@@ -128,6 +153,10 @@ func _process(delta: float) -> void:
 		return
 	if _mission_t >= 0.0:
 		_mission_t += delta
+	if drop_at >= 0.0 and not _dropped and _mission_t >= drop_at:
+		_dropped = true
+		print(bot_name, ": dropping the link")
+		Net.drop_link()
 	if die_at >= 0.0 and not _died and _mission_t >= die_at:
 		_died = true
 		_down = true
@@ -186,6 +215,10 @@ func _on_over(won: bool) -> void:
 	s["hits_sent"] = _hits_sent
 	s["shops"] = _shops
 	s["revived"] = _revived
+	s["reconnects"] = nc.reconnects
+	s["links"] = _links
+	s["link_failed"] = _link_failed
+	s["puppets"] = nc.puppets.size()
 	s["rescues"] = _rescues
 	s["pending_shots"] = nc._shots.size()
 	s["pending_t"] = float(nc._shots[0][0]) if not nc._shots.is_empty() else -1.0

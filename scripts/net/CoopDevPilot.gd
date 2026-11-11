@@ -9,6 +9,9 @@ var shot_every: float = 0.0
 ## --die_at=T: T seconds after the first ship appears, this pilot loses its
 ## last life on purpose (to show DOWN, the rescue pod and the revive).
 var die_at: float = -1.0
+var drop_at: float = -1.0
+var drop_secs: float = 0.5
+var _dropped: bool = false
 var no_rescue: bool = false
 ## --perf: sample the script time per frame (Performance.TIME_PROCESS) while a
 ## ship is flying and print PERF lines (avg / p95 / worst, frames per second).
@@ -129,6 +132,11 @@ func _process(delta: float) -> void:
 	if perf:
 		_perf_sample(delta)
 	_t += delta
+	if drop_at >= 0.0 and not _dropped and _t >= drop_at and Net.client != null:
+		_dropped = true
+		Net.client.first_retry_after = drop_secs
+		print("CoopDev ", pilot, ": dropping the link for ", drop_secs, " s")
+		Net.drop_link()
 	if autopilot and not get_tree().paused:
 		var me = get_tree().get_first_node_in_group(&"player")
 		if me != null and is_instance_valid(me) and me.has_method("set_stick_target"):
