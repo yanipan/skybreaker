@@ -371,7 +371,9 @@ func open_last_run() -> void:
 			rank.text = "Not ranked: this run started offline."
 		elif r.get("ranked", false):
 			rank.text = "Rank #%d all time  ·  #%d this week" % [int(r.get("rank_all", 0)), int(r.get("rank_week", 0))]
-		elif r.has("rank_all") or r.has("challenge_beat"):
+		elif r.get("queued", false):
+			rank.text = "Offline: score saved, it will be sent when you're back online."
+		elif r.get("refused", false) or r.has("rank_all") or r.has("challenge_beat"):
 			rank.text = "Not ranked."
 		else:
 			rank.text = "Sending your score..."
