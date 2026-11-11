@@ -41,6 +41,8 @@ func _run() -> void:
 	GameState.carry_active = true
 	GameState.carry_weapon_levels = {0: 7, 1: 4, 2: 5}
 	GameState.carry_max_shield = 3
+	GameState.high_score = 7000      # the solo BEST RUN on the start screen
+	GameState.total_score = 123456   # lifetime score
 	SaveSystem.save_game()
 	var disk0: PackedByteArray = _bytes("user://savegame.dat")
 	_check(disk0.size() > 0, "solo save written")
@@ -60,7 +62,9 @@ func _run() -> void:
 	GameState.carry_max_shield = 6
 	GameState.clear_carry()
 	GameState.save_run_state()
-	GameState.commit_high_score()
+	GameState.add_score(50000)        # co-op kills: run_score, total_score
+	GameState.commit_high_score()     # ... and a "new best" inside co-op
+	_check(GameState.high_score > 7000, "inside co-op the HUD best does follow the co-op score (%d)" % GameState.high_score)
 	SaveSystem.save_game()
 	_check(_bytes("user://savegame.dat") == disk0, "saves during co-op never reach the file")
 
@@ -69,6 +73,8 @@ func _run() -> void:
 	_check(GameState.current_level == 9 and GameState.lives == 2 and GameState.money == 1234, "level, lives, money are back (%d / %d / %d)" % [GameState.current_level, GameState.lives, GameState.money])
 	_check(GameState.run_score == 5555 and GameState.run_seed == 4242 and GameState.has_active_run, "run score, seed and the active run are back")
 	_check(GameState.carry_active and int(GameState.carry_weapon_levels.get(0, 0)) == 7 and int(GameState.carry_weapon_levels.get(2, 0)) == 5 and GameState.carry_max_shield == 3, "carried gear is back (%s, shield %d)" % [GameState.carry_weapon_levels, GameState.carry_max_shield])
+	_check(GameState.high_score == 7000, "the solo BEST RUN is back (%d), a co-op score never becomes it" % GameState.high_score)
+	_check(GameState.total_score == 123456, "the solo lifetime score is back (%d)" % GameState.total_score)
 	SaveSystem.save_game()
 	var j0: Variant = JSON.parse_string(disk0.get_string_from_utf8())
 	var j1: Variant = JSON.parse_string(_bytes("user://savegame.dat").get_string_from_utf8())
