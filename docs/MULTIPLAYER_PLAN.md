@@ -74,8 +74,9 @@ Effort: phase 1-2 about a week, the rest 3-5 weeks.
 | 2 real game screen in a room (two windows on the Mac) | done |
 | 3a bosses, mini-bosses, breakable parts | done (bots: Iron Tortoise killed at 80 ms / 3% loss) |
 | 3b shared shop | done (bots + two real windows) |
-| 3c down / rescue pod / return next sector / both down = over | logic done and bot-tested; real-window check pending |
-| 3d full run to sector 24, co-op score | not started |
+| 3c down / rescue pod / return next sector / both down = over | done (bots: rescue, both down; two real windows) |
+| 3d full run to sector 24 | done with bots 11/11: 24 sectors, all 8 boss types incl. the Herald + Skybreaker finale, won=true, 0 script errors, 15 min at duration_mul 0.35 (that run has no mini-bosses, shops or megas: they sit past the shortened sector end; mini-boss checked separately on sector 6 at full length) |
+| 3e co-op result screen (both scores at the end of a run) | not started; goes with the lobby UI in phase 4 |
 | 4 lobby (code, QR, Play now) | not started |
 | 5 GCP | not started |
 | 6 balance for two, store notes | not started |
