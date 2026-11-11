@@ -4,7 +4,7 @@ class_name Enemy
 ## Sector 1 only — three placeholder archetypes (Grunt, Dodger, Tank).
 
 ## SHARD is never in a level pool: it only comes out of a dying SPLITTER.
-enum Type { GRUNT, DODGER, TANK, STRAFER, BOMBER, SWARMER, LANCER, BROODER, REAPER, SHADE, ARTILLERY, MINELAYER, SPLITTER, PULSAR, SHARD, HUNTER, BEAMER }
+enum Type { GRUNT, DODGER, TANK, STRAFER, BOMBER, SWARMER, LANCER, BROODER, REAPER, SHADE, ARTILLERY, MINELAYER, SPLITTER, PULSAR, SHARD, HUNTER, BEAMER, JINKER }
 
 const EnemyBulletScript := preload("res://scripts/EnemyBullet.gd")
 const PickupScript := preload("res://scripts/Pickup.gd")
@@ -38,6 +38,16 @@ const PATH_SPLITTER: String = "res://assets/sprites/enemy_splitter.png"
 const PATH_PULSAR: String = "res://assets/sprites/enemy_pulsar.png"
 const PATH_HUNTER: String = "res://assets/sprites/enemy_hunter.png"
 const PATH_BEAMER: String = "res://assets/sprites/enemy_beamer.png"
+const PATH_JINKER: String = "res://assets/sprites/enemy_jinker.png"
+## JINKER (11/11): reads incoming player shots and side-jinks out of their
+## path. Looks JINK_LOOK px below its hull, needs JINK_CD between jinks
+## (shorter late), each jink moves JINK_DIST px over JINK_SECS. Homing
+## missiles re-steer and the beam is instant, so those are its counters.
+const JINK_LOOK: float = 260.0
+const JINK_DIST: float = 120.0
+const JINK_SECS: float = 0.16
+const JINK_CD_EARLY: float = 1.1
+const JINK_CD_LATE: float = 0.7
 const EnemyBeamScript := preload("res://scripts/EnemyBeam.gd")
 ## BEAMER: hold line, hold time, and the slowest it may ever cycle its beam
 ## (the sector fire-rate ladder must not turn it into a permanent wall).
@@ -71,6 +81,17 @@ var _kick_x: float = 0.0
 var _ring_turn: float = 0.0
 ## BEAMER: the beam it currently has out (null / freed = none).
 var _beam: EnemyBeam = null
+## ARMED VARIANT (11/11): every `alt_every`-th volley uses `alt_pattern`
+## (&"beam" or &"homing") instead of the normal one. Set by EnemySpawner
+## before add_child (Enemy.roll_armed). A ring in the weapon's colour marks it.
+var alt_pattern: StringName = &""
+var alt_every: int = 3
+var _volleys: int = 0
+## JINKER state
+var _jink_cd: float = 0.0
+var _jink_left: float = 0.0
+var _jink_dir: float = 0.0
+var jinks: int = 0   ## Count of dodges (tests, telemetry)
 var hp: int
 var speed: float
 var enemy_size: float
@@ -455,6 +476,28 @@ func _configure() -> void:
 			torpedo_drop_chance = 0.034
 			money_drop_chance = 0.90
 			money_value = 50
+		Type.JINKER:
+			# Evasive interceptor. Drops in at a steady pace and side-jinks out
+			# of the path of incoming shots; fires twin aimed darts. Lead it,
+			# spray it with a wide spread, or let homing missiles and the beam
+			# do the work.
+			max_hp = 7
+			speed = 150.0
+			enemy_size = randf_range(64.0, 80.0)
+			enemy_color = Color(0.95, 0.95, 0.35)
+			movement = &"jink"
+			reward = 55
+			fire_pattern = &"twin_aimed"
+			fire_interval = 2.0
+			_fire_timer = randf_range(0.6, 1.4)
+			bullet_style = EnemyBullet.Style.DART
+			contact_damage = 5
+			health_drop_chance = 0.020
+			power_drop_chance = 0.018
+			torpedo_drop_chance = 0.020
+			money_drop_chance = 0.75
+			money_value = 30
+			fire_sfx = SFX_FIRE_DODGER
 		Type.REAPER:
 			# Kamikaze ramship. No projectiles — its threat IS the ram. Locks
 			# onto the player's X each frame and accelerates downward to ram.
@@ -519,6 +562,18 @@ func _draw() -> void:
 		var body_color: Color = enemy_color.lerp(Color(1, 1, 1), _hit_flash)
 		draw_rect(rect, body_color, true)
 		draw_rect(rect, Color(0, 0, 0, 0.6), false, 2.0)
+	# Armed variant tell: a ring in the weapon's colour (cyan beam, orange missiles)
+	if alt_pattern != &"":
+		var rc: Color = Color(0.45, 0.85, 1.0) if alt_pattern == &"beam" else Color(1.0, 0.55, 0.20)
+		draw_arc(Vector2.ZERO, half * 1.18, 0.0, TAU, 40, Color(rc.r, rc.g, rc.b, 0.25), 9.0, true)
+		draw_arc(Vector2.ZERO, half * 1.18, 0.0, TAU, 40, Color(rc.r, rc.g, rc.b, 0.85), 2.5, true)
+	# JINKER: afterimage streak while it jinks
+	if _jink_left > 0.0:
+		for k in 3:
+			var yy: float = (-0.35 + 0.35 * k) * half
+			var x0: float = -_jink_dir * half * 0.55
+			var x1: float = x0 - _jink_dir * (half * (1.2 - 0.25 * absf(k - 1.0)))
+			draw_line(Vector2(x0, yy), Vector2(x1, yy), Color(1.0, 0.95, 0.5, 0.75), 3.0, true)
 	# Damage smoke — heavier as HP drops. Drawn in local space.
 	# Light grey on the outside (reads against dark space) with a hot ember core
 	# so it's clearly visible against the busy starfield.
@@ -643,6 +698,10 @@ func _build_sprite() -> void:
 			tex = _optional_tex(PATH_BEAMER, TEX_TANK)
 			if tex == TEX_TANK:
 				_sprite_tint = Color(0.50, 0.82, 1.0)
+		Type.JINKER:
+			tex = _optional_tex(PATH_JINKER, TEX_STRAFER)
+			if tex == TEX_STRAFER:
+				_sprite_tint = Color(1.0, 0.95, 0.40)
 		_:
 			tex = null
 	if tex == null:
@@ -711,6 +770,9 @@ func _process(delta: float) -> void:
 		_kick_x = move_toward(_kick_x, 0.0, 520.0 * delta)
 	elif movement == &"horizontal":
 		position.x += speed * delta * h_dir
+	elif movement == &"jink":
+		position.y += speed * delta
+		_update_jink(delta)
 	elif movement == &"chase":
 		# Reaper-style ram: accelerates down + drifts horizontally toward the
 		# player's current X. Can't reverse, only steer. Speed ramps up to
@@ -772,7 +834,76 @@ func _update_phase(delta: float) -> void:
 
 
 func _fire() -> void:
-	match fire_pattern:
+	_volleys += 1
+	if alt_pattern != &"" and _volleys % maxi(1, alt_every) == 0:
+		if alt_pattern != &"beam" or not _beam_live():
+			_fire_pattern(alt_pattern)
+			return
+	_fire_pattern(fire_pattern)
+
+
+## JINKER: look for a player shot climbing toward the hull; if one is in the
+## lane, jink to the side with more room (away from the shot when centred).
+func _update_jink(delta: float) -> void:
+	if _jink_left > 0.0:
+		var step: float = minf(_jink_left, delta)
+		position.x = clampf(position.x + _jink_dir * (JINK_DIST / JINK_SECS) * step, enemy_size * 0.5, _viewport_size.x - enemy_size * 0.5)
+		_jink_left -= step
+		queue_redraw()   # streak while jinking, and one clean frame after
+		return
+	_jink_cd -= delta
+	if _jink_cd > 0.0 or position.y < 0.0 or position.y > _viewport_size.y * 0.85:
+		return
+	var lane: float = enemy_size * 0.55 + 10.0
+	var threat_x: float = INF
+	for b in get_tree().get_nodes_in_group(&"player_bullets"):
+		if not is_instance_valid(b):
+			continue
+		var bp: Vector2 = (b as Node2D).global_position
+		var dy: float = bp.y - position.y
+		if dy <= 0.0 or dy > JINK_LOOK:
+			continue
+		if absf(bp.x - position.x) <= lane:
+			threat_x = bp.x
+			break
+	if threat_x == INF:
+		return
+	var room_l: float = position.x - enemy_size * 0.5
+	var room_r: float = _viewport_size.x - enemy_size * 0.5 - position.x
+	var dir: float = signf(position.x - threat_x)
+	if dir == 0.0:
+		dir = 1.0 if room_r > room_l else -1.0
+	if (dir > 0.0 and room_r < JINK_DIST * 0.6) or (dir < 0.0 and room_l < JINK_DIST * 0.6):
+		dir = -dir   # pinned at a wall: jink the other way
+	_jink_dir = dir
+	_jink_left = JINK_SECS
+	var lvl_t: float = clampf(float(GameState.current_level - 1) / float(GameState.MAX_LEVEL - 1), 0.0, 1.0)
+	_jink_cd = lerpf(JINK_CD_EARLY, JINK_CD_LATE, lvl_t)
+	jinks += 1
+
+
+## ARMED VARIANTS: which ships may carry a beam / homing missiles from which
+## sector, and how often. Rolled with the spawner's seeded RNG.
+const ARMED_TABLE: Dictionary = {
+	Type.TANK: {"pattern": &"beam", "from": 10, "chance": [0.25, 0.50], "every": 3},
+	Type.BOMBER: {"pattern": &"homing", "from": 8, "chance": [0.30, 0.50], "every": 2},
+	Type.STRAFER: {"pattern": &"homing", "from": 14, "chance": [0.25, 0.40], "every": 2},
+	Type.LANCER: {"pattern": &"beam", "from": 16, "chance": [0.25, 0.40], "every": 2},
+}
+
+static func roll_armed(t: int, level: int, roll: float) -> Dictionary:
+	var e: Dictionary = ARMED_TABLE.get(t, {})
+	if e.is_empty() or level < int(e["from"]):
+		return {}
+	var k: float = clampf(float(level - int(e["from"])) / float(maxi(1, GameState.MAX_LEVEL - int(e["from"]))), 0.0, 1.0)
+	var chance: float = lerpf(float(e["chance"][0]), float(e["chance"][1]), k)
+	if roll >= chance:
+		return {}
+	return {"pattern": e["pattern"], "every": int(e["every"])}
+
+
+func _fire_pattern(pattern: StringName) -> void:
+	match pattern:
 		&"straight":
 			_spawn_enemy_bullet(Vector2.DOWN, 3)
 		&"aimed":
@@ -822,6 +953,18 @@ func _fire() -> void:
 				bullet.damage = 5
 				bullet.style = EnemyBullet.Style.ACID
 				get_parent().add_child(bullet)
+		&"twin_aimed":
+			var tdir := Vector2.DOWN
+			var tp := get_tree().get_first_node_in_group(&"player")
+			if tp != null:
+				tdir = (tp.global_position - global_position).normalized()
+			for side in [-1.0, 1.0]:
+				var tb: EnemyBullet = EnemyBulletScript.new()
+				tb.position = global_position + Vector2(side * enemy_size * 0.28, enemy_size * 0.3)
+				tb.direction = tdir
+				tb.damage = 4
+				tb.style = bullet_style
+				get_parent().add_child(tb)
 		&"homing":
 			# One homing missile (two from sector 20 on), launched to the side
 			# so its curve is readable.

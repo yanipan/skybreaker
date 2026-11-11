@@ -555,6 +555,11 @@ func _spawn_wave() -> void:
 
 		var enemy: Enemy = EnemyScript.new()
 		enemy.type = t
+		# Armed variants (beam / homing missiles), seeded like the wave itself
+		var armed: Dictionary = Enemy.roll_armed(t, GameState.current_level, GameRng.randf())
+		if not armed.is_empty():
+			enemy.alt_pattern = armed["pattern"]
+			enemy.alt_every = int(armed["every"])
 
 		if t == Enemy.Type.STRAFER or t == Enemy.Type.MINELAYER:
 			# Strafers and minelayers spawn at a screen edge and fly across.
