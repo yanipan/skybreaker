@@ -81,7 +81,7 @@ var _asteroid_timer: float = 0.0
 var _asteroids_enabled: bool = false
 
 # Meteor showers + mega asteroid (Levels.METEOR_SHOWERS / MEGA_ASTEROIDS).
-const SHOWER_WARN_SECS: float = 1.6
+const SHOWER_WARN_SECS: float = 2.3   ## = ALERT_SECS
 var _shower_times: Array = []       ## Pending start times (s), soonest first
 var _shower_left: float = 0.0       ## Seconds of rain left (> 0 = raining)
 var _shower_warn: float = 0.0       ## Warning countdown before the rain
@@ -89,6 +89,7 @@ var _shower_tick: float = 0.0
 var _shower_angle: float = 0.0      ## Radians off straight down, per shower
 var _mega_time: float = -1.0
 var _mega_spawned: bool = false
+var _mega_warn: float = -1.0       ## Alert countdown before the mega enters
 var _warning: CanvasLayer = null
 
 # Starbase — friendly shop. Random chance every level to roll one in mid-stage,
@@ -183,8 +184,13 @@ func _process(delta: float) -> void:
 		if not shower_active():   # the rain IS the wave
 			_spawn_wave()
 	_process_shower(delta)
-	if _mega_time >= 0.0 and not _mega_spawned and _mission_time >= _mega_time and not _mini_alive():
-		_spawn_mega_asteroid()
+	if _mega_time >= 0.0 and not _mega_spawned and _mega_warn < 0.0 and _mission_time >= _mega_time and not _mini_alive() and not shower_active():
+		_mega_warn = ALERT_SECS
+		_show_warning("MEGA ASTEROID INBOUND")
+	elif _mega_warn >= 0.0:
+		_mega_warn -= delta
+		if _mega_warn < 0.0:
+			_spawn_mega_asteroid()
 	if _guaranteed_power_enabled and not _guaranteed_power_dropped and _mission_time >= _guaranteed_power_time:
 		_drop_guaranteed_power()
 	if _weapon_change_enabled and not _weapon_change_dropped and _mission_time >= _weapon_change_time:
@@ -398,7 +404,7 @@ func _process_shower(delta: float) -> void:
 			_shower_times.pop_front()
 			_shower_warn = SHOWER_WARN_SECS
 			_shower_angle = deg_to_rad(GameRng.randf_range(-24.0, 24.0))
-			_show_warning("METEOR SHOWER", Color(1.0, 0.62, 0.25))
+			_show_warning("METEOR FIELD AHEAD")
 		return
 	if _shower_warn > 0.0:
 		_shower_warn -= delta
@@ -441,36 +447,91 @@ func _spawn_mega_asteroid() -> void:
 	rock.position = Vector2(GameRng.randf_range(_viewport_size.x * 0.35, _viewport_size.x * 0.65), -240.0)
 	rock.drift = Vector2(GameRng.randf_range(-14.0, 14.0), 46.0)
 	get_parent().add_child(rock)
-	_show_warning("MEGA ASTEROID", Color(1.0, 0.80, 0.35))
 	print("MEGA ASTEROID spawned hp=", rock.max_hp)
 
 
-## Big flashing warning text for ~2 s (its own layer, frees itself).
-func _show_warning(text: String, col: Color) -> void:
+## RED ALERT (11/11): klaxon, pulsing red screen edges, a dark band with
+## "RED ALERT" over the hazard name. Its own CanvasLayer, frees itself.
+## The hazard arrives as the alert ends (ALERT_SECS), never before.
+const ALERT_SECS: float = 2.3
+
+func _show_warning(text: String, _col: Color = Color.RED) -> void:
 	if _warning != null and is_instance_valid(_warning):
 		_warning.queue_free()
 	_warning = CanvasLayer.new()
 	_warning.layer = 5
+	add_child(_warning)
+	var root := Control.new()
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.size = _viewport_size
+	_warning.add_child(root)
+	# Red edges: radial gradient, clear centre, red rim
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 0, 0, 0.0))
+	g.set_color(1, Color(1, 0.05, 0.0, 0.55))
+	g.add_point(0.55, Color(1, 0, 0, 0.0))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.05, 1.05)
+	gt.width = 128
+	gt.height = 256
+	var edge := TextureRect.new()
+	edge.texture = gt
+	edge.stretch_mode = TextureRect.STRETCH_SCALE
+	edge.size = _viewport_size
+	edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(edge)
+	# Band
+	var band_y: float = _viewport_size.y * 0.28
+	var band := ColorRect.new()
+	band.color = Color(0.25, 0.0, 0.0, 0.72)
+	band.position = Vector2(0, band_y)
+	band.size = Vector2(_viewport_size.x, 150)
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(band)
+	for yy in [band_y, band_y + 146.0]:
+		var line := ColorRect.new()
+		line.color = Color(1.0, 0.15, 0.1, 0.95)
+		line.position = Vector2(0, yy)
+		line.size = Vector2(_viewport_size.x, 4)
+		line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(line)
+	var title := _alert_label("RED ALERT", 30, Color(1.0, 0.35, 0.3), band_y + 16.0)
+	root.add_child(title)
+	root.add_child(_alert_label(text, 48, Color(1, 1, 1), band_y + 60.0))
+	AudioManager.play_sfx(AudioManager.SFX_RED_ALERT, -3.0)
+	EventBus.screen_shake_requested.emit(3.0, 0.35)
+	# Three pulses with the klaxon, then fade away
+	edge.modulate.a = 0.0
+	var tw := edge.create_tween()
+	for i in 3:
+		tw.tween_property(edge, "modulate:a", 1.0, 0.12)
+		tw.tween_property(edge, "modulate:a", 0.25, 0.55)
+	var tw2 := title.create_tween()
+	for i in 3:
+		tw2.tween_property(title, "modulate:a", 1.0, 0.08)
+		tw2.tween_property(title, "modulate:a", 0.35, 0.59)
+	var fade := root.create_tween()
+	fade.tween_interval(ALERT_SECS - 0.4)
+	fade.tween_property(root, "modulate:a", 0.0, 0.4)
+	fade.tween_callback(_warning.queue_free)
+
+
+func _alert_label(text: String, size_px: int, col: Color, y: float) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.add_theme_font_override("font", Fonts.HEADLINE)
-	l.add_theme_font_size_override("font_size", 54)
+	l.add_theme_font_size_override("font_size", size_px)
 	l.add_theme_color_override("font_color", col)
 	l.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	l.add_theme_constant_override("outline_size", 8)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.size = Vector2(_viewport_size.x, 80)
-	l.position = Vector2(0, _viewport_size.y * 0.30)
-	_warning.add_child(l)
-	add_child(_warning)
-	var tw := l.create_tween()
-	tw.tween_property(l, "modulate:a", 0.25, 0.25)
-	tw.tween_property(l, "modulate:a", 1.0, 0.25)
-	tw.tween_property(l, "modulate:a", 0.25, 0.25)
-	tw.tween_property(l, "modulate:a", 1.0, 0.25)
-	tw.tween_interval(0.6)
-	tw.tween_property(l, "modulate:a", 0.0, 0.4)
-	tw.tween_callback(_warning.queue_free)
+	l.size = Vector2(_viewport_size.x, size_px + 20)
+	l.position = Vector2(0, y)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
 
 
 ## Builds a procedural wave from the current level's enemy pool.

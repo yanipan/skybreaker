@@ -36,6 +36,7 @@ const _PATH_SPACESHIP_EXPLODING: String = "res://assets/audio/sfx/spaceship_expl
 const _PATH_POWERUP_ZAP: String = "res://assets/audio/sfx/electric_powerup_zap.mp3"
 const _PATH_BEAM: String = "res://assets/audio/sfx/beamsound.mp3"
 const _PATH_MISSILE_LAUNCH: String = "res://assets/audio/sfx/missilelaunch.mp3"
+const _PATH_RED_ALERT: String = "res://assets/audio/sfx/red_alert.mp3"   ## scripts/tools/make_alert_sfx.py
 
 # Cached AudioStreams keyed by path. First access populates the cache;
 # every subsequent call is a dictionary hit.
@@ -70,6 +71,8 @@ var SFX_BEAM: AudioStream:
 	get: return _get_stream(_PATH_BEAM)
 var SFX_MISSILE_LAUNCH: AudioStream:
 	get: return _get_stream(_PATH_MISSILE_LAUNCH)
+var SFX_RED_ALERT: AudioStream:
+	get: return _get_stream(_PATH_RED_ALERT)
 ## Drop a `shield_hit.mp3` into assets/audio/sfx and add a path constant +
 ## getter to enable a distinct shield-impact sound. Until then it falls back
 ## to a soft takingimpact play in Player._take_damage.

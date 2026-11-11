@@ -59,6 +59,7 @@ func _run() -> void:
 	sp._mission_time = t0 + 0.01
 	sp._process(0.05)
 	_check(sp.shower_active() and sp._shower_warn > 0.0, "warning starts at %.1f s" % t0)
+	_check(is_instance_valid(sp._warning) and sp._warning.is_inside_tree(), "red alert overlay is on screen")
 	_check(_rocks(host, false).is_empty(), "no rocks during the warning")
 	# Run the shower through
 	var steps: int = int((EnemySpawner.SHOWER_WARN_SECS + Levels.SHOWER_SECS) / 0.05) + 4
@@ -102,6 +103,10 @@ func _run() -> void:
 	_check(sp._mega_time > 0.0, "sector 5 has a mega asteroid")
 	sp._mission_time = sp._mega_time + 0.01
 	sp._process(0.05)
+	_check(_rocks(host, true).is_empty() and sp._mega_warn > 0.0, "red alert first, no rock yet")
+	for i in int(EnemySpawner.ALERT_SECS / 0.05) + 2:
+		sp._mission_time += 0.05
+		sp._process(0.05)
 	var megas: Array = _rocks(host, true)
 	_check(megas.size() == 1, "mega spawned once")
 	sp._mission_time += 1.0
