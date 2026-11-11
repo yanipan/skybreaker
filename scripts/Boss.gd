@@ -42,6 +42,13 @@ var _sprite_tint: Color = Color.WHITE
 ## Mid-sector MINI-BOSS (Levels.gd `mini_boss`): an already-beaten boss comes
 ## back smaller, a little slower to fire, with a small reward and drops.
 @export var mini: bool = false
+## CO-OP (docs/MULTIPLAYER_PLAN.md): on a phone the boss is a puppet. The
+## server moves it, runs its patterns and owns its HP and its parts' HP; the
+## phone draws it, reports hits (core and parts) and plays the death on KILL.
+var net_puppet: bool = false
+var net_id: int = 0
+## Server's max HP (it may scale the boss for two ships), applied after _configure.
+var net_max_hp: int = 0
 const MINI_SIZE: float = 0.78
 const MINI_FIRE_CD: float = 1.25
 const MINI_REWARD: float = 0.25
@@ -98,6 +105,9 @@ var _shield_ping: float = 0.0   ## Visual: shield shimmer flash on a blocked hit
 func _ready() -> void:
 	_viewport_size = get_viewport_rect().size
 	_configure()
+	if net_max_hp > 0:
+		max_hp = net_max_hp
+		hp = max_hp
 	if hit_half == Vector2.ZERO:
 		hit_half = Vector2(boss_size * 0.425, boss_size * 0.375)
 	_build_collision()
@@ -359,7 +369,8 @@ func take_part_hit(_p: BossPart, amount: int) -> void:
 
 
 func on_part_destroyed(p: BossPart) -> void:
-	GameState.add_score(maxi(50, p.reward_money))
+	if not net_puppet:
+		GameState.add_score(maxi(50, p.reward_money))
 	if type == Type.BOSS2 and p.shields_core and not shell_broken and not core_shielded():
 		_crack_shell()
 
@@ -460,6 +471,12 @@ func _build_hp_bar() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_update_hit_flash(delta)
+	if net_puppet:
+		# Position, HP and every shot come from the server.
+		_update_smoke(delta)
+		_update_hp_bar()
+		queue_redraw()
+		return
 	_update_movement(delta)
 	_update_smoke(delta)
 	_update_phase()
@@ -679,6 +696,14 @@ func _spawn_bullet_at(at: Vector2, dir: Vector2, dmg: int, style: int) -> void:
 # --- Damage / death ---
 
 func take_damage(amount: int) -> void:
+	if net_puppet:
+		# The server applies armour and the shell shield; show which it was.
+		if core_shielded():
+			_shield_ping = 1.0
+		else:
+			_hit_flash = 1.0
+		Net.report_hit(net_id, amount)
+		return
 	# Armor reduces incoming damage but minimum 1 still chips through
 	_apply_core_damage(max(1, amount - armor))
 
@@ -697,6 +722,38 @@ func _apply_core_damage(net: int) -> void:
 	_hit_flash = 1.0
 	if hp <= 0:
 		_die()
+
+
+## CO-OP: the server says the boss died. The same show as _die(), but the
+## drops arrive from the server as pickups and only the phone that landed
+## the kill gets the score and the popup.
+func net_kill(mine: bool) -> void:
+	for p in live_parts():
+		p.destroy(true)
+	if mine:
+		GameState.add_score(reward)
+		GameState.mission_kills += 1
+	var host: Node = get_parent()
+	if host != null:
+		for i in 5:
+			var burst: EnemyExplosion = EnemyExplosionScript.new()
+			burst.position = global_position + Vector2(randf_range(-60, 60), randf_range(-40, 40))
+			burst.burst_radius = boss_size * 0.55
+			burst.spark_count = 22
+			burst.debris_count = 12
+			burst.smoke_count = 10
+			burst.base_color = primary_color
+			host.add_child(burst)
+		if mine:
+			var popup: ScorePopup = ScorePopupScript.new()
+			popup.amount = reward
+			popup.position = global_position + Vector2(0, -boss_size * 0.4)
+			host.add_child(popup)
+	EventBus.screen_shake_requested.emit(12.0 if mini else 18.0, 0.6 if mini else 0.8)
+	if _hp_bar != null: _hp_bar.queue_free()
+	if _hp_bar_bg != null: _hp_bar_bg.queue_free()
+	if _hp_label != null: _hp_label.queue_free()
+	queue_free()
 
 
 func _die() -> void:

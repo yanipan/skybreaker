@@ -62,25 +62,36 @@ func _ready() -> void:
 		get_tree().quit(3))
 
 
+## Something a real shot could hit: not a wrecked boss part, not a cloaked ship.
+static func _hittable(n) -> bool:
+	if not is_instance_valid(n):
+		return false
+	if "alive" in n and not n.alive:
+		return false
+	if "cloaked" in n and n.cloaked:
+		return false
+	return true
+
+
 func _process(delta: float) -> void:
 	# Steer toward the nearest puppet's x
 	var best: Node2D = null
 	var bd: float = INF
 	for n in nc.puppets.values():
-		if is_instance_valid(n) and n.position.y > 0.0 and n.position.y < ship.position.y:
-			var d: float = absf(n.position.x - ship.position.x)
+		if _hittable(n) and n.global_position.y > 0.0 and n.global_position.y < ship.position.y:
+			var d: float = absf(n.global_position.x - ship.position.x)
 			if d < bd:
 				bd = d
 				best = n
 	if best != null:
-		ship.position.x = move_toward(ship.position.x, best.position.x, 500.0 * delta)
+		ship.position.x = move_toward(ship.position.x, best.global_position.x, 500.0 * delta)
 	_fire_t += delta
 	if _fire_t >= dps_tick:
 		_fire_t = 0.0
 		var target: Node2D = null
 		for n in nc.puppets.values():
-			if is_instance_valid(n) and absf(n.position.x - ship.position.x) < 60.0 and n.position.y > 0.0 and n.position.y < ship.position.y:
-				if target == null or n.position.y > target.position.y:
+			if _hittable(n) and absf(n.global_position.x - ship.position.x) < 60.0 and n.global_position.y > 0.0 and n.global_position.y < ship.position.y:
+				if target == null or n.global_position.y > target.global_position.y:
 					target = n
 		if target != null and target.has_method("take_damage"):
 			target.take_damage(dmg)

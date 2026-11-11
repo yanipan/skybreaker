@@ -38,6 +38,9 @@ var glow: Color = Color(0.55, 1.0, 0.35)
 var follows_boss: bool = true
 
 var alive: bool = true
+## CO-OP: the server's id for this part (0 = local). On a phone the part's
+## HP and its death come from the server; hits are reported.
+var net_id: int = 0
 var _flash: float = 0.0
 var _t: float = 0.0
 var _aim: float = PI * 0.5   ## Barrel angle, eased toward the player
@@ -64,7 +67,7 @@ func _process(delta: float) -> void:
 		if p != null:
 			var want: float = (p.global_position - global_position).angle()
 			_aim = lerp_angle(_aim, want, clampf(delta * 4.0, 0.0, 1.0))
-	if alive and fire_cd > 0.0 and boss != null and boss.has_method("part_fire") and boss.can_attack():
+	if alive and fire_cd > 0.0 and boss != null and boss.has_method("part_fire") and boss.can_attack() and not _puppet():
 		fire_timer -= delta
 		if fire_timer <= 0.0:
 			fire_timer = fire_cd * boss.part_cd_mul()
@@ -76,10 +79,18 @@ func aim_dir() -> Vector2:
 	return Vector2.RIGHT.rotated(_aim)
 
 
+## True on a phone in co-op: the owning boss is a server puppet.
+func _puppet() -> bool:
+	return boss != null and is_instance_valid(boss) and "net_puppet" in boss and boss.net_puppet
+
+
 func take_damage(amount: int) -> void:
 	if not alive:
 		return
 	_flash = 1.0
+	if _puppet():
+		Net.report_hit(net_id, amount)
+		return
 	if core_transfer > 0.0:
 		if boss != null and is_instance_valid(boss):
 			boss.take_part_hit(self, maxi(1, int(round(float(amount) * core_transfer))))

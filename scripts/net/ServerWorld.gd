@@ -132,6 +132,9 @@ func _on_msg(peer: int, msg: Array) -> void:
 				var n = entities.get(int(id))
 				if n != null and is_instance_valid(n) and not n.is_queued_for_deletion() and n.has_method("take_damage"):
 					n.set_meta("last_hitter", peer)
+					# A hit on a part can be what kills the boss: credit it there too.
+					if "boss" in n and n.boss != null and is_instance_valid(n.boss):
+						n.boss.set_meta("last_hitter", peer)
 					n.take_damage(int(d[id]))
 					stats.hits += 1
 		Net.M.CLAIM:
@@ -163,8 +166,8 @@ func _send_sync(peer: int) -> void:
 		return   # between sectors: the old world is about to be wiped, send nothing
 	for id in entities.keys():
 		var n = entities[id]
-		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_node_ready():
-			_send_spawn(n, peer)
+		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_node_ready() and not (n is BossPart):
+			_send_spawn(n, peer)   # parts travel inside their boss's SPAWN
 
 
 func _joined() -> int:
@@ -207,7 +210,10 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if spawner != null and is_instance_valid(spawner):
 		var dur: float = spawner.get_level_duration() * duration_mul
-		if spawner.get_mission_time() >= dur and spawner.boss_sequence_done() and _clear_t < 0.0:
+		# Same rule as Main._check_level_complete: every boss dead, then the
+		# timer; the finale ends the moment its last boss dies.
+		var finale_kill: bool = spawner.ends_on_boss() and spawner.bosses_spawned() > 0
+		if spawner.boss_sequence_done() and (finale_kill or spawner.get_mission_time() >= dur) and _clear_t < 0.0:
 			_clear_t = CLEAR_PAUSE
 			stats.sectors += 1
 			_sectors_done += 1
@@ -265,7 +271,7 @@ func _game_over(won: bool) -> void:
 # --- Replication ---
 
 func _on_child(n: Node) -> void:
-	if n is Enemy or n is Asteroid or n is Pickup:
+	if n is Enemy or n is Asteroid or n is Pickup or n is Boss:
 		var id: int = _next_id
 		_next_id += 1
 		n.set_meta("nid", id)
@@ -291,6 +297,14 @@ func _send_spawn(n: Node, only_peer: int = 0) -> void:
 		if n.alt_pattern != &"":
 			p["alt"] = n.alt_pattern
 			p["ae"] = n.alt_every
+	elif n is Boss:
+		kind = "boss"
+		p["t"] = n.type
+		p["mi"] = n.mini
+		p["hs"] = n.hp_scale
+		p["nm"] = n.name_override
+		p["mh"] = n.max_hp
+		p["parts"] = _register_parts(n)
 	elif n is MegaAsteroid:
 		kind = "mega"
 		p["d"] = n.drift
@@ -309,6 +323,22 @@ func _send_spawn(n: Node, only_peer: int = 0) -> void:
 		return
 	stats.spawns += 1
 	Net.broadcast([Net.M.SPAWN, id, kind, p])
+
+
+## A boss's breakable parts get ids of their own, so a phone can report hits
+## on a plate or a turret and see its HP and its wreck. Both ends build the
+## same parts from the boss type, matched by part_id. Returns {part_id: id}.
+func _register_parts(boss: Boss) -> Dictionary:
+	var out: Dictionary = {}
+	for part in boss._parts:
+		if not is_instance_valid(part):
+			continue
+		if not part.has_meta("nid"):
+			part.set_meta("nid", _next_id)
+			entities[_next_id] = part
+			_next_id += 1
+		out[String(part.part_id)] = int(part.get_meta("nid"))
+	return out
 
 
 func _send_shot(b: EnemyBullet) -> void:
@@ -334,6 +364,10 @@ func _send_beam(beam: EnemyBeam) -> void:
 func _on_gone(n: Node) -> void:
 	var id: int = int(n.get_meta("nid", 0))
 	entities.erase(id)
+	if n is Boss:
+		for part in n._parts:
+			if is_instance_valid(part) and part.has_meta("nid"):
+				entities.erase(int(part.get_meta("nid")))
 	if n.has_meta("silent") or n.has_meta("granted"):
 		return
 	var dead: bool = ("hp" in n) and int(n.hp) <= 0
@@ -356,7 +390,8 @@ func _send_snapshot() -> void:
 		ids.append(id)
 		xy.append(n.position.x)
 		xy.append(n.position.y)
-		fl.append(1 if ("cloaked" in n and n.cloaked) else 0)
+		# bit 0 = cloaked (SHADE), bit 1 = broken (a boss part that is now a wreck)
+		fl.append((1 if ("cloaked" in n and n.cloaked) else 0) | (2 if ("alive" in n and not n.alive) else 0))
 		var frac: float = clampf(float(n.hp) / float(maxi(1, n.max_hp)), 0.0, 1.0) if ("hp" in n and "max_hp" in n) else 1.0
 		hpb.append(int(round(frac * 255.0)))
 	Net.broadcast([Net.M.SNAP, _clock, ids, xy, fl, hpb], false)

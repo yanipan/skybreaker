@@ -159,6 +159,30 @@ func _spawn(id: int, kind: String, p: Dictionary) -> void:
 			e.net_puppet = true
 			e.net_id = id
 			n = e
+		"boss":
+			var boss := Boss.new()
+			boss.type = int(p["t"])
+			boss.mini = bool(p.get("mi", false))
+			boss.hp_scale = float(p.get("hs", 1.0))
+			boss.name_override = str(p.get("nm", ""))
+			boss.net_max_hp = int(p.get("mh", 0))
+			boss.net_puppet = true
+			boss.net_id = id
+			boss.position = p["p"]
+			world.add_child(boss)
+			puppets[id] = boss
+			_buf[id] = []
+			boss.tree_exiting.connect(_forget.bind(id), CONNECT_ONE_SHOT)
+			# Its parts are built from the type on both ends; give each the
+			# server's id. Parts ride on the boss, so they get no position buffer.
+			var part_ids: Dictionary = p.get("parts", {})
+			for part in boss._parts:
+				var pid: int = int(part_ids.get(String(part.part_id), 0))
+				if pid > 0:
+					part.net_id = pid
+					puppets[pid] = part
+					part.tree_exiting.connect(_forget.bind(pid), CONNECT_ONE_SHOT)
+			return
 		"mega":
 			var m := MegaAsteroid.new()
 			m.drift = p.get("d", Vector2.ZERO)
@@ -212,13 +236,18 @@ func _snap(t: float, ids: PackedInt32Array, xy: PackedFloat32Array, fl: PackedBy
 	_offset = sample if _offset == -INF else maxf(sample, _offset - 0.002)
 	for i in ids.size():
 		var id: int = ids[i]
-		if not _buf.has(id):
-			continue
-		var b: Array = _buf[id]
-		b.append([t, Vector2(xy[i * 2], xy[i * 2 + 1])])
-		if b.size() > 8:
-			b.pop_front()
+		if _buf.has(id):
+			var b: Array = _buf[id]
+			b.append([t, Vector2(xy[i * 2], xy[i * 2 + 1])])
+			if b.size() > 8:
+				b.pop_front()
 		var n = puppets.get(id)
+		if n == null:
+			continue
+		# A boss part the server has broken becomes a wreck here too.
+		if is_instance_valid(n) and "alive" in n and n.alive and (fl[i] & 2) == 2 and n.has_method("destroy"):
+			n.destroy(true)
+			continue
 		if n != null and is_instance_valid(n) and i < hpb.size() and "max_hp" in n:
 			var nhp: int = maxi(1, int(round(float(hpb[i]) / 255.0 * float(n.max_hp))))
 			if nhp != n.hp:
