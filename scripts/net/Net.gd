@@ -22,7 +22,7 @@ const CH_FAST: int = 1
 
 ## Message kinds. Server -> phone
 enum M {
-	HELLO,        ## [HELLO, proto, your_peer_id, seat]
+	HELLO,        ## [HELLO, proto, your_peer_id, seat, start_sector]
 	SPAWN,        ## [SPAWN, id, kind, params:Dictionary]
 	SNAP,         ## [SNAP, server_time, ids:PackedInt32Array, xy:PackedFloat32Array, flags:PackedByteArray (1 = cloaked), hp:PackedByteArray (0-255 of max)]
 	SHOT,         ## [SHOT, params:Dictionary]  enemy bullet launch state
@@ -41,11 +41,44 @@ enum M {
 	HITS,         ## [HITS, Dictionary id -> damage]
 	CLAIM,        ## [CLAIM, pickup_id]
 	DOWN,         ## [DOWN]  lost its last life
+	READY,        ## [READY, level]  this phone has the sector scene loaded
+	SYNC,         ## [SYNC]  resend a SPAWN for everything alive (scene reload, reconnect)
 }
 
 var mode: Mode = Mode.OFF
 var my_peer: int = 0          ## Client: id the server gave us
 var seat: int = 0             ## Client: 0 or 1
+## Client: true between ENet connect and disconnect.
+var server_connected: bool = false
+## Client: the co-op session object. It is a child of this autoload so it
+## survives the scene reload at every sector change and every respawn; the
+## current Main attaches itself as its world (NetClient.attach).
+var client: Node = null
+
+
+## Phone: start a co-op session against a room server.
+func start_coop(address: String, port: int = DEFAULT_PORT, player_name: String = "Pilot") -> int:
+	leave_coop(false)
+	SaveSystem.begin_coop_hold()
+	var c: Node = load("res://scripts/net/NetClient.gd").new()
+	c.name = "Client"
+	c.player_name = player_name
+	add_child(c)
+	client = c
+	var err: int = connect_to(address, port)
+	if err != OK:
+		leave_coop(false)
+	return err
+
+
+## Phone: end the co-op session and put the solo run, money and lives back
+## exactly as they were when it started (SaveSystem co-op hold).
+func leave_coop(_restore_solo: bool = true) -> void:
+	stop()
+	if client != null and is_instance_valid(client):
+		client.queue_free()
+	client = null
+	SaveSystem.end_coop_hold()
 
 ## Test hooks: simulated one-way latency (ms) and loss (0-1) on everything
 ## this process SENDS. Both ends set it -> RTT = 2x.
@@ -119,8 +152,10 @@ func stop() -> void:
 	_peers.clear()
 	_ids.clear()
 	_delayed.clear()
+	_hits = {}
 	mode = Mode.OFF
 	my_peer = 0
+	server_connected = false
 
 
 func peers() -> Array:
@@ -203,6 +238,7 @@ func _process(delta: float) -> void:
 					peer.set_timeout(0, 10000, 20000)   # 20 s before a silent phone counts as gone
 					peer_joined.emit(id)
 				else:
+					server_connected = true
 					connected.emit()
 			ENetConnection.EVENT_DISCONNECT:
 				if mode == Mode.SERVER:
@@ -213,6 +249,7 @@ func _process(delta: float) -> void:
 						peer_left.emit(gone)
 				else:
 					_server_peer = null
+					server_connected = false
 					disconnected.emit()
 			ENetConnection.EVENT_RECEIVE:
 				var pkt: PackedByteArray = peer.get_packet()

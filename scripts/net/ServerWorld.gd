@@ -8,6 +8,7 @@ extends Node
 const FIELD := Vector2i(816, 1800)   ## Fixed play field (phones: same x, may show less height)
 const SNAP_EVERY: float = 0.05       ## 20 Hz snapshots
 const CLEAR_PAUSE: float = 3.0       ## Seconds between sectors
+const READY_TIMEOUT: float = 15.0    ## Longest wait for a phone to load the next sector
 
 var port: int = Net.DEFAULT_PORT
 var start_sector: int = 1
@@ -28,6 +29,7 @@ var _started: bool = false
 var _over: bool = false
 var _sectors_done: int = 0
 var _clock: float = 0.0
+var _ready_wait: float = 0.0
 ## Stats for tests / logs
 var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0}
 
@@ -81,7 +83,7 @@ func _on_join(peer: int) -> void:
 	s.set_meta("peer", peer)
 	add_child(s)   # NOT under world: never replicated
 	ships[peer] = s
-	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, seat])
+	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, seat, start_sector])
 	print("ServerWorld: peer ", peer, " joined as seat ", seat)
 
 
@@ -103,9 +105,16 @@ func _on_msg(peer: int, msg: Array) -> void:
 				return
 			seats[peer]["name"] = str(msg[2]) if msg.size() > 2 else ""
 			seats[peer]["joined"] = true
-			if not _started and _joined() >= expected:
+		Net.M.READY:
+			# The phone has the sector scene up. The first sector starts when
+			# every expected seat is ready; later sectors in _process.
+			if seats.has(peer):
+				seats[peer]["ready"] = true
+			if not _started and _joined() >= expected and _all_ready():
 				_started = true
 				_begin_sector(start_sector)
+		Net.M.SYNC:
+			_send_sync(peer)
 		Net.M.SHIP:
 			var st: Dictionary = msg[1]
 			var ship: Area2D = ships.get(peer)
@@ -137,6 +146,25 @@ func _on_msg(peer: int, msg: Array) -> void:
 			seats[peer]["out"] = true
 			seats[peer]["alive"] = false
 			_check_over()
+
+
+## Every seat still in the run has its scene loaded.
+func _all_ready() -> bool:
+	for p in seats:
+		if not seats[p]["out"] and not seats[p].get("ready", false):
+			return false
+	return true
+
+
+## One SPAWN per living object, to one phone (it reloaded its scene for a
+## respawn or a new sector, or it reconnected), plus the sector it is in.
+func _send_sync(peer: int) -> void:
+	if not _started or _clear_t >= 0.0:
+		return   # between sectors: the old world is about to be wiped, send nothing
+	for id in entities.keys():
+		var n = entities[id]
+		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_node_ready():
+			_send_spawn(n, peer)
 
 
 func _joined() -> int:
@@ -183,6 +211,9 @@ func _process(delta: float) -> void:
 			_clear_t = CLEAR_PAUSE
 			stats.sectors += 1
 			_sectors_done += 1
+			for p in seats:
+				seats[p]["ready"] = false   # each phone reloads its scene for the next sector
+			_ready_wait = 0.0
 			Net.broadcast([Net.M.SECTOR_CLEAR, GameState.current_level])
 			print("ServerWorld: sector ", GameState.current_level, " clear")
 	if _clear_t >= 0.0:
@@ -190,6 +221,12 @@ func _process(delta: float) -> void:
 		if _clear_t < 0.0:
 			if GameState.current_level >= GameState.MAX_LEVEL or _sectors_done >= max_sectors:
 				_game_over(GameState.current_level >= GameState.MAX_LEVEL)
+				return
+			# Next sector once every phone still in the run has loaded it, or
+			# after READY_TIMEOUT (a slow or silent phone does not hold the room).
+			_ready_wait += delta
+			if not _all_ready() and _ready_wait < READY_TIMEOUT:
+				_clear_t = 0.0
 				return
 			_revive_all()
 			_begin_sector(GameState.current_level + 1)
@@ -242,7 +279,7 @@ func _on_child(n: Node) -> void:
 		n.ready.connect(_send_beam.bind(n), CONNECT_ONE_SHOT)
 
 
-func _send_spawn(n: Node) -> void:
+func _send_spawn(n: Node, only_peer: int = 0) -> void:
 	var id: int = int(n.get_meta("nid"))
 	var kind: String = ""
 	var p: Dictionary = {"p": n.position}
@@ -267,6 +304,9 @@ func _send_spawn(n: Node) -> void:
 		kind = "pickup"
 		p["t"] = n.type
 		p["m"] = n.money_value
+	if only_peer != 0:
+		Net.send(only_peer, [Net.M.SPAWN, id, kind, p])
+		return
 	stats.spawns += 1
 	Net.broadcast([Net.M.SPAWN, id, kind, p])
 

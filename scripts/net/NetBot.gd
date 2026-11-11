@@ -50,7 +50,10 @@ func _ready() -> void:
 	nc.ship_state = func() -> Dictionary: return {"p": ship.position, "a": true, "w": 0, "l": 5, "f": true}
 	add_child(nc)
 	nc.sector_started.connect(func(l: int) -> void: _sectors.append(l))
-	nc.sector_cleared.connect(func(l: int) -> void: _cleared.append(l))
+	nc.sector_cleared.connect(func(l: int) -> void:
+		_cleared.append(l)
+		Net.send(0, [Net.M.READY, l + 1]))   # a bot has nothing to load
+	nc.welcomed.connect(func(_p: int, _s: int) -> void: Net.send(0, [Net.M.READY, nc.start_sector]))
 	nc.game_over.connect(_on_over)
 	var err: int = Net.connect_to(host, port)
 	print(bot_name, ": connecting ", host, ":", port, " err=", err)

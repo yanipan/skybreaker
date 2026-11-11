@@ -21,8 +21,17 @@ signal welcomed(peer: int, seat: int)
 const INTERP: float = 0.10
 const SHIP_EVERY: float = 1.0 / 30.0
 
-var world: Node                 ## Where puppets/shots go (Main, or a test world)
+## Where puppets/shots go: the current Main (or a test world). The session
+## object outlives Main (it is reloaded at every sector change and respawn),
+## so a new Main calls attach(self). While no world is attached, world
+## messages are dropped (attach asks the server for a SYNC: one SPAWN per
+## living object) and flow messages are kept and replayed after the attach.
+var world: Node
 var player_name: String = "Pilot"
+var start_sector: int = 1       ## From HELLO
+var _flow_queue: Array = []     ## SECTOR / SECTOR_CLEAR / GAME_OVER / ALERT seen while detached
+const FLOW_KINDS: Array = [Net.M.SECTOR, Net.M.SECTOR_CLEAR, Net.M.GAME_OVER, Net.M.ALERT]
+const WORLD_KINDS: Array = [Net.M.SPAWN, Net.M.SNAP, Net.M.SHOT, Net.M.BEAM, Net.M.KILL, Net.M.DESPAWN, Net.M.GRANT]
 ## Callable returning this phone's ship state Dictionary {p, a, w, l, f, ...};
 ## defaults to reading the node in group "player".
 var ship_state: Callable
@@ -39,6 +48,33 @@ var stats := {"spawns": 0, "shots": 0, "kills": 0, "my_kills": 0, "grants": 0, "
 func _ready() -> void:
 	Net.message.connect(_on_msg)
 	Net.connected.connect(func() -> void: Net.send(0, [Net.M.JOIN, Net.PROTO, player_name]))
+	if Net.server_connected:
+		Net.send(0, [Net.M.JOIN, Net.PROTO, player_name])
+
+
+## A freshly loaded Main (or a test world) becomes the place puppets live.
+## Everything from the previous scene died with it, so the tables are reset,
+## the server is asked to resend what is alive, and it is told this phone is
+## ready for `level`.
+func attach(w: Node, level: int) -> void:
+	world = w
+	puppets.clear()
+	pickups.clear()
+	_buf.clear()
+	_shots.clear()
+	w.tree_exiting.connect(_detach.bind(w), CONNECT_ONE_SHOT)
+	Net.send(0, [Net.M.SYNC])
+	Net.send(0, [Net.M.READY, level])
+	if not _flow_queue.is_empty():
+		var q: Array = _flow_queue
+		_flow_queue = []
+		for m in q:
+			_on_msg.call_deferred(0, m)
+
+
+func _detach(w: Node) -> void:
+	if world == w:
+		world = null
 
 
 func _now() -> float:
@@ -51,10 +87,18 @@ func render_time() -> float:
 
 
 func _on_msg(_peer: int, msg: Array) -> void:
-	match int(msg[0]):
+	var kind: int = int(msg[0])
+	if world == null or not is_instance_valid(world):
+		if kind in FLOW_KINDS:
+			_flow_queue.append(msg)
+			return
+		if kind in WORLD_KINDS:
+			return
+	match kind:
 		Net.M.HELLO:
 			Net.my_peer = int(msg[2])
 			Net.seat = int(msg[3])
+			start_sector = int(msg[4]) if msg.size() > 4 else 1
 			welcomed.emit(Net.my_peer, Net.seat)
 		Net.M.SECTOR:
 			_clear()
@@ -99,6 +143,8 @@ func _clear() -> void:
 
 
 func _spawn(id: int, kind: String, p: Dictionary) -> void:
+	if puppets.has(id) or pickups.has(id):
+		return   # a SYNC answer and the normal SPAWN can both carry the same object
 	stats.spawns += 1
 	var n: Node2D = null
 	match kind:
@@ -298,8 +344,17 @@ func _grant(id: int, peer: int) -> void:
 	k.queue_free()
 
 
+## This phone's ship as the server and the partner need it. No ship in the
+## scene (dead, between scenes) = not alive.
 func _default_ship_state() -> Dictionary:
-	var me: Node2D = get_tree().get_first_node_in_group(&"player") as Node2D
-	if me == null:
-		return {}
-	return {"p": me.global_position, "a": me.visible}
+	var me = get_tree().get_first_node_in_group(&"player")
+	if me == null or not is_instance_valid(me) or not (me is Node2D):
+		return {"a": false}
+	var st: Dictionary = {"p": me.global_position, "a": me.visible, "n": player_name}
+	if "weapon_type" in me:
+		st["w"] = int(me.weapon_type)
+		if "weapon_levels" in me:
+			st["l"] = int(me.weapon_levels.get(me.weapon_type, 1))
+	if "_is_firing" in me:
+		st["f"] = bool(me._is_firing) and not bool(me.get("firing_locked"))
+	return st

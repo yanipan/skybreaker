@@ -37,7 +37,43 @@ func _ready() -> void:
 
 ## Write the current GameState to disk. Cheap (JSON < 1KB, single file
 ## write) — safe to call on every state change rather than batching.
+## CO-OP HOLD: a co-op session plays with the same GameState fields as a solo
+## run (level, lives, money, weapons). begin_coop_hold() keeps a copy of the
+## solo state IN MEMORY (it does not touch the disk); until end_coop_hold()
+## every save_game() is a no-op, so nothing a co-op run does can reach the
+## save file, and end_coop_hold() puts the solo state back in memory. A crash
+## in the middle leaves the solo save on disk exactly as it was.
+var _coop_hold: bool = false
+var _coop_snapshot: Dictionary = {}
+var _collect_only: bool = false
+
+
+func begin_coop_hold() -> void:
+	if _coop_hold:
+		return
+	_collect_only = true
+	save_game()            # fills _save_data from GameState, writes nothing
+	_collect_only = false
+	_coop_snapshot = _save_data.duplicate(true)
+	_coop_hold = true
+
+
+func end_coop_hold() -> void:
+	if not _coop_hold:
+		return
+	_coop_hold = false
+	_save_data = _coop_snapshot.duplicate(true)
+	_coop_snapshot = {}
+	_apply_save_data()
+
+
+func coop_hold_active() -> bool:
+	return _coop_hold
+
+
 func save_game() -> void:
+	if _coop_hold:
+		return
 	_save_data = {
 		"version": SAVE_VERSION,
 		# --- Meta / progression ---
@@ -84,6 +120,8 @@ func save_game() -> void:
 		"respawn_energy_cells": GameState.respawn_energy_cells,
 		"respawn_torpedo_tier": GameState.respawn_torpedo_tier,
 	}
+	if _collect_only:
+		return
 	# Write the staging file fully, close it, then swap it in. The real file
 	# is never opened for writing, so a kill mid-write leaves it intact.
 	var file := FileAccess.open(TMP_PATH, FileAccess.WRITE)

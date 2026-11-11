@@ -89,7 +89,18 @@ var _shake_time_left: float = 0.0
 var _shake_duration: float = 0.0
 
 
+## CO-OP (docs/MULTIPLAYER_PLAN.md). True while this Main is one phone of a
+## co-op room: the server owns the enemies and the sector flow, so there is no
+## local EnemySpawner, no cutscenes, no real pause, and nothing is reported
+## to the solo leaderboard or written to the solo save.
+var _coop: bool = false
+var _coop_level: int = 0          ## Sector this scene was loaded for
+var _partners: Dictionary = {}    ## peer -> PartnerShip
+var _coop_over: bool = false
+
+
 func _ready() -> void:
+	_coop = Net.is_client() and Net.client != null and is_instance_valid(Net.client)
 	Telemetry.reset_sector_counters()
 	# Same run seed + sector = same waves (friend challenges).
 	GameRng.seed_sector(GameState.run_seed, GameState.current_level)
@@ -114,7 +125,8 @@ func _ready() -> void:
 	_spawn_hud()
 	_spawn_weapon_meters()
 	_spawn_player()
-	_spawn_enemy_spawner()
+	if not _coop:
+		_spawn_enemy_spawner()
 	_spawn_level_banner()
 	_spawn_mobile_controls()
 	_spawn_physics_watchdog()
@@ -124,6 +136,8 @@ func _ready() -> void:
 	var warped_in: bool = GameState.pending_warp_entry
 	var story_key: StringName = GameState.pending_story_key
 	GameState.pending_story_key = &""
+	if _coop:
+		story_key = &""   # story stays in solo
 	if GameState.pending_warp_entry:
 		GameState.pending_warp_entry = false
 		_begin_entry_sequence()
@@ -142,7 +156,9 @@ func _ready() -> void:
 	# Intro cutscene — plays once on first-ever entry to sector 1, then
 	# `intro_seen` is persisted so a returning player skips it. Deferred one
 	# frame so every _ready finishes before the cutscene pauses the tree.
-	if GameState.resume_pending:
+	if _coop:
+		GameState.resume_pending = false
+	elif GameState.resume_pending:
 		# CONTINUE from the start screen: never replay the intro (even if the
 		# run was saved before it finished), count the player back in instead.
 		# A warp entry is already a safe fly-in, so no countdown on top of it.
@@ -161,8 +177,104 @@ func _ready() -> void:
 	EventBus.screen_shake_requested.connect(_on_screen_shake_requested)
 	EventBus.player_died.connect(_on_player_died)
 	_refresh_hud()
+	if _coop:
+		_coop_setup()
 
 	print("=== Boot complete ===")
+
+
+# --- Co-op ---
+
+## Become the world of the co-op session: puppets and enemy shots are added
+## to this node, the server is asked for everything alive (SYNC) and told
+## this phone has the sector loaded (READY).
+func _coop_setup() -> void:
+	_coop_level = GameState.current_level
+	var c: Node = Net.client
+	c.sector_started.connect(_coop_on_sector_started)
+	c.sector_cleared.connect(_coop_on_sector_cleared)
+	c.game_over.connect(_coop_on_game_over)
+	c.partner_state.connect(_coop_on_partner_state)
+	Net.disconnected.connect(_coop_on_disconnected)
+	c.attach(self, _coop_level)
+	print("CO-OP: sector ", _coop_level, " seat ", Net.seat)
+
+
+## The server started a sector. Normally it is the one this scene was loaded
+## for. If this phone fell behind (it was in its death sequence when the
+## sector ended), jump straight to the server's sector.
+func _coop_on_sector_started(level: int) -> void:
+	if level == _coop_level or _coop_over:
+		return
+	print("CO-OP: behind the server (", _coop_level, " -> ", level, "), jumping")
+	GameState.current_level = level
+	GameState.pending_warp_entry = true
+	Engine.time_scale = 1.0
+	_level_transitioning = true
+	get_tree().reload_current_scene.call_deferred()
+
+
+## The server says the sector is done: play the normal warp. A phone that is
+## busy dying keeps dying; the next sector_started pulls it forward.
+func _coop_on_sector_cleared(level: int) -> void:
+	if level != _coop_level or _level_transitioning or _death_active or _coop_over:
+		return
+	_begin_warp_transition()
+
+
+func _coop_on_partner_state(peer: int, st: Dictionary) -> void:
+	var ship = _partners.get(peer)
+	if ship == null or not is_instance_valid(ship):
+		var script_path: String = "res://scripts/net/PartnerShip.gd"
+		if not ResourceLoader.exists(script_path):
+			return
+		ship = load(script_path).new()
+		ship.peer = peer
+		add_child(ship)
+		# Draw it just under this phone's own ship: same layer as the game
+		# objects (a negative z_index would put it behind the star backdrop),
+		# earlier in the child order than the player.
+		var me = get_tree().get_first_node_in_group(&"player")
+		if me != null and is_instance_valid(me) and me.get_parent() == self:
+			move_child(ship, me.get_index())
+		_partners[peer] = ship
+	ship.apply_state(st)
+
+
+func _coop_on_game_over(won: bool) -> void:
+	_coop_end("RUN COMPLETE" if won else "RUN OVER")
+
+
+func _coop_on_disconnected() -> void:
+	_coop_end("CONNECTION LOST")
+
+
+## Co-op is over for this phone: say why, then back to the menu with the
+## solo run, money and lives exactly as they were before co-op started.
+func _coop_end(text: String) -> void:
+	if _coop_over:
+		return
+	_coop_over = true
+	_level_transitioning = true
+	Engine.time_scale = 1.0
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_override("font", Fonts.HEADLINE)
+	l.add_theme_font_size_override("font_size", 60)
+	l.add_theme_color_override("font_color", Color(0.65, 0.95, 1.0))
+	l.add_theme_color_override("font_outline_color", Color.BLACK)
+	l.add_theme_constant_override("outline_size", 6)
+	l.size = Vector2(_viewport_size.x, 80)
+	l.position = Vector2(0, _viewport_size.y * 0.40)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.z_index = 4000
+	add_child(l)
+	await get_tree().create_timer(3.0, true, false, true).timeout
+	if not is_inside_tree():
+		return
+	get_tree().paused = false
+	Net.leave_coop()
+	get_tree().change_scene_to_file("res://scenes/main/StartScreen.tscn")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -698,7 +810,8 @@ func _finish_warp_transition() -> void:
 	var player := get_tree().get_first_node_in_group(&"player")
 	Telemetry.track("sector_complete", Telemetry.snapshot(player))
 	Telemetry.flush()
-	Online.record_sector(GameState.current_level, _spawner.get_mission_time() if _spawner != null else 0.0)
+	if not _coop:
+		Online.record_sector(GameState.current_level, _spawner.get_mission_time() if _spawner != null else 0.0)
 	if player != null:
 		GameState.snapshot_player(player)
 	# Sidekick survives the jump if one is currently in the field.
@@ -827,7 +940,10 @@ func _on_player_died() -> void:
 	if lives_after <= 0:
 		Telemetry.track("game_over", {"score": GameState.run_score})
 		Telemetry.end_run()
-		Online.finish_run(false)
+		if _coop:
+			Net.send(0, [Net.M.DOWN])   # out of lives: the partner plays on
+		else:
+			Online.finish_run(false)
 	Telemetry.flush()
 	if player != null and lives_after > 0:
 		GameState.stash_respawn(player)
@@ -1020,6 +1136,8 @@ func _snapshot_and_save() -> void:
 func _notification(what: int) -> void:
 	if what != NOTIFICATION_APPLICATION_PAUSED and what != NOTIFICATION_APPLICATION_FOCUS_OUT:
 		return
+	if _coop:
+		return   # the room does not stop for one phone (phase 4: ghost the ship)
 	if not is_inside_tree() or not GameState.has_active_run:
 		return
 	if _pause_layer != null or _pause_pending:
@@ -1058,7 +1176,7 @@ func _open_pause() -> void:
 	if _pause_layer != null:
 		return
 	_snapshot_and_save()
-	get_tree().paused = true
+	get_tree().paused = not _coop   # co-op: the menu opens, the world keeps going
 	_pause_layer = CanvasLayer.new()
 	_pause_layer.layer = 110
 	_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -1150,6 +1268,9 @@ func _on_main_menu() -> void:
 	# action, so the redundancy is cheap insurance against a store crash.
 	GameState.save_run_state()
 	get_tree().paused = false
+	if _coop:
+		Net.send(0, [Net.M.DOWN])
+		Net.leave_coop()
 	get_tree().change_scene_to_file("res://scenes/main/StartScreen.tscn")
 
 
@@ -1173,4 +1294,6 @@ func _finish_death_sequence() -> void:
 		# and saved in _on_player_died. Visual only: bounce to the start screen.
 		print("GAME OVER — returning to start screen")
 		GameState.reset_mission_stats()
+		if _coop:
+			Net.leave_coop()   # solo run, money and lives back as they were
 		get_tree().change_scene_to_file("res://scenes/main/StartScreen.tscn")
