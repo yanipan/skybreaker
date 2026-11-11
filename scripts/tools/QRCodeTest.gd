@@ -51,8 +51,8 @@ func _run() -> void:
 	var texts: Array = [
 		"HELLO",
 		"AB3K9X",
-		"https://shimonster.com/skybreaker/join/AB3K9X",
-		"https://shimonster.com/skybreaker/join/ZZ9PQ4?from=VIPER&v=4",
+		"https://yanipan.github.io/skybreaker/join/?c=AB3K9X",
+		"https://yanipan.github.io/skybreaker/join/?c=ZZ9PQ4&from=VIPER",
 		_long(100),
 		_long(200),
 		"Pilot Zoë ✈ 24 sectors",

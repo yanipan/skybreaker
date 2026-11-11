@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Join a Skybreaker co-op run</title>
+<meta property="og:title" content="Join my Skybreaker co-op run">
+<meta property="og:description" content="Open Skybreaker, tap CO-OP, then JOIN WITH CODE.">
+<link rel="icon" href="icon.png">
+<style>
+  :root { --bg:#0a0e17; --panel:#121826; --ink:#e6ecf5; --muted:#8a94a6; --accent:#5cc8ff; --gold:#ffd24a; --rule:#1f2840; --green:#5fe08a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); }
+  body { font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased;
+         min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 16px;
+         background:radial-gradient(ellipse at 50% -10%, #1b2748 0%, var(--bg) 60%); }
+  main { width:100%; max-width:420px; background:var(--panel); border:1px solid var(--rule); border-radius:18px; padding:28px 22px 24px; text-align:center; }
+  img { width:84px; height:84px; border-radius:20px; display:block; margin:0 auto 12px; }
+  h1 { font-size:22px; margin:0 0 4px; letter-spacing:.02em; }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 20px; }
+  .label { color:var(--muted); font-size:12px; letter-spacing:.14em; text-transform:uppercase; }
+  .code { font:700 44px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--gold); letter-spacing:.12em; margin:6px 0 14px; word-break:break-all; }
+  button, .store { display:block; width:100%; border-radius:12px; padding:13px 14px; font:600 16px/1 inherit; cursor:pointer; text-decoration:none; }
+  button { background:transparent; color:var(--gold); border:1.5px solid var(--gold); }
+  button.done { color:var(--green); border-color:var(--green); }
+  ol { text-align:left; margin:20px 0 6px; padding-left:22px; }
+  li { margin:7px 0; }
+  li b { color:var(--accent); font-weight:600; }
+  hr { border:0; border-top:1px solid var(--rule); margin:20px 0 16px; }
+  .store { background:#1a2540; color:var(--ink); border:1px solid var(--rule); margin-top:10px; }
+  .note { color:var(--muted); font-size:13px; margin:14px 0 0; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <img src="icon.png" alt="Skybreaker">
+  <h1>SKYBREAKER CO-OP</h1>
+  <p class="sub" id="lead">A friend invited you to fly a run together.</p>
+
+  <div id="has">
+    <div class="label">Room code</div>
+    <div class="code" id="code"></div>
+    <button id="copy" type="button">Copy the code</button>
+    <ol>
+      <li>Open <b>Skybreaker</b> on this phone.</li>
+      <li>Tap <b>CO-OP</b>, then <b>JOIN WITH CODE</b>.</li>
+      <li>Type the code. You start together in sector 1.</li>
+    </ol>
+    <p class="note">A code works for about 10 minutes, until the run starts.</p>
+  </div>
+
+  <div id="none" class="hide">
+    <p>This invite has no room code. Ask your friend to send it again, or open Skybreaker, tap <b>CO-OP</b> and <b>PLAY NOW</b> to find a partner.</p>
+  </div>
+
+  <hr>
+  <div class="label">Don't have the game yet?</div>
+  <a class="store" id="ios" href="https://apps.apple.com/app/id6827568754">Get it on the App Store</a>
+  <a class="store" id="android" href="https://play.google.com/store/apps/details?id=com.origami.skybreaker">Get it on Google Play</a>
+</main>
+<script>
+(function () {
+  // The code comes as ?c=ABC123 (or #ABC123). Only the room alphabet is shown.
+  var raw = (new URLSearchParams(location.search).get('c') || location.hash.replace('#', '') || '').toUpperCase();
+  var code = raw.replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  if (code.length !== 6) {
+    document.getElementById('has').className = 'hide';
+    document.getElementById('none').className = '';
+  } else {
+    document.getElementById('code').textContent = code.slice(0, 3) + ' ' + code.slice(3);
+    var b = document.getElementById('copy');
+    b.addEventListener('click', function () {
+      var ok = function () { b.textContent = 'Copied'; b.className = 'done'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(ok, function () {});
+      else { var t = document.createElement('textarea'); t.value = code; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); ok(); } catch (e) {} document.body.removeChild(t); }
+    });
+  }
+  // Show the store that matches this phone first.
+  var ua = navigator.userAgent || '';
+  if (/Android/i.test(ua)) document.getElementById('ios').className = 'store hide';
+  else if (/iPhone|iPad|iPod/i.test(ua)) document.getElementById('android').className = 'store hide';
+})();
+</script>
+</body>
+</html>

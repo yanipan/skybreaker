@@ -75,6 +75,8 @@ func _coop_dev_args() -> void:
 				if kv.size() > 1: auto = kv[1]
 			"pid":
 				if kv.size() > 1: LobbyApi.player_id_override = kv[1]
+			"scan":   # offer the QR scanner on desktop too (it is phones-only otherwise)
+				load("res://scripts/net/CoopLobbyUI.gd").scan_on_desktop = true
 			"autopilot":
 				pilot_args["autopilot"] = true
 				pilot_wanted = true

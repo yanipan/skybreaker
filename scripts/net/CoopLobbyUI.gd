@@ -10,7 +10,9 @@ extends "res://scripts/OnlineUI.gd"
 ## In a room: both names, then STARTING IN 3-2-1, then the normal game scene.
 ## Leaving any of these screens leaves the room and puts the solo run back.
 
-const INVITE_URL: String = "https://shimonster.com/skybreaker/join/"
+## The invite page (docs/join/index.html, served by GitHub Pages with the
+## privacy policy). The code travels as ?c=ABC123.
+const INVITE_URL: String = "https://yanipan.github.io/skybreaker/join/?c="
 const MAIN_SCENE: String = "res://scenes/main/Main.tscn"
 const CONNECT_SECS: float = 8.0
 const PARTNER_WAIT_SECS: float = 15.0   ## A matched room whose partner never shows up
@@ -41,6 +43,7 @@ func _ready() -> void:
 
 func _screen(title: String) -> VBoxContainer:
 	_gen += 1
+	_stop_camera()
 	_names = null
 	_status = null
 	return _open(title)
@@ -133,9 +136,27 @@ func _friend_screen() -> void:
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		tex.custom_minimum_size = Vector2(_vw * 0.86, side)
-		box.add_child(tex)
-	box.add_child(_label("Your friend opens CO-OP, taps JOIN WITH CODE\nand types the code.", _font() * 0.9, COL_MUTED))
+		tex.custom_minimum_size = Vector2(side, side)
+		# Branded: the code itself stays plain black on white (it has to scan
+		# from any phone), the frame and caption carry the game's look.
+		var card := PanelContainer.new()
+		card.name = "InviteCard"
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(1, 1, 1)
+		sb.border_color = COL_GOLD
+		sb.set_border_width_all(maxi(3, int(side * 0.022)))
+		sb.set_corner_radius_all(int(side * 0.06))
+		sb.set_content_margin_all(side * 0.03)
+		card.add_theme_stylebox_override("panel", sb)
+		card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var inner := VBoxContainer.new()
+		inner.add_theme_constant_override("separation", 0)
+		inner.add_child(tex)
+		var cap := _label("SKYBREAKER CO-OP", _font() * 0.75, Color(0.10, 0.12, 0.20), Fonts.HEADLINE)
+		inner.add_child(cap)
+		card.add_child(inner)
+		box.add_child(card)
+	box.add_child(_label("Your friend scans this with the phone camera,\nor opens CO-OP > JOIN WITH CODE and types the code.", _font() * 0.9, COL_MUTED))
 	_names = _label("", _font() * 1.2, COL_CYAN)
 	box.add_child(_names)
 	_status = _label("WAITING FOR YOUR FRIEND...", _font(), COL_GREEN)
@@ -171,8 +192,137 @@ func _join_screen() -> void:
 		_join(code)
 	edit.text_submitted.connect(func(_t: String) -> void: go_join.call())
 	box.add_child(_button("JOIN", COL_GREEN, go_join))
+	if camera_available():
+		box.add_child(_button("SCAN QR CODE", COL_CYAN, _scan_screen))
 	box.add_child(_button("BACK", COL_RED, open_menu))
-	edit.grab_focus.call_deferred()
+	if not camera_available():
+		edit.grab_focus.call_deferred()   # on a phone the keyboard would cover SCAN
+
+
+# --- Scan a friend's QR with this phone's camera ---
+# NOT YET TRIED ON A REAL PHONE (11/11). The decoder (QRScan) is tested with
+# synthetic camera frames; the camera plumbing below (permission, feed
+# format, CameraTexture.get_image, preview orientation) needs a device.
+
+const SCAN_EVERY: float = 0.25
+## DEV: --scan on the command line offers the scanner on desktop too.
+static var scan_on_desktop: bool = false
+var _cam_feed: CameraFeed = null
+
+
+static func camera_available() -> bool:
+	return OS.has_feature("mobile") or scan_on_desktop
+
+
+func _stop_camera() -> void:
+	if _cam_feed != null:
+		_cam_feed.feed_is_active = false
+	_cam_feed = null
+
+
+func _scan_screen() -> void:
+	_leave_room()
+	var box := _screen("SCAN QR CODE")
+	var gen: int = _gen
+	box.add_child(_label("Point the camera at the QR code\non your friend's screen.", _font(), COL_MUTED))
+	var side: float = minf(_vw * 0.78, _vh * 0.42)
+	var view := TextureRect.new()
+	view.name = "ScanView"
+	view.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	view.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	view.custom_minimum_size = Vector2(side, side)
+	view.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	view.clip_contents = true
+	# The viewfinder is drawn from brightness only, tinted like the HUD: it
+	# works for every camera format and is all the decoder needs anyway.
+	var sh := Shader.new()
+	sh.code = "shader_type canvas_item;\nuniform bool y_only = false;\nvoid fragment() {\n\tvec4 c = texture(TEXTURE, UV);\n\tfloat l = y_only ? c.r : dot(c.rgb, vec3(0.299, 0.587, 0.114));\n\tCOLOR = vec4(l * 0.55, l * 0.95, l, 1.0);\n}\n"
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	view.material = mat
+	var frame := ScanFrame.new()
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	view.add_child(frame)
+	box.add_child(view)
+	_status = _label("STARTING THE CAMERA...", _font(), COL_GREEN)
+	box.add_child(_status)
+	box.add_child(_button("TYPE THE CODE INSTEAD", COL_GOLD, _join_screen))
+	box.add_child(_button("BACK", COL_RED, open_menu))
+	if OS.get_name() == "Android" and not ("android.permission.CAMERA" in OS.get_granted_permissions()):
+		OS.request_permission("android.permission.CAMERA")
+		var waited: float = 0.0
+		while not ("android.permission.CAMERA" in OS.get_granted_permissions()) and waited < 30.0:
+			await get_tree().create_timer(0.5).timeout
+			waited += 0.5
+			if gen != _gen:
+				return
+	if "monitoring_feeds" in CameraServer:
+		CameraServer.set("monitoring_feeds", true)   # Godot 4.5+: feeds are listed only while monitoring
+	await get_tree().create_timer(0.6).timeout
+	if gen != _gen:
+		return
+	var feed: CameraFeed = null
+	for f in CameraServer.feeds():
+		if feed == null or (f as CameraFeed).get_position() == CameraFeed.FEED_BACK:
+			feed = f
+	if feed == null:
+		_status.text = "NO CAMERA. TYPE THE CODE INSTEAD."
+		_status.add_theme_color_override("font_color", COL_RED)
+		return
+	# Android lists formats and needs one chosen; take the one nearest 640x480.
+	if feed.has_method("get_formats") and feed.has_method("set_format"):
+		var formats: Array = feed.get_formats()
+		var pick: int = -1
+		var best: float = INF
+		for i in formats.size():
+			var fm: Dictionary = formats[i]
+			var d: float = absf(float(fm.get("width", 0)) - 640.0) + absf(float(fm.get("height", 0)) - 480.0)
+			if d < best:
+				best = d
+				pick = i
+		if pick >= 0:
+			feed.set_format(pick, {})
+	feed.feed_is_active = true
+	_cam_feed = feed
+	var tex := CameraTexture.new()
+	tex.camera_feed_id = feed.get_id()
+	var y_only: bool = feed.get_datatype() == CameraFeed.FEED_YCBCR_SEP
+	tex.which_feed = CameraServer.FEED_Y_IMAGE if y_only else CameraServer.FEED_RGBA_IMAGE
+	mat.set_shader_parameter("y_only", y_only)
+	view.texture = tex
+	_status.text = "LOOKING FOR A CODE..."
+	while gen == _gen:
+		await get_tree().create_timer(SCAN_EVERY).timeout
+		if gen != _gen:
+			return
+		var img: Image = tex.get_image()
+		if img == null or img.is_empty():
+			continue
+		var code: String = QRScan.room_code(QRScan.decode_image(img))
+		if code != "":
+			Input.vibrate_handheld(60)
+			_join(code)   # opens a new screen, which stops the camera
+			return
+
+
+## Gold corner brackets and the game's name over the viewfinder.
+class ScanFrame extends Control:
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var col := Color(1.0, 0.82, 0.29)
+		var m: float = size.x * 0.12
+		var l: float = size.x * 0.16
+		var w: float = maxf(3.0, size.x * 0.012)
+		for c in [Vector2(m, m), Vector2(size.x - m, m), Vector2(m, size.y - m), Vector2(size.x - m, size.y - m)]:
+			var dx: float = l if c.x < size.x * 0.5 else -l
+			var dy: float = l if c.y < size.y * 0.5 else -l
+			draw_line(c, c + Vector2(dx, 0), col, w)
+			draw_line(c, c + Vector2(0, dy), col, w)
+		var f: Font = Fonts.HEADLINE
+		var fs: int = int(size.x * 0.055)
+		draw_string(f, Vector2(0, size.y - m * 0.35), "SKYBREAKER CO-OP", HORIZONTAL_ALIGNMENT_CENTER, size.x, fs, Color(col, 0.9))
 
 
 func _join(code: String) -> void:
@@ -340,6 +490,10 @@ func dev_auto(action: String) -> void:
 			_play_friend()
 		"quick":
 			_play_now()
+		"scan":
+			_scan_screen()
+		"joinscreen":
+			_join_screen()
 		"join":
 			_screen("JOIN WITH CODE")
 			var gen: int = _gen
