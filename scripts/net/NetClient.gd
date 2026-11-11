@@ -23,6 +23,9 @@ signal shop_bought(peer: int, item: String)
 signal shop_timer(seconds: float)
 signal shop_closed
 signal revived(peer: int, by: int)
+signal lobby_changed(players: Array, needed: int)   ## players = [[peer, seat, name], ...]
+signal go(start_sector: int, run_seed: int)
+signal refused(reason: String)
 
 const INTERP: float = 0.10
 const SHIP_EVERY: float = 1.0 / 30.0
@@ -147,6 +150,13 @@ func _on_msg(_peer: int, msg: Array) -> void:
 			shop_closed.emit()
 		Net.M.REVIVE:
 			revived.emit(int(msg[1]), int(msg[2]))
+		Net.M.LOBBY:
+			lobby_changed.emit(msg[1], int(msg[2]))
+		Net.M.GO:
+			start_sector = int(msg[1])
+			go.emit(int(msg[1]), int(msg[2]))
+		Net.M.REFUSED:
+			refused.emit(str(msg[1]))
 
 
 ## The server clock stood still (shop) while this phone's clock did not: drop

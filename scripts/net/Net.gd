@@ -15,7 +15,7 @@ signal disconnected
 signal message(peer_id: int, msg: Array)   ## peer_id = 0 on the client side
 
 enum Mode { OFF, SERVER, CLIENT }
-const PROTO: int = 3
+const PROTO: int = 4
 const DEFAULT_PORT: int = 24620
 const CH_RELIABLE: int = 0
 const CH_FAST: int = 1
@@ -41,6 +41,9 @@ enum M {
 	SHOP_TIMER,   ## [SHOP_TIMER, seconds]  the slower player is on the clock
 	SHOP_CLOSE,   ## [SHOP_CLOSE]  everyone ready: GET READY countdown, then the world runs
 	REVIVE,       ## [REVIVE, peer, by_peer]  a downed ship is back (its pod was picked up)
+	LOBBY,        ## [LOBBY, players:Array of [peer, seat, name], needed]  who is in the room before the run
+	GO,           ## [GO, start_sector, seed]  everyone is here: load the game and answer READY
+	REFUSED,      ## [REFUSED, reason]  "version" = update the game to play co-op
 	# Phone -> server
 	JOIN = 50,    ## [JOIN, proto, name]
 	SHIP,         ## [SHIP, state:Dictionary]  pos, alive, weapon, power, firing
@@ -169,6 +172,13 @@ func stop() -> void:
 
 func peers() -> Array:
 	return _peers.keys()
+
+
+## Server: drop one phone (after telling it why).
+func kick(peer_id: int) -> void:
+	var p: ENetPacketPeer = _peers.get(peer_id)
+	if p != null:
+		p.peer_disconnect_later()
 
 
 ## Server: one peer. Client: peer_id ignored (always the server).

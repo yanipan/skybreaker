@@ -20,6 +20,15 @@ var duration_mul: float = 1.0                ## Test hook: shorter sectors
 ## Seconds the slower player gets once the other has left the shop (0 = no
 ## limit: friends). Matched games set it (plan: 30).
 var shop_timer: float = 0.0
+## Room lifetime before the run starts (the lobby service starts one process
+## per room): give up when nobody is connected for EMPTY_SECS, or when the
+## room has not filled within lobby_timeout (a friend code lives 10 minutes).
+var room_code: String = ""
+var lobby_timeout: float = 600.0
+const EMPTY_SECS: float = 45.0
+var _lobby_age: float = 0.0
+var _empty_for: float = 0.0
+var _go_sent: bool = false
 
 var world: Node2D
 var spawner: EnemySpawner = null
@@ -75,6 +84,8 @@ func _parse_args() -> void:
 			"sectors": max_sectors = int(kv[1])
 			"duration_mul": duration_mul = float(kv[1])
 			"shop_timer": shop_timer = float(kv[1])
+			"room": room_code = kv[1]
+			"lobby_timeout": lobby_timeout = float(kv[1])
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
 	if run_seed == 0:
@@ -84,7 +95,13 @@ func _parse_args() -> void:
 # --- Peers ---
 
 func _on_join(peer: int) -> void:
-	var seat: int = seats.size()
+	# Lowest free seat (someone may have left the waiting room).
+	var taken: Array = []
+	for q in seats:
+		taken.append(int(seats[q]["seat"]))
+	var seat: int = 0
+	while seat in taken:
+		seat += 1
 	# out = gone for good (left, disconnected); down = no lives left, can be
 	# rescued through its pod and returns anyway at the next sector.
 	seats[peer] = {"seat": seat, "name": "", "alive": true, "out": false, "down": false}
@@ -111,6 +128,14 @@ func _on_left(peer: int) -> void:
 	_shop_ready.erase(peer)
 	_check_shop_done()
 	_check_over()
+	if not _started:
+		# Still in the waiting room: the seat is simply free again.
+		seats.erase(peer)
+		if ships.has(peer):
+			ships[peer].queue_free()
+			ships.erase(peer)
+		_go_sent = false
+		_send_lobby()
 
 
 func _on_msg(peer: int, msg: Array) -> void:
@@ -118,9 +143,16 @@ func _on_msg(peer: int, msg: Array) -> void:
 		Net.M.JOIN:
 			if int(msg[1]) != Net.PROTO:
 				print("ServerWorld: peer ", peer, " wrong protocol ", msg[1])
+				Net.send(peer, [Net.M.REFUSED, "version"])
+				Net.kick(peer)
 				return
-			seats[peer]["name"] = str(msg[2]) if msg.size() > 2 else ""
+			seats[peer]["name"] = str(msg[2]).substr(0, 24) if msg.size() > 2 else ""
 			seats[peer]["joined"] = true
+			_send_lobby()
+			if not _started and not _go_sent and _joined() >= expected:
+				_go_sent = true
+				Net.broadcast([Net.M.GO, start_sector, run_seed])
+				print("ServerWorld: room full, GO")
 		Net.M.READY:
 			# The phone has the sector scene up. The first sector starts when
 			# every expected seat is ready; later sectors in _process.
@@ -179,6 +211,18 @@ func _on_msg(peer: int, msg: Array) -> void:
 		Net.M.SHOP_BUY:
 			if _shop_open:
 				Net.broadcast([Net.M.SHOP_BOUGHT, peer, str(msg[1])], true, peer)
+
+
+## Tell everyone in the waiting room who is here.
+func _send_lobby() -> void:
+	if _started:
+		return
+	var players: Array = []
+	for p in seats:
+		if seats[p].get("joined", false):
+			players.append([p, int(seats[p]["seat"]), str(seats[p]["name"])])
+	Net.broadcast([Net.M.LOBBY, players, expected])
+	print("ServerWorld: lobby ", players.size(), "/", expected)
 
 
 ## Every seat still in the run has its scene loaded.
@@ -336,6 +380,16 @@ func _clear_world() -> void:
 
 
 func _process(delta: float) -> void:
+	if not _started and not _over:
+		# Waiting room: do not live for ever.
+		_lobby_age += delta
+		_empty_for = 0.0 if not Net.peers().is_empty() else _empty_for + delta
+		if _empty_for >= EMPTY_SECS or _lobby_age >= lobby_timeout:
+			print("ServerWorld: room closed before the run (empty ", snappedf(_empty_for, 1.0), " s, age ", snappedf(_lobby_age, 1.0), " s)")
+			_over = true
+			Net.stop()
+			get_tree().quit(0)
+		return
 	if not _started or _over:
 		return
 	if _shop_open or _shop_resume_t >= 0.0:
