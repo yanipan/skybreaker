@@ -767,7 +767,7 @@ func _process(delta: float) -> void:
 				# Line up over the ship, but stand still while a beam is out
 				# so the warning line means what it shows.
 				if not _beam_live():
-					var ship := get_tree().get_first_node_in_group(&"player") as Node2D
+					var ship := Targeting.nearest_ship(get_tree(), global_position) as Node2D
 					if ship != null:
 						position.x = move_toward(position.x, ship.global_position.x, BEAMER_TRACK_SPEED * delta)
 			else:
@@ -789,7 +789,7 @@ func _process(delta: float) -> void:
 		# player's current X. Can't reverse, only steer. Speed ramps up to
 		# 1.5x its base over 2 seconds so the kill window is the first second.
 		position.y += speed * delta * (1.0 + min(_time * 0.25, 0.5))
-		var p := get_tree().get_first_node_in_group(&"player")
+		var p := Targeting.nearest_ship(get_tree(), global_position)
 		if p != null:
 			var dx: float = p.global_position.x - position.x
 			# Strafe rate scales with vertical speed for a believable arc
@@ -920,7 +920,7 @@ func _fire_pattern(pattern: StringName) -> void:
 		&"aimed":
 			# Fast, precise — Dodger/Strafer snipes
 			var dir := Vector2.DOWN
-			var player := get_tree().get_first_node_in_group(&"player")
+			var player := Targeting.nearest_ship(get_tree(), global_position)
 			if player != null:
 				dir = (player.global_position - global_position).normalized()
 			_spawn_enemy_bullet(dir, 4)
@@ -966,7 +966,7 @@ func _fire_pattern(pattern: StringName) -> void:
 				get_parent().add_child(bullet)
 		&"twin_aimed":
 			var tdir := Vector2.DOWN
-			var tp := get_tree().get_first_node_in_group(&"player")
+			var tp := Targeting.nearest_ship(get_tree(), global_position)
 			if tp != null:
 				tdir = (tp.global_position - global_position).normalized()
 			for side in [-1.0, 1.0]:
@@ -1029,7 +1029,7 @@ func _fire_pattern(pattern: StringName) -> void:
 		&"shade_pair":
 			# Two aimed darts a hair apart, fired once per visible window.
 			var sdir := Vector2.DOWN
-			var sp := get_tree().get_first_node_in_group(&"player")
+			var sp := Targeting.nearest_ship(get_tree(), global_position)
 			if sp != null:
 				sdir = (sp.global_position - global_position).normalized()
 			for so in [-0.07, 0.07]:
@@ -1044,7 +1044,7 @@ func _fire_pattern(pattern: StringName) -> void:
 			# One slow shell lobbed at the player's current position; after
 			# its fuse it bursts into a ring of pellets (EnemyBullet.burst_*).
 			var mdir := Vector2.DOWN
-			var mp := get_tree().get_first_node_in_group(&"player")
+			var mp := Targeting.nearest_ship(get_tree(), global_position)
 			if mp != null:
 				mdir = (mp.global_position - global_position).normalized()
 			var shell: EnemyBullet = EnemyBulletScript.new()
@@ -1063,7 +1063,7 @@ func _fire_pattern(pattern: StringName) -> void:
 			# as a "telegraphed snipe" — the player should learn to strafe
 			# whenever a Lancer comes on screen.
 			var ldir := Vector2.DOWN
-			var lp := get_tree().get_first_node_in_group(&"player")
+			var lp := Targeting.nearest_ship(get_tree(), global_position)
 			if lp != null:
 				ldir = (lp.global_position - global_position).normalized()
 			var lbullet: EnemyBullet = EnemyBulletScript.new()

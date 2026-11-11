@@ -619,7 +619,7 @@ func _pattern_homing(count: int) -> void:
 		get_parent().add_child(m)
 
 func _pattern_aimed_burst() -> void:
-	var player := get_tree().get_first_node_in_group(&"player")
+	var player := Targeting.nearest_ship(get_tree(), global_position)
 	if player == null:
 		return
 	var dir: Vector2 = (player.global_position - global_position).normalized()

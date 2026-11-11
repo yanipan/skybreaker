@@ -362,7 +362,7 @@ func _process_motion(delta: float) -> void:
 		_burst()
 		return
 	if homing_turn_rate > 0.0 and _time < homing_secs:
-		var ship: Node2D = get_tree().get_first_node_in_group(&"player") as Node2D
+		var ship: Node2D = Targeting.nearest_ship(get_tree(), global_position) as Node2D
 		if ship != null:
 			var want: float = (ship.global_position - global_position).angle()
 			var cur: float = direction.angle()
