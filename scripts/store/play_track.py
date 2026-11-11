@@ -59,6 +59,14 @@ elif mode == 'production':
     tr = req('PUT', E + '/tracks/production', {'track': 'production', 'releases': [{'name': rname, 'status': 'completed', 'versionCodes': [str(vc)], 'releaseNotes': [{'language': 'en-US', 'text': notes}]}]})
     print('track', json.dumps(tr)[:300])
     print('commit', req('POST', E + ':commit'))
+elif mode == 'promote':
+    # python3 scripts/store/play_track.py promote <versionCode> <release name> <notes file>
+    # Puts an ALREADY UPLOADED bundle (e.g. the internal-track one) on PRODUCTION at full rollout.
+    vc, rname, notes = sys.argv[2], sys.argv[3], open(sys.argv[4]).read().strip()
+    assert len(notes) <= 500
+    tr = req('PUT', E + '/tracks/production', {'track': 'production', 'releases': [{'name': rname, 'status': 'completed', 'versionCodes': [str(vc)], 'releaseNotes': [{'language': 'en-US', 'text': notes}]}]})
+    print('track', json.dumps(tr)[:300])
+    print('commit', req('POST', E + ':commit'))
 elif mode == 'internal':
     aab, notes = sys.argv[2], (sys.argv[3] if len(sys.argv) > 3 else 'Playtest build')
     b = req('POST', f'{UP}/edits/{edit}/bundles?uploadType=media', open(aab, 'rb').read(), 'application/octet-stream')

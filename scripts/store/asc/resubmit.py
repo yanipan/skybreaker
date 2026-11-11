@@ -67,9 +67,16 @@ must(st, j, f'attach build {build_no}')
 
 st, j = call('POST', '/v1/reviewSubmissions', {'data': {'type': 'reviewSubmissions', 'attributes': {'platform': 'IOS'}, 'relationships': {'app': {'data': {'type': 'apps', 'id': APP}}}}})
 sub = must(st, j, 'create submission')['data']['id']
-st, j = call('POST', '/v1/reviewSubmissionItems', {'data': {'type': 'reviewSubmissionItems', 'relationships': {
-    'reviewSubmission': {'data': {'type': 'reviewSubmissions', 'id': sub}},
-    'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': VER}}}}})
+# The cancelled submission keeps the version for a little while after the cancel
+# (409 ITEM_PART_OF_ANOTHER_SUBMISSION) until it turns COMPLETE: retry.
+for i in range(30):
+    st, j = call('POST', '/v1/reviewSubmissionItems', {'data': {'type': 'reviewSubmissionItems', 'relationships': {
+        'reviewSubmission': {'data': {'type': 'reviewSubmissions', 'id': sub}},
+        'appStoreVersion': {'data': {'type': 'appStoreVersions', 'id': VER}}}}})
+    if st != 409:
+        break
+    print('version still held by the cancelled submission, retrying in 20 s', flush=True)
+    time.sleep(20)
 must(st, j, 'add version to submission')
 st, j = call('PATCH', f'/v1/reviewSubmissions/{sub}', {'data': {'type': 'reviewSubmissions', 'id': sub, 'attributes': {'submitted': True}}})
 must(st, j, 'submit')
