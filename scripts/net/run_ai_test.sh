@@ -40,6 +40,7 @@ if name == "play":
     check(H.get("my_kills", 0) + ai.get("kills", 0) == st.get("kills"), f"every kill credited once ({H.get('my_kills')} + {ai.get('kills')} = {st.get('kills')})")
     check(ai.get("pickups", 0) >= 5 and H.get("my_grants", 0) + ai.get("pickups", 0) == st.get("grants"), f"the AI collected pickups, each granted once ({H.get('my_grants')} + {ai.get('pickups')} = {st.get('grants')})")
     check(ai.get("bought", 0) >= 1, f"the AI bought something with its own money (bought {ai.get('bought')}, weapon level {a.group(3)})")
+    check(H.get("shared_money", 0) > 0, f"money the AI picked up was shared with the human (+{H.get('shared_money')})")
     check(st.get("shops") == 1 and srv.count("world running again") == 1, "one shared shop visit, the AI left it")
 elif name == "rescue":
     check(st.get("downs") == 1 and st.get("revives") == 1 and ai.get("rescues") == 1, f"the AI rescued the human (downs {st.get('downs')}, revives {st.get('revives')}, AI rescues {ai.get('rescues')})")

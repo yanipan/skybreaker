@@ -261,7 +261,7 @@ func _configure() -> void:
 	# Scale meaningfully by current level so a boss met later is much meaner
 	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
 	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
-	max_hp = int(round(float(max_hp) * lerp(1.0, 1.60, t) * hp_scale))
+	max_hp = int(round(float(max_hp) * lerp(1.0, 1.60, t) * hp_scale * GameState.coop_boss_hp_mul()))
 	max_hp = maxi(1, max_hp)
 	hp = max_hp
 	if name_override != "":
@@ -293,7 +293,7 @@ func _build_parts() -> void:
 func _part_hp(base: int) -> int:
 	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
 	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
-	return maxi(1, int(round(float(base) * lerp(1.0, 1.60, t) * hp_scale)))
+	return maxi(1, int(round(float(base) * lerp(1.0, 1.60, t) * hp_scale * GameState.coop_boss_hp_mul())))
 
 
 func add_part(kind: int, id: StringName, at: Vector2, half: Vector2, base_hp: int, part_armor: int) -> BossPart:

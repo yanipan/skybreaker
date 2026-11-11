@@ -70,6 +70,7 @@ var reconnects: int = 0
 var shop_is_open: bool = false
 ## From GO, for telemetry only: 0 = human partner, 1 = labelled AI, 2 = disguised AI.
 var partner_kind: int = 0
+var shared_money: int = 0   ## Money received from the partner's pickups this session
 var _token: int = 0
 var _seat_peer: int = 0
 var _in_run: bool = false                 ## between the first SECTOR and GAME_OVER
@@ -203,6 +204,9 @@ func _on_msg(_peer: int, msg: Array) -> void:
 				welcomed.emit(Net.my_peer, Net.seat)
 		Net.M.RESUME:
 			_resume(int(msg[1]), bool(msg[2]), bool(msg[3]), bool(msg[4]))
+		Net.M.SHARE:
+			GameState.add_money(int(msg[1]))
+			shared_money += int(msg[1])
 		Net.M.LINK:
 			partner_link.emit(int(msg[1]), int(msg[2]))
 		Net.M.SECTOR:

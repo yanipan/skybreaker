@@ -549,7 +549,7 @@ func _configure() -> void:
 	if lvl > LADDER_TOP:
 		# Past the old ceiling the fire rate tightens another 12% by sector 24.
 		fire_mul *= lerp(1.0, 0.88, float(lvl - LADDER_TOP) / float(GameState.MAX_LEVEL - LADDER_TOP))
-	max_hp = max(1, int(round(float(max_hp) * hp_mul)))
+	max_hp = max(1, int(round(float(max_hp) * hp_mul * GameState.coop_enemy_hp_mul())))
 	speed *= speed_mul
 	if fire_interval > 0.0:
 		fire_interval *= fire_mul

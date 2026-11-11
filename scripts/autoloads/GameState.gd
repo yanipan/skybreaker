@@ -129,6 +129,22 @@ const HEAVY_HIT_BASE: int = 8
 ## Hook for the future difficulty levels (e.g. easy 0.8, hard 1.25). Not saved yet.
 var difficulty_damage_mul: float = 1.0
 
+## Co-op balance (docs/MULTIPLAYER_PLAN.md). Set ONLY by the room server to
+## the number of ships flying right now; 1 everywhere else, so single-player
+## is untouched. Two guns on the field = tougher enemies, so a fight lasts
+## about as long as it does alone. Read when an enemy or boss spawns.
+var coop_players: int = 1
+const COOP_ENEMY_HP_PER_EXTRA: float = 0.5
+const COOP_BOSS_HP_PER_EXTRA: float = 0.7
+
+
+func coop_enemy_hp_mul() -> float:
+	return 1.0 + COOP_ENEMY_HP_PER_EXTRA * float(maxi(0, coop_players - 1))
+
+
+func coop_boss_hp_mul() -> float:
+	return 1.0 + COOP_BOSS_HP_PER_EXTRA * float(maxi(0, coop_players - 1))
+
 
 func enemy_damage_mul() -> float:
 	var t: float = clampf(float(current_level - 1) / float(MAX_LEVEL - 1), 0.0, 1.0)

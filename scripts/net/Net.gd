@@ -46,6 +46,7 @@ enum M {
 	GO,           ## [GO, start_sector, seed, partner_kind]  everyone is here: load the game and answer READY
 	REFUSED,      ## [REFUSED, reason]  "version" = update the game to play co-op
 	RESUME,       ## [RESUME, level, between_sectors, shop_open, down]  answer to a reconnect: where the room is now
+	SHARE,        ## [SHARE, amount, from_peer]  the partner picked up money: everyone gets it
 	LINK,         ## [LINK, peer, state]  a partner's connection: 0 = lost (may return), 1 = back, 2 = gone for good
 	# Phone -> server
 	JOIN = 50,    ## [JOIN, proto, name] or, reconnecting, [JOIN, proto, name, old_peer_id, token]

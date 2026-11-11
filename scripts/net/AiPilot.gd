@@ -373,6 +373,7 @@ func _take_pickup(id: int, p: Pickup) -> void:
 	Net.broadcast([Net.M.GRANT, id, peer])
 	sw.stats.grants += 1
 	stats.pickups += 1
+	sw.share_money(p, peer)
 	match p.type:
 		Pickup.Type.MONEY:
 			money += int(p.money_value)

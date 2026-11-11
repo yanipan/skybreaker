@@ -172,6 +172,28 @@ func partner_kind() -> int:
 	return 0
 
 
+## Money is shared: whoever grabs a money pickup, every other pilot gets the
+## same amount (each pilot pays for their own upgrades, and with one wallet's
+## worth of drops between two ships both would fall behind the sector).
+func share_money(p: Pickup, from_peer: int) -> void:
+	if p.type != Pickup.Type.MONEY or int(p.money_value) <= 0:
+		return
+	Net.broadcast([Net.M.SHARE, int(p.money_value), from_peer], true, from_peer)
+	for b in bots:
+		if b != from_peer:
+			bots[b].money += int(p.money_value)
+
+
+## Ships flying right now (not down, not gone): sets the co-op HP scaling
+## for whatever spawns next.
+func _count_flying() -> void:
+	var n: int = 0
+	for p in seats:
+		if not seats[p]["out"] and not seats[p]["down"] and not seats[p]["away"]:
+			n += 1
+	GameState.coop_players = maxi(1, n)
+
+
 func humans_shop_ready() -> bool:
 	for p in _shop_ready:
 		if not bots.has(p) and not _shop_ready[p]:
@@ -336,6 +358,7 @@ func _on_msg(peer: int, msg: Array) -> void:
 				p.set_meta("granted", peer)
 				Net.broadcast([Net.M.GRANT, pid, peer])
 				stats.grants += 1
+				share_money(p, peer)
 				p.queue_free()
 		Net.M.DOWN:
 			_go_down(peer, msg[1] if msg.size() > 1 and msg[1] is Vector2 else Vector2(FIELD.x * 0.5, FIELD.y * 0.5))
@@ -515,6 +538,7 @@ func _process_shop(delta: float) -> void:
 
 func _begin_sector(level: int) -> void:
 	_clear_world()
+	_count_flying()
 	GameState.current_level = level
 	GameRng.seed_sector(run_seed, level)
 	spawner = EnemySpawner.new()
@@ -555,6 +579,7 @@ func _process(delta: float) -> void:
 		_process_shop(delta)
 		return   # frozen: no clock, no sector timer, no snapshots
 	_clock += delta
+	_count_flying()
 	for b in bots:
 		bots[b].tick(delta)
 		if _over:

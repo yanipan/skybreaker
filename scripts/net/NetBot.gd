@@ -230,6 +230,7 @@ func _on_over(won: bool) -> void:
 	s["bytes_in"] = Net.bytes_in
 	s["bytes_out"] = Net.bytes_out
 	s["peer"] = Net.my_peer
+	s["shared_money"] = nc.shared_money
 	print(bot_name, ": STATS ", JSON.stringify(s))
 	await get_tree().create_timer(0.5).timeout
 	Net.stop()
