@@ -14,6 +14,12 @@ const StarbaseShopScript := preload("res://scripts/StarbaseShop.gd")
 
 var _viewport_size: Vector2
 var _used: bool = false             ## True once the player has opened the shop
+## CO-OP: on a phone the starbase is a server puppet. Touching it only asks
+## the server to DOCK; the server freezes the world and opens the shop on
+## BOTH phones (scripts/net/CoopShop.gd).
+var net_puppet: bool = false
+var net_id: int = 0
+var _dock_cd: float = 0.0
 var _shop_open: bool = false        ## Pause drift while the menu is up
 var _sprite: Sprite2D = null
 var _time: float = 0.0
@@ -67,7 +73,8 @@ func _build_floating_label() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	# Drift downward unless the shop is open (then it hovers in place)
-	if not _shop_open:
+	_dock_cd = maxf(0.0, _dock_cd - delta)
+	if not _shop_open and not net_puppet:
 		position.y += drift_speed * delta
 	# Gentle horizontal sway and label pulse
 	if _sprite != null:
@@ -77,7 +84,7 @@ func _process(delta: float) -> void:
 		var k: float = 0.7 + 0.3 * sin(_time * 4.0)
 		_label.modulate = Color(1, 1, 1, k)
 	# Despawn after fully scrolling off
-	if position.y > _viewport_size.y + visual_size:
+	if position.y > _viewport_size.y + visual_size and not net_puppet:
 		queue_free()
 
 
@@ -85,6 +92,11 @@ func _on_area_entered(area: Area2D) -> void:
 	if _used:
 		return
 	if not area.is_in_group(&"player"):
+		return
+	if net_id > 0 and Net.is_client():
+		if _dock_cd <= 0.0:
+			_dock_cd = 1.5   # ask again if the server did not take it
+			Net.send(0, [Net.M.DOCK, net_id])
 		return
 	_used = true
 	_open_shop(area)
@@ -114,6 +126,20 @@ func _on_shop_closed() -> void:
 		main.begin_resume_countdown()
 	else:
 		get_tree().paused = false
+	_farewell()
+
+
+## CO-OP: the server opened the shop at this station.
+func net_shop_opened() -> void:
+	_used = true
+	_shop_open = true
+	if _label != null:
+		_label.queue_free()
+		_label = null
+
+
+## "SAFE TRAVELS", then the used station shrinks, fades and frees itself.
+func _farewell() -> void:
 	_shop_open = false
 	# Pop a friendly "thanks for shopping" hint label that fades as it floats
 	var bye := Label.new()

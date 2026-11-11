@@ -15,6 +15,40 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
+## Autopilot in the shared shop. Seat 0 leaves after 3 s, goes BACK TO SHOP
+## 2 s later, and leaves for good 2 s after that; seat 1 shops for 9 s. So one
+## run shows: both shopping, one waiting, the change of mind, both ready.
+var _shop_t: float = 0.0
+var _shop_step: int = 0
+
+func _drive_shop(delta: float) -> void:
+	var main: Node = get_tree().current_scene
+	var cs = main.get_node_or_null("CoopShop") if main != null else null
+	if cs == null or not cs.open:
+		_shop_t = 0.0
+		_shop_step = 0
+		return
+	_shop_t += delta
+	var shop = cs._shop
+	if Net.seat == 0:
+		if _shop_step == 0 and _shop_t > 3.0 and shop != null and is_instance_valid(shop):
+			_shop_step = 1
+			shop._on_leave()
+		elif _shop_step == 1 and _shop_t > 5.0:
+			_shop_step = 2
+			cs._back_to_shop()
+		elif _shop_step == 2 and _shop_t > 7.0 and shop != null and is_instance_valid(shop):
+			_shop_step = 3
+			shop._on_leave()
+	else:
+		if _shop_step == 0 and _shop_t > 2.0 and shop != null and is_instance_valid(shop):
+			_shop_step = 1
+			shop._on_buy(&"repair")   # shows up on the partner's strip (if affordable)
+		elif _shop_step == 1 and _shop_t > 9.0 and shop != null and is_instance_valid(shop):
+			_shop_step = 2
+			shop._on_leave()
+
+
 func _process(delta: float) -> void:
 	_t += delta
 	if autopilot and not get_tree().paused:
@@ -33,9 +67,17 @@ func _process(delta: float) -> void:
 				if d < best:
 					best = d
 					want_x = p.x + (-70.0 if Net.seat == 0 else 70.0)   # two ships, two lanes
-			me.set_stick_target(Vector2(want_x / size.x, 0.80), true)
+			# A starbase in view: fly into it (docking opens the shared shop).
+			var want_y: float = size.y * 0.80
+			for sb in get_tree().get_nodes_in_group(&"starbases"):
+				if is_instance_valid(sb) and not sb._used and (sb as Node2D).global_position.y > 120.0:
+					want_x = (sb as Node2D).global_position.x
+					want_y = (sb as Node2D).global_position.y
+			me.set_stick_target(Vector2(want_x / size.x, want_y / size.y), true)
 			me._fire_button_held = true
 			me._is_firing = true
+	if autopilot:
+		_drive_shop(delta)
 	if shot_every > 0.0 and DisplayServer.get_name() != "headless":
 		_shot_t += delta
 		if _shot_t >= shot_every:

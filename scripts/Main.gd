@@ -196,6 +196,11 @@ func _coop_setup() -> void:
 	c.game_over.connect(_coop_on_game_over)
 	c.partner_state.connect(_coop_on_partner_state)
 	Net.disconnected.connect(_coop_on_disconnected)
+	# Shared shop: the server opens and closes it for both phones.
+	var shop: Node = load("res://scripts/net/CoopShop.gd").new()
+	shop.name = "CoopShop"
+	add_child(shop)
+	shop.setup(self, c)
 	c.attach(self, _coop_level)
 	print("CO-OP: sector ", _coop_level, " seat ", Net.seat)
 

@@ -17,6 +17,11 @@ signal game_over(won: bool)
 signal partner_state(peer: int, state: Dictionary)
 signal alert(text: String)
 signal welcomed(peer: int, seat: int)
+signal shop_opened(base_id: int, docker: int)
+signal shop_state(peer: int, ready: bool)
+signal shop_bought(peer: int, item: String)
+signal shop_timer(seconds: float)
+signal shop_closed
 
 const INTERP: float = 0.10
 const SHIP_EVERY: float = 1.0 / 30.0
@@ -30,7 +35,8 @@ var world: Node
 var player_name: String = "Pilot"
 var start_sector: int = 1       ## From HELLO
 var _flow_queue: Array = []     ## SECTOR / SECTOR_CLEAR / GAME_OVER / ALERT seen while detached
-const FLOW_KINDS: Array = [Net.M.SECTOR, Net.M.SECTOR_CLEAR, Net.M.GAME_OVER, Net.M.ALERT]
+const FLOW_KINDS: Array = [Net.M.SECTOR, Net.M.SECTOR_CLEAR, Net.M.GAME_OVER, Net.M.ALERT,
+		Net.M.SHOP_OPEN, Net.M.SHOP_STATE, Net.M.SHOP_TIMER, Net.M.SHOP_CLOSE]
 const WORLD_KINDS: Array = [Net.M.SPAWN, Net.M.SNAP, Net.M.SHOT, Net.M.BEAM, Net.M.KILL, Net.M.DESPAWN, Net.M.GRANT]
 ## Callable returning this phone's ship state Dictionary {p, a, w, l, f, ...};
 ## defaults to reading the node in group "player".
@@ -127,6 +133,26 @@ func _on_msg(_peer: int, msg: Array) -> void:
 			partner_state.emit(int(msg[1]), msg[2])
 		Net.M.ALERT:
 			alert.emit(str(msg[1]))
+		Net.M.SHOP_OPEN:
+			shop_opened.emit(int(msg[1]), int(msg[2]))
+		Net.M.SHOP_STATE:
+			shop_state.emit(int(msg[1]), bool(msg[2]))
+		Net.M.SHOP_BOUGHT:
+			shop_bought.emit(int(msg[1]), str(msg[2]))
+		Net.M.SHOP_TIMER:
+			shop_timer.emit(float(msg[1]))
+		Net.M.SHOP_CLOSE:
+			reset_clock()
+			shop_closed.emit()
+
+
+## The server clock stood still (shop) while this phone's clock did not: drop
+## the clock estimate and the snapshot history, or puppets and held shots
+## would be drawn far ahead of the server. The next snapshot starts afresh.
+func reset_clock() -> void:
+	_offset = -INF
+	for id in _buf:
+		_buf[id] = []
 
 
 func _clear() -> void:
@@ -183,6 +209,11 @@ func _spawn(id: int, kind: String, p: Dictionary) -> void:
 					puppets[pid] = part
 					part.tree_exiting.connect(_forget.bind(pid), CONNECT_ONE_SHOT)
 			return
+		"starbase":
+			var sb := Starbase.new()
+			sb.net_puppet = true
+			sb.net_id = id
+			n = sb
 		"mega":
 			var m := MegaAsteroid.new()
 			m.drift = p.get("d", Vector2.ZERO)

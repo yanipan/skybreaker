@@ -760,6 +760,8 @@ func _on_buy(kind: StringName) -> void:
 	GameState.money -= price
 	EventBus.money_changed.emit(GameState.money)
 	Telemetry.track("shop_purchase", {"item": String(kind), "price": price})
+	if Net.is_client():
+		Net.send(0, [Net.M.SHOP_BUY, String(kind)])
 	_show_message("PURCHASED!", Color(0.55, 1.0, 0.65))
 	_bounce_icon(kind)
 	_advance_alien()

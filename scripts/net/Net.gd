@@ -15,7 +15,7 @@ signal disconnected
 signal message(peer_id: int, msg: Array)   ## peer_id = 0 on the client side
 
 enum Mode { OFF, SERVER, CLIENT }
-const PROTO: int = 1
+const PROTO: int = 2
 const DEFAULT_PORT: int = 24620
 const CH_RELIABLE: int = 0
 const CH_FAST: int = 1
@@ -35,6 +35,11 @@ enum M {
 	PARTNER,      ## [PARTNER, peer, state:Dictionary]
 	ALERT,        ## [ALERT, text]
 	GAME_OVER,    ## [GAME_OVER, won]
+	SHOP_OPEN,    ## [SHOP_OPEN, starbase_id, docker_peer]  world frozen, both phones shop
+	SHOP_STATE,   ## [SHOP_STATE, peer, ready]
+	SHOP_BOUGHT,  ## [SHOP_BOUGHT, peer, item]
+	SHOP_TIMER,   ## [SHOP_TIMER, seconds]  the slower player is on the clock
+	SHOP_CLOSE,   ## [SHOP_CLOSE]  everyone ready: GET READY countdown, then the world runs
 	# Phone -> server
 	JOIN = 50,    ## [JOIN, proto, name]
 	SHIP,         ## [SHIP, state:Dictionary]  pos, alive, weapon, power, firing
@@ -43,6 +48,9 @@ enum M {
 	DOWN,         ## [DOWN]  lost its last life
 	READY,        ## [READY, level]  this phone has the sector scene loaded
 	SYNC,         ## [SYNC]  resend a SPAWN for everything alive (scene reload, reconnect)
+	DOCK,         ## [DOCK, starbase_id]  this ship touched the starbase
+	SHOP_READY,   ## [SHOP_READY, bool]  left the shop / went back in
+	SHOP_BUY,     ## [SHOP_BUY, item]  shown to the partner
 }
 
 var mode: Mode = Mode.OFF

@@ -9,6 +9,7 @@ const FIELD := Vector2i(816, 1800)   ## Fixed play field (phones: same x, may sh
 const SNAP_EVERY: float = 0.05       ## 20 Hz snapshots
 const CLEAR_PAUSE: float = 3.0       ## Seconds between sectors
 const READY_TIMEOUT: float = 15.0    ## Longest wait for a phone to load the next sector
+const SHOP_RESUME_SECS: float = 3.4  ## The phones' GET READY 3-2-1 (3.2 s) plus a breath
 
 var port: int = Net.DEFAULT_PORT
 var start_sector: int = 1
@@ -16,6 +17,9 @@ var expected: int = 2
 var run_seed: int = 0
 var max_sectors: int = GameState.MAX_LEVEL   ## Test hook: stop after N sectors
 var duration_mul: float = 1.0                ## Test hook: shorter sectors
+## Seconds the slower player gets once the other has left the shop (0 = no
+## limit: friends). Matched games set it (plan: 30).
+var shop_timer: float = 0.0
 
 var world: Node2D
 var spawner: EnemySpawner = null
@@ -30,8 +34,15 @@ var _over: bool = false
 var _sectors_done: int = 0
 var _clock: float = 0.0
 var _ready_wait: float = 0.0
+var _last_shot_t: float = -1.0   ## Server clock of the newest enemy shot (diagnostics)
+# Shared shop: the world is frozen from DOCK until everyone has left.
+var _shop_open: bool = false
+var _shop_base = null
+var _shop_ready: Dictionary = {}     ## peer -> bool
+var _shop_deadline: float = -1.0
+var _shop_resume_t: float = -1.0
 ## Stats for tests / logs
-var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0}
+var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0, "shops": 0}
 
 
 func _ready() -> void:
@@ -63,6 +74,7 @@ func _parse_args() -> void:
 			"seed": run_seed = int(kv[1])
 			"sectors": max_sectors = int(kv[1])
 			"duration_mul": duration_mul = float(kv[1])
+			"shop_timer": shop_timer = float(kv[1])
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
 	if run_seed == 0:
@@ -94,6 +106,8 @@ func _on_left(peer: int) -> void:
 		seats[peer]["alive"] = false
 	if ships.has(peer):
 		ships[peer].remove_from_group(&"player")
+	_shop_ready.erase(peer)
+	_check_shop_done()
 	_check_over()
 
 
@@ -148,7 +162,23 @@ func _on_msg(peer: int, msg: Array) -> void:
 		Net.M.DOWN:
 			seats[peer]["out"] = true
 			seats[peer]["alive"] = false
+			_shop_ready.erase(peer)
+			_check_shop_done()
 			_check_over()
+		Net.M.DOCK:
+			_dock(peer, int(msg[1]))
+		Net.M.SHOP_READY:
+			if _shop_open and _shop_ready.has(peer):
+				var rdy: bool = bool(msg[1])
+				_shop_ready[peer] = rdy
+				Net.broadcast([Net.M.SHOP_STATE, peer, rdy])
+				if rdy and shop_timer > 0.0 and _shop_deadline < 0.0:
+					_shop_deadline = shop_timer
+					Net.broadcast([Net.M.SHOP_TIMER, shop_timer])
+				_check_shop_done()
+		Net.M.SHOP_BUY:
+			if _shop_open:
+				Net.broadcast([Net.M.SHOP_BOUGHT, peer, str(msg[1])], true, peer)
 
 
 ## Every seat still in the run has its scene loaded.
@@ -178,6 +208,63 @@ func _joined() -> int:
 	return n
 
 
+# --- Shared shop ---
+
+## A ship touched the starbase: freeze the world and open the shop for
+## everyone still in the run. One visit per station.
+func _dock(peer: int, base_id: int) -> void:
+	if _shop_open or _shop_resume_t >= 0.0 or _clear_t >= 0.0 or not _started or _over:
+		return
+	var sb = entities.get(base_id)
+	if sb == null or not is_instance_valid(sb) or not (sb is Starbase) or sb._used:
+		return
+	sb._used = true
+	sb._shop_open = true
+	_shop_base = sb
+	_shop_open = true
+	_shop_deadline = -1.0
+	_shop_ready = {}
+	for p in seats:
+		if not seats[p]["out"]:
+			_shop_ready[p] = false
+	world.process_mode = Node.PROCESS_MODE_DISABLED
+	stats.shops += 1
+	Net.broadcast([Net.M.SHOP_OPEN, base_id, peer])
+	print("ServerWorld: shop open (docked by peer ", peer, "), world frozen")
+
+
+## Everyone still in the run has left the shop: tell the phones to count
+## down, and let the world run again when their countdown ends.
+func _check_shop_done() -> void:
+	if not _shop_open:
+		return
+	for p in _shop_ready:
+		if not _shop_ready[p]:
+			return
+	_shop_open = false
+	_shop_deadline = -1.0
+	_shop_resume_t = SHOP_RESUME_SECS
+	Net.broadcast([Net.M.SHOP_CLOSE])
+	print("ServerWorld: shop closed, resuming in ", SHOP_RESUME_SECS, " s")
+
+
+func _process_shop(delta: float) -> void:
+	if _shop_open and _shop_deadline >= 0.0:
+		_shop_deadline -= delta
+		if _shop_deadline <= 0.0:
+			for p in _shop_ready:
+				_shop_ready[p] = true   # time is up for the slower player
+			_check_shop_done()
+	if _shop_resume_t >= 0.0:
+		_shop_resume_t -= delta
+		if _shop_resume_t < 0.0:
+			world.process_mode = Node.PROCESS_MODE_INHERIT
+			if _shop_base != null and is_instance_valid(_shop_base):
+				_shop_base._on_shop_closed()   # farewell, then it frees itself -> DESPAWN
+			_shop_base = null
+			print("ServerWorld: world running again")
+
+
 # --- Sectors ---
 
 func _begin_sector(level: int) -> void:
@@ -187,7 +274,6 @@ func _begin_sector(level: int) -> void:
 	spawner = EnemySpawner.new()
 	spawner.name = "Spawner"
 	world.add_child(spawner)
-	spawner._starbase_enabled = false   # phase 3: co-op starbase
 	_clock = 0.0
 	Net.broadcast([Net.M.SECTOR, level, run_seed])
 	print("ServerWorld: sector ", level, " start")
@@ -207,6 +293,9 @@ func _clear_world() -> void:
 func _process(delta: float) -> void:
 	if not _started or _over:
 		return
+	if _shop_open or _shop_resume_t >= 0.0:
+		_process_shop(delta)
+		return   # frozen: no clock, no sector timer, no snapshots
 	_clock += delta
 	if spawner != null and is_instance_valid(spawner):
 		var dur: float = spawner.get_level_duration() * duration_mul
@@ -262,7 +351,7 @@ func _check_over() -> void:
 func _game_over(won: bool) -> void:
 	_over = true
 	Net.broadcast([Net.M.GAME_OVER, won])
-	print("ServerWorld: game over won=", won, " stats=", stats, " out=", Net.bytes_out, " in=", Net.bytes_in)
+	print("ServerWorld: game over won=", won, " stats=", stats, " out=", Net.bytes_out, " in=", Net.bytes_in, " clock=", snappedf(_clock, 0.01), " last_shot=", snappedf(_last_shot_t, 0.01))
 	await get_tree().create_timer(1.0).timeout
 	Net.stop()
 	get_tree().quit(0)
@@ -271,7 +360,7 @@ func _game_over(won: bool) -> void:
 # --- Replication ---
 
 func _on_child(n: Node) -> void:
-	if n is Enemy or n is Asteroid or n is Pickup or n is Boss:
+	if n is Enemy or n is Asteroid or n is Pickup or n is Boss or n is Starbase:
 		var id: int = _next_id
 		_next_id += 1
 		n.set_meta("nid", id)
@@ -318,6 +407,8 @@ func _send_spawn(n: Node, only_peer: int = 0) -> void:
 		kind = "pickup"
 		p["t"] = n.type
 		p["m"] = n.money_value
+	elif n is Starbase:
+		kind = "starbase"
 	if only_peer != 0:
 		Net.send(only_peer, [Net.M.SPAWN, id, kind, p])
 		return
@@ -343,6 +434,7 @@ func _register_parts(boss: Boss) -> Dictionary:
 
 func _send_shot(b: EnemyBullet) -> void:
 	stats.shots += 1
+	_last_shot_t = _clock
 	var p := {"p": b.global_position, "d": b.direction, "v": b.speed, "dm": b.damage, "st": b.style,
 			"r": b.bullet_radius, "c": b.bullet_color, "t": _clock}
 	if b.from_boss: p["fb"] = true

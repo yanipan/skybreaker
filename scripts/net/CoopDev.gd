@@ -15,6 +15,7 @@ var port: int = Net.DEFAULT_PORT
 var pilot: String = "Pilot"
 var autopilot: bool = false
 var shot_every: float = 0.0
+var dev_money: int = -1   ## --money=N: start the co-op run with N credits (solo money is restored after)
 
 
 func _ready() -> void:
@@ -26,6 +27,7 @@ func _ready() -> void:
 			"name": pilot = kv[1]
 			"autopilot": autopilot = true
 			"coopshots": shot_every = float(kv[1])
+			"money": dev_money = int(kv[1])
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
 	# The solo state is frozen FIRST (start_coop takes the hold), then the
@@ -45,6 +47,8 @@ func _ready() -> void:
 	GameState.resume_pending = false
 	GameState.pending_warp_entry = false
 	GameState.has_active_run = true
+	if dev_money >= 0:
+		GameState.money = dev_money
 	var c: Node = Net.client
 	var waited: float = 0.0
 	while Net.my_peer == 0:
