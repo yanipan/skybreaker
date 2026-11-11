@@ -140,7 +140,10 @@ assets/fonts/
 - Puppet mode: `net_puppet` / `net_id` on `Enemy` and `Asteroid` (no AI, no self-despawn, `take_damage` -> `Net.report_hit`, death via `net_kill`); `Pickup.net_id` + claim in `Player._on_area_entered`; burst pellets carry meta `net_local` (each phone bursts its own shell).
 - RULE: never read a node back from a net table into a TYPED variable (`var n: Node = d.get(id)`): a freed instance makes that assignment an error that aborts the caller. That froze a bot's whole update loop on 11/11.
 - Tests: `scenes/tools/NetClientTest.tscn` (no network, 21 checks incl. the freed-object race) and `scripts/net/run_loop_test.sh [sector] [duration_mul] [lag_ms] [loss] [port]` (server + 2 bots as separate processes).
-- Not built yet: Main/Player integration (nothing is playable), partner ship, bosses, starbase/shop, revive pods, lobby, GCP deploy, AI partners (phase 7).
+- Phase 2 (11/11): `Main.gd` co-op mode (`_coop`: no local spawner, no cutscenes, pause menu without pausing, server-driven warp, catch-up jump), persistent session `Net.client` (survives the scene reload at every sector and respawn: `attach` -> SYNC + READY), `Targeting.nearest_ship` for all enemy aiming, `PartnerShip` (cosmetic, never collides), `SaveSystem.begin_coop_hold/end_coop_hold` (solo progress frozen in memory, saves are no-ops during co-op).
+- Try it on the Mac: server `godot --headless --path . res://scenes/net/ServerWorld.tscn -- --port=24620 --sector=2`, then two windows `godot --path . res://scenes/net/CoopDev.tscn --position 60,60 --resolution 408x726 -- --port=24620 --name=A [--autopilot] [--coopshots=4]`. NEVER name an arg `--shots`: it wakes `scripts/tools/ShotDirector.gd` (store screenshots), and two instances delete the local save.
+- More tests: `TargetingTest` 16, `PartnerShipTest` 35, `CoopHoldTest` 11.
+- Not built yet: bosses, starbase/shop (design in the plan), revive pods, lobby (code / QR / Play now), GCP deploy, AI partners (phase 7). Known open: `CutsceneTapTest` has 4 failures that predate co-op.
 
 ## Store / Release
 - `docs/STORE_SUBMISSION.md` — submission runbook
