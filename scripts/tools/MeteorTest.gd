@@ -108,7 +108,7 @@ func _run() -> void:
 	sp._process(0.05)
 	_check(_rocks(host, true).size() == 1, "still only one mega")
 	var m: MegaAsteroid = megas[0]
-	_check(m.max_hp >= 150 and m.radius >= 120.0, "mega is big (hp %d, r %.0f)" % [m.max_hp, m.radius])
+	_check(m.max_hp >= 220 and m.radius >= 190.0, "mega is big (hp %d, r %.0f)" % [m.max_hp, m.radius])
 	_check(m.drift.y < 60.0, "mega drifts slowly")
 	_check(MegaAsteroid.live.has(m), "mega registered as cover")
 	# Enemy bullet into the rock pops
@@ -120,7 +120,7 @@ func _run() -> void:
 	eb._process_motion(0.016)
 	_check(eb.is_queued_for_deletion(), "enemy bullet stops on the mega")
 	var eb2: EnemyBullet = EnemyBullet.new()
-	eb2.position = Vector2(50, 500)
+	eb2.position = Vector2(30, 500)
 	eb2.direction = Vector2.DOWN
 	host.add_child(eb2)
 	eb2._process_motion(0.016)

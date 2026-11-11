@@ -7,7 +7,7 @@ func _ready() -> void:
 	var sp: EnemySpawner = EnemySpawner.new()
 	add_child(sp)
 	sp._mission_time = float(sp._shower_times[0]) + 0.01
-	var m := MegaAsteroid.new(); m.position = Vector2(420, 640); m.drift = Vector2.ZERO; add_child(m)
+	var m := MegaAsteroid.new(); m.position = Vector2(408, 700); m.drift = Vector2.ZERO; add_child(m)
 	m.take_damage(int(m.max_hp * 0.4))
 	for i in 150:
 		await get_tree().process_frame

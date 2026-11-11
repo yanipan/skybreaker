@@ -51,7 +51,7 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(e):
 			continue
 		# Only consider enemies within our column and above the ship
-		# A mega asteroid is a 260 px wall: it stops the beam anywhere across
+		# A mega asteroid is a 400 px wall: it stops the beam anywhere across
 		# its face, at its lower edge, not only when the beam crosses its centre.
 		var wide: float = e.beam_half_w if "beam_half_w" in e else 0.0
 		if abs(e.global_position.x - origin.x) > hit_tolerance + wide:

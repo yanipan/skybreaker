@@ -438,7 +438,7 @@ func _spawn_shower_rock(lvl_t: float) -> void:
 func _spawn_mega_asteroid() -> void:
 	_mega_spawned = true
 	var rock: MegaAsteroid = MegaAsteroid.new()
-	rock.position = Vector2(GameRng.randf_range(_viewport_size.x * 0.30, _viewport_size.x * 0.70), -170.0)
+	rock.position = Vector2(GameRng.randf_range(_viewport_size.x * 0.35, _viewport_size.x * 0.65), -240.0)
 	rock.drift = Vector2(GameRng.randf_range(-14.0, 14.0), 46.0)
 	get_parent().add_child(rock)
 	_show_warning("MEGA ASTEROID", Color(1.0, 0.80, 0.35))

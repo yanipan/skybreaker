@@ -19,7 +19,7 @@ var ram_damage: int = 25
 ## Box read by HitCheck's safety net.
 var hit_half: Vector2 = Vector2.ZERO
 ## Extra half-width the beam adds to its column test (the beam looks at
-## centres, a 260 px rock must stop it at its edge too).
+## centres, a 400 px rock must stop it at its edge too).
 var beam_half_w: float = 0.0
 
 var _ram_cd: float = 0.0
@@ -41,9 +41,9 @@ func _exit_tree() -> void:
 func _configure() -> void:
 	var lvl: int = clamp(GameState.current_level, 1, GameState.MAX_LEVEL)
 	var t: float = float(lvl - 1) / float(GameState.MAX_LEVEL - 1)
-	max_hp = int(round(lerp(150.0, 650.0, t)))
+	max_hp = int(round(lerp(220.0, 900.0, t)))
 	hp = max_hp
-	radius = 130.0
+	radius = 200.0   ## 400 px across: half the 816 px field
 	contact_damage = 14
 	reward = 600
 	money_value = 20
