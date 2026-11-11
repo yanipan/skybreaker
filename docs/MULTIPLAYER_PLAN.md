@@ -118,8 +118,17 @@ Play with a friend
   Scanned with the phone's own camera: game installed -> opens straight into the
   room; not installed -> a page with the code and the store buttons (every invite is
   also an install link).
-- No scanner inside the game: it would need camera permission, a native QR-reading
-  plugin, and store privacy changes. Drawing a QR needs none of that.
+- DECIDED by Yaniv 11/11: scanning happens IN THE GAME, in the game's own look
+  (branded scanner screen, branded QR with the logo). The QR still carries the
+  invite LINK, so the phone's normal camera also works and a friend without the
+  game lands on the store page.
+- Cost of the in-game scanner: camera permission prompt on both platforms, store
+  privacy declarations, and a QR reader. Found 11/11 (web, NOT tried): Godot's
+  CameraServer docs now list Android and iOS (iOS needs the camera module enabled
+  in the export); a community "Godot QR plugin" generates QRs and reads them from an
+  Image (Android build listed for Godot 4.6, iOS build for 4.5), so live scanning
+  = feeding it camera frames. Needs a spike on two real phones before it is promised.
+  Typing the code always works as the fallback.
 - The friend can always just type the code (JOIN WITH CODE).
 - Both in the room -> names shown -> 3 s countdown -> sector 1.
 - Codes live 10 minutes or until the run starts; join attempts are rate-limited.
@@ -131,8 +140,11 @@ Play with a friend
 Play now
 - PLAY NOW -> "SEARCHING FOR A PILOT..." for up to ~10 s. Another human waiting on the
   same game version -> paired. Nobody -> an AI partner joins.
-- Bots are LABELLED (callsign + small AI tag, "No pilot nearby: AI wingman VIPER
-  joined"), not disguised as people. (Recommendation, Yaniv decides.)
+- Bots, DECIDED by Yaniv 11/11 "for now": 50% of bot partners are DISGUISED (a
+  human-looking pilot name, no tag), 50% are LABELLED (callsign + small AI tag,
+  "AI wingman VIPER joined"). Treat it as an experiment: log which kind each game
+  had (telemetry) so the two groups can be compared (session length, runs per
+  day, quits). Either kind stays off the leaderboards and cannot be name-reported.
 - Only same protocol version is matched (stores roll out at different times);
   an old build gets "Update to play co-op".
 - If a human partner leaves and does not return within the reconnect window, an AI
@@ -153,6 +165,7 @@ Where bot games run: ON THE PHONE, not in the cloud
   (most of the 360 MB) and ticks at 60 Hz; a 30 Hz tick and skipping art should cut both.
 
 Run length (open question)
+- DECIDED by Yaniv 11/11: the v1 proposal below.
 - A full run is 24 sectors, roughly 45-60 minutes. v1 proposal: co-op starts at
   sector 1 and goes as far as the pair gets, with a "KEEP GOING?" prompt after each
   boss. Short "one act" matches (about 10 minutes, ending on a boss) are a later option;
