@@ -134,6 +134,14 @@ assets/fonts/
 - Rules that came out of it: never `queue_redraw()` every frame on anything that exists 100 times (shots draw once, pulse through `modulate`); flatten per-frame lookups (`HitCheck` caches enemies and the ship once per frame); share collision shapes; `run/max_fps=60`.
 - Headless measures scripts + physics + draw-command building, not GPU fill. Phone heat still needs a device check.
 
+## Co-op multiplayer (in progress, started 11/11; plan + protocol + phases in `docs/MULTIPLAYER_PLAN.md`)
+- Server-authoritative: one headless Godot process per room runs `scenes/net/ServerWorld.tscn` (the real `EnemySpawner` + world objects, fixed 816x1800 field). Phones keep owning their own ship, shots, damage taken, money, shop and lives.
+- `scripts/net/Net.gd` (autoload `Net`, raw ENet, inert while `mode == OFF`), `ServerWorld.gd`, `NetClient.gd` (puppets, interpolation 100 ms behind the server clock, local enemy shots, kills, pickup grants), `NetBot.gd` (headless bot).
+- Puppet mode: `net_puppet` / `net_id` on `Enemy` and `Asteroid` (no AI, no self-despawn, `take_damage` -> `Net.report_hit`, death via `net_kill`); `Pickup.net_id` + claim in `Player._on_area_entered`; burst pellets carry meta `net_local` (each phone bursts its own shell).
+- RULE: never read a node back from a net table into a TYPED variable (`var n: Node = d.get(id)`): a freed instance makes that assignment an error that aborts the caller. That froze a bot's whole update loop on 11/11.
+- Tests: `scenes/tools/NetClientTest.tscn` (no network, 21 checks incl. the freed-object race) and `scripts/net/run_loop_test.sh [sector] [duration_mul] [lag_ms] [loss] [port]` (server + 2 bots as separate processes).
+- Not built yet: Main/Player integration (nothing is playable), partner ship, bosses, starbase/shop, revive pods, lobby, GCP deploy, AI partners (phase 7).
+
 ## Store / Release
 - `docs/STORE_SUBMISSION.md` — submission runbook
 - `docs/APP_STORE_COPY.md` — store listing copy

@@ -65,6 +65,13 @@ const ARTILLERY_HOLD_Y: float = 0.22
 const ARTILLERY_HOLD_SECS: float = 7.5
 
 @export var type: Type = Type.GRUNT
+## CO-OP (docs/MULTIPLAYER_PLAN.md): on a phone, server-owned enemies are
+## puppets: no AI, no firing, position from server snapshots, hits reported
+## to the server (Net.report_hit), death from a KILL message (net_kill).
+var net_puppet: bool = false
+var net_id: int = 0
+## Server's size roll, applied after _configure so both ends match.
+var net_size: float = 0.0
 
 # Filled in by _configure() based on type
 var max_hp: int
@@ -144,6 +151,8 @@ func _ready() -> void:
 	_viewport_size = get_viewport_rect().size
 	_spawn_x = position.x
 	_configure()
+	if net_size > 0.0:
+		enemy_size = net_size
 	_build_collision()
 	_build_sprite()
 	add_to_group(&"enemies")
@@ -726,7 +735,7 @@ func _build_sprite() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_update_smoke(delta)
-	if type == Type.SHADE:
+	if type == Type.SHADE and not net_puppet:
 		_update_phase(delta)
 	var alpha: float = SHADE_CLOAK_ALPHA if cloaked else 1.0
 	if _hit_flash > 0.0:
@@ -740,6 +749,8 @@ func _process(delta: float) -> void:
 		var rest := Color(_sprite_tint.r, _sprite_tint.g, _sprite_tint.b, alpha)
 		if _sprite.modulate != rest:
 			_sprite.modulate = rest
+	if net_puppet:
+		return   # moved by NetClient, fires nothing (the server sends its shots)
 	if movement == &"hold":
 		# Artillery: descend to the hold line, hover there for a while, then
 		# carry on down and leave.
@@ -1112,6 +1123,11 @@ func _spawn_enemy_bullet(dir: Vector2, dmg: int) -> void:
 func take_damage(amount: int) -> void:
 	if cloaked:
 		return   # a phased SHADE cannot be hurt
+	if net_puppet:
+		_hit_flash = 1.0
+		queue_redraw()
+		Net.report_hit(net_id, amount)
+		return
 	hp -= amount
 	_hit_flash = 1.0
 	queue_redraw()
@@ -1132,6 +1148,18 @@ func take_damage(amount: int) -> void:
 		var shake: float = clamp(enemy_size / 18.0, 2.0, 8.0)
 		EventBus.screen_shake_requested.emit(shake, 0.18)
 		queue_free()
+
+
+## CO-OP: the server says this enemy died. Effects here; drops and brood
+## spawns arrive from the server as their own spawns.
+func net_kill(mine: bool) -> void:
+	if mine:
+		GameState.add_score(reward)
+		GameState.mission_kills += 1
+		_spawn_score_popup()
+	_spawn_death_burst()
+	EventBus.screen_shake_requested.emit(clamp(enemy_size / 18.0, 2.0, 8.0) * (1.0 if mine else 0.5), 0.18)
+	queue_free()
 
 
 func _spawn_score_popup() -> void:

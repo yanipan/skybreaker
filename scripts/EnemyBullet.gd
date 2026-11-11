@@ -338,6 +338,7 @@ func _burst() -> void:
 		p.style = Style.PELLET
 		p.speed_override = burst_speed
 		p.from_boss = from_boss
+		p.set_meta("net_local", true)   # co-op: every phone bursts its own shell
 		if parent != null:
 			parent.add_child.call_deferred(p)
 	queue_free()

@@ -208,6 +208,13 @@ func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group(&"starbases"):
 		return
 	if area.is_in_group(&"pickups"):
+		if "net_id" in area and area.net_id > 0 and Net.is_client():
+			if not area.net_claimed:
+				area.net_claimed = true
+				area.visible = false
+				area.set_deferred("monitorable", false)
+				Net.send(0, [Net.M.CLAIM, area.net_id])
+			return
 		_consume_pickup(area)
 		return
 	if area.is_in_group(&"enemy_bullets"):

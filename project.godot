@@ -36,6 +36,7 @@ DevTools="*res://scripts/autoloads/DevTools.gd"
 Telemetry="*res://scripts/autoloads/Telemetry.gd"
 GameRng="*res://scripts/autoloads/GameRng.gd"
 Online="*res://scripts/autoloads/Online.gd"
+Net="*res://scripts/net/Net.gd"
 
 [display]
 

@@ -25,6 +25,9 @@ enum Size { SMALL, MEDIUM, LARGE }
 @export var drift: Vector2 = Vector2(0, 140)
 ## Part of a meteor shower (EnemySpawner): lean drops, see _configure.
 @export var shower: bool = false
+## CO-OP puppet (see Enemy.net_puppet): moved by NetClient, hits reported.
+var net_puppet: bool = false
+var net_id: int = 0
 
 var max_hp: int
 var hp: int
@@ -130,12 +133,15 @@ func _generate_shape() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	position += drift * delta
+	if not net_puppet:
+		position += drift * delta
 	rotation += spin_speed * delta
 	if _hit_flash > 0.0:
 		_hit_flash = max(0.0, _hit_flash - delta * 8.0)
 		queue_redraw()
-	# Despawn well off-screen on any side
+	# Despawn well off-screen on any side (a co-op puppet waits for the server)
+	if net_puppet:
+		return
 	if position.y > _viewport_size.y + 200.0 \
 			or position.y < -300.0 \
 			or position.x < -300.0 \
@@ -160,6 +166,11 @@ func _draw() -> void:
 
 
 func take_damage(amount: int) -> void:
+	if net_puppet:
+		_hit_flash = 1.0
+		queue_redraw()
+		Net.report_hit(net_id, amount)
+		return
 	hp -= amount
 	_hit_flash = 1.0
 	queue_redraw()
@@ -170,6 +181,15 @@ func take_damage(amount: int) -> void:
 		var shake: float = clamp(radius / 12.0, 2.0, 7.0)
 		EventBus.screen_shake_requested.emit(shake, 0.18)
 		queue_free()
+
+
+## CO-OP: the server says this rock broke. Effects only.
+func net_kill(mine: bool) -> void:
+	if mine:
+		GameState.add_score(reward)
+	_spawn_burst()
+	EventBus.screen_shake_requested.emit(clamp(radius / 12.0, 2.0, 7.0), 0.18)
+	queue_free()
 
 
 func _spawn_burst() -> void:

@@ -31,6 +31,10 @@ enum Type {
 @export var magnet_radius: float = 180.0
 @export var magnet_strength: float = 900.0
 var money_value: int = 0  ## Set by Enemy when type == MONEY
+## CO-OP: server pickup id (0 = local). Touching a networked pickup only
+## CLAIMS it; the server grants it to the first phone that asked.
+var net_id: int = 0
+var net_claimed: bool = false
 
 var _viewport_size: Vector2
 var _time: float = 0.0

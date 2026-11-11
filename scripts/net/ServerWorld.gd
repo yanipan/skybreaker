@@ -1,0 +1,322 @@
+extends Node
+## CO-OP ROOM SERVER (docs/MULTIPLAYER_PLAN.md). One headless Godot process =
+## one room. Runs the real EnemySpawner and world objects; phones see puppets.
+##   godot --headless --path . res://scenes/net/ServerWorld.tscn -- --port=24620 --sector=1 --players=2 --seed=123
+## Owns: spawns, enemy fire, enemy HP (from phone hit reports), kills and who
+## scored them, pickups (first claim wins), sector flow, game over.
+
+const FIELD := Vector2i(816, 1800)   ## Fixed play field (phones: same x, may show less height)
+const SNAP_EVERY: float = 0.05       ## 20 Hz snapshots
+const CLEAR_PAUSE: float = 3.0       ## Seconds between sectors
+
+var port: int = Net.DEFAULT_PORT
+var start_sector: int = 1
+var expected: int = 2
+var run_seed: int = 0
+var max_sectors: int = GameState.MAX_LEVEL   ## Test hook: stop after N sectors
+var duration_mul: float = 1.0                ## Test hook: shorter sectors
+
+var world: Node2D
+var spawner: EnemySpawner = null
+var ships: Dictionary = {}        ## peer -> Area2D stand-in (group "player")
+var seats: Dictionary = {}        ## peer -> {seat, name, alive, out}
+var entities: Dictionary = {}     ## net id -> Node
+var _next_id: int = 1
+var _snap_t: float = 0.0
+var _clear_t: float = -1.0
+var _started: bool = false
+var _over: bool = false
+var _sectors_done: int = 0
+var _clock: float = 0.0
+## Stats for tests / logs
+var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0}
+
+
+func _ready() -> void:
+	_parse_args()
+	get_window().content_scale_size = FIELD
+	get_window().size = FIELD
+	world = Node2D.new()
+	world.name = "World"
+	add_child(world)
+	world.child_entered_tree.connect(_on_child)
+	Net.peer_joined.connect(_on_join)
+	Net.peer_left.connect(_on_left)
+	Net.message.connect(_on_msg)
+	var err: int = Net.start_server(port, expected)
+	print("ServerWorld: listening on ", port, " err=", err, " expecting ", expected, " seed=", run_seed)
+	if err != OK:
+		get_tree().quit(2)
+
+
+func _parse_args() -> void:
+	for a in OS.get_cmdline_user_args():
+		var kv: PackedStringArray = a.trim_prefix("--").split("=")
+		if kv.size() != 2:
+			continue
+		match kv[0]:
+			"port": port = int(kv[1])
+			"sector": start_sector = int(kv[1])
+			"players": expected = int(kv[1])
+			"seed": run_seed = int(kv[1])
+			"sectors": max_sectors = int(kv[1])
+			"duration_mul": duration_mul = float(kv[1])
+			"lag": Net.fake_lag_ms = int(kv[1])
+			"loss": Net.fake_loss = float(kv[1])
+	if run_seed == 0:
+		run_seed = randi_range(1, 2147483646)
+
+
+# --- Peers ---
+
+func _on_join(peer: int) -> void:
+	var seat: int = seats.size()
+	seats[peer] = {"seat": seat, "name": "", "alive": true, "out": false}
+	var s := Area2D.new()
+	s.name = "Ship%d" % peer
+	s.monitoring = false
+	s.monitorable = false
+	s.position = Vector2(FIELD.x * (0.35 + 0.3 * seat), FIELD.y * 0.8)
+	s.add_to_group(&"player")
+	s.set_meta("peer", peer)
+	add_child(s)   # NOT under world: never replicated
+	ships[peer] = s
+	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, seat])
+	print("ServerWorld: peer ", peer, " joined as seat ", seat)
+
+
+func _on_left(peer: int) -> void:
+	print("ServerWorld: peer ", peer, " left")
+	if seats.has(peer):
+		seats[peer]["out"] = true
+		seats[peer]["alive"] = false
+	if ships.has(peer):
+		ships[peer].remove_from_group(&"player")
+	_check_over()
+
+
+func _on_msg(peer: int, msg: Array) -> void:
+	match int(msg[0]):
+		Net.M.JOIN:
+			if int(msg[1]) != Net.PROTO:
+				print("ServerWorld: peer ", peer, " wrong protocol ", msg[1])
+				return
+			seats[peer]["name"] = str(msg[2]) if msg.size() > 2 else ""
+			seats[peer]["joined"] = true
+			if not _started and _joined() >= expected:
+				_started = true
+				_begin_sector(start_sector)
+		Net.M.SHIP:
+			var st: Dictionary = msg[1]
+			var ship: Area2D = ships.get(peer)
+			if ship != null:
+				ship.position = st.get("p", ship.position)
+				var alive: bool = bool(st.get("a", true))
+				if alive != ship.is_in_group(&"player"):
+					if alive: ship.add_to_group(&"player")
+					else: ship.remove_from_group(&"player")
+				seats[peer]["alive"] = alive
+			Net.broadcast([Net.M.PARTNER, peer, st], false, peer)
+		Net.M.HITS:
+			var d: Dictionary = msg[1]
+			for id in d:
+				var n = entities.get(int(id))
+				if n != null and is_instance_valid(n) and not n.is_queued_for_deletion() and n.has_method("take_damage"):
+					n.set_meta("last_hitter", peer)
+					n.take_damage(int(d[id]))
+					stats.hits += 1
+		Net.M.CLAIM:
+			var pid: int = int(msg[1])
+			var p = entities.get(pid)
+			if p != null and is_instance_valid(p) and p is Pickup and not p.has_meta("granted"):
+				p.set_meta("granted", peer)
+				Net.broadcast([Net.M.GRANT, pid, peer])
+				stats.grants += 1
+				p.queue_free()
+		Net.M.DOWN:
+			seats[peer]["out"] = true
+			seats[peer]["alive"] = false
+			_check_over()
+
+
+func _joined() -> int:
+	var n: int = 0
+	for p in seats:
+		if seats[p].get("joined", false):
+			n += 1
+	return n
+
+
+# --- Sectors ---
+
+func _begin_sector(level: int) -> void:
+	_clear_world()
+	GameState.current_level = level
+	GameRng.seed_sector(run_seed, level)
+	spawner = EnemySpawner.new()
+	spawner.name = "Spawner"
+	world.add_child(spawner)
+	spawner._starbase_enabled = false   # phase 3: co-op starbase
+	_clock = 0.0
+	Net.broadcast([Net.M.SECTOR, level, run_seed])
+	print("ServerWorld: sector ", level, " start")
+
+
+func _clear_world() -> void:
+	for id in entities.keys():
+		var n = entities[id]
+		if is_instance_valid(n):
+			n.set_meta("silent", true)
+	for c in world.get_children():
+		c.queue_free()
+	entities.clear()
+	spawner = null
+
+
+func _process(delta: float) -> void:
+	if not _started or _over:
+		return
+	_clock += delta
+	if spawner != null and is_instance_valid(spawner):
+		var dur: float = spawner.get_level_duration() * duration_mul
+		if spawner.get_mission_time() >= dur and spawner.boss_sequence_done() and _clear_t < 0.0:
+			_clear_t = CLEAR_PAUSE
+			stats.sectors += 1
+			_sectors_done += 1
+			Net.broadcast([Net.M.SECTOR_CLEAR, GameState.current_level])
+			print("ServerWorld: sector ", GameState.current_level, " clear")
+	if _clear_t >= 0.0:
+		_clear_t -= delta
+		if _clear_t < 0.0:
+			if GameState.current_level >= GameState.MAX_LEVEL or _sectors_done >= max_sectors:
+				_game_over(GameState.current_level >= GameState.MAX_LEVEL)
+				return
+			_revive_all()
+			_begin_sector(GameState.current_level + 1)
+	_snap_t += delta
+	if _snap_t >= SNAP_EVERY:
+		_snap_t = 0.0
+		_send_snapshot()
+
+
+func _revive_all() -> void:
+	# Own lives: a downed (not out) ship comes back at the next sector. Phones
+	# track their own lives; the server only needs to know who is still in.
+	for p in seats:
+		if not seats[p]["out"]:
+			seats[p]["alive"] = true
+
+
+func _check_over() -> void:
+	if not _started or _over:
+		return
+	for p in seats:
+		if not seats[p]["out"]:
+			return
+	_game_over(false)
+
+
+func _game_over(won: bool) -> void:
+	_over = true
+	Net.broadcast([Net.M.GAME_OVER, won])
+	print("ServerWorld: game over won=", won, " stats=", stats, " out=", Net.bytes_out, " in=", Net.bytes_in)
+	await get_tree().create_timer(1.0).timeout
+	Net.stop()
+	get_tree().quit(0)
+
+
+# --- Replication ---
+
+func _on_child(n: Node) -> void:
+	if n is Enemy or n is Asteroid or n is Pickup:
+		var id: int = _next_id
+		_next_id += 1
+		n.set_meta("nid", id)
+		entities[id] = n
+		n.ready.connect(_send_spawn.bind(n), CONNECT_ONE_SHOT)
+		n.tree_exiting.connect(_on_gone.bind(n), CONNECT_ONE_SHOT)
+	elif n is EnemyBullet:
+		if not n.has_meta("net_local"):
+			n.ready.connect(_send_shot.bind(n), CONNECT_ONE_SHOT)
+	elif n is EnemyBeam:
+		n.ready.connect(_send_beam.bind(n), CONNECT_ONE_SHOT)
+
+
+func _send_spawn(n: Node) -> void:
+	var id: int = int(n.get_meta("nid"))
+	var kind: String = ""
+	var p: Dictionary = {"p": n.position}
+	if n is Enemy:
+		kind = "enemy"
+		p["t"] = n.type
+		p["s"] = n.enemy_size
+		p["h"] = n.h_dir
+		if n.alt_pattern != &"":
+			p["alt"] = n.alt_pattern
+			p["ae"] = n.alt_every
+	elif n is MegaAsteroid:
+		kind = "mega"
+		p["d"] = n.drift
+		p["hp"] = n.max_hp
+	elif n is Asteroid:
+		kind = "rock"
+		p["z"] = n.size
+		p["sh"] = n.shower
+		p["d"] = n.drift
+	elif n is Pickup:
+		kind = "pickup"
+		p["t"] = n.type
+		p["m"] = n.money_value
+	stats.spawns += 1
+	Net.broadcast([Net.M.SPAWN, id, kind, p])
+
+
+func _send_shot(b: EnemyBullet) -> void:
+	stats.shots += 1
+	var p := {"p": b.global_position, "d": b.direction, "v": b.speed, "dm": b.damage, "st": b.style,
+			"r": b.bullet_radius, "c": b.bullet_color, "t": _clock}
+	if b.from_boss: p["fb"] = true
+	if b.burst_after > 0.0:
+		p["ba"] = b.burst_after; p["bc"] = b.burst_count; p["bd"] = b.burst_damage; p["bs"] = b.burst_speed
+	if b.homing_turn_rate > 0.0:
+		p["ht"] = b.homing_turn_rate; p["hs"] = b.homing_secs
+	Net.broadcast([Net.M.SHOT, p])
+
+
+func _send_beam(beam: EnemyBeam) -> void:
+	var em: Node = beam.emitter
+	if em == null or not em.has_meta("nid"):
+		return
+	Net.broadcast([Net.M.BEAM, int(em.get_meta("nid")), {"o": beam.offset, "dm": beam.damage,
+			"cs": beam.charge_secs, "fs": beam.fire_secs, "w": beam.width, "c": beam.beam_color}])
+
+
+func _on_gone(n: Node) -> void:
+	var id: int = int(n.get_meta("nid", 0))
+	entities.erase(id)
+	if n.has_meta("silent") or n.has_meta("granted"):
+		return
+	var dead: bool = ("hp" in n) and int(n.hp) <= 0
+	if dead:
+		stats.kills += 1
+		Net.broadcast([Net.M.KILL, id, int(n.get_meta("last_hitter", 0)), int(n.reward) if "reward" in n else 0])
+	else:
+		Net.broadcast([Net.M.DESPAWN, id])
+
+
+func _send_snapshot() -> void:
+	var ids := PackedInt32Array()
+	var xy := PackedFloat32Array()
+	var fl := PackedByteArray()
+	var hpb := PackedByteArray()
+	for id in entities:
+		var n = entities[id]
+		if not is_instance_valid(n) or n is Pickup:
+			continue   # pickups fly locally on each phone
+		ids.append(id)
+		xy.append(n.position.x)
+		xy.append(n.position.y)
+		fl.append(1 if ("cloaked" in n and n.cloaked) else 0)
+		var frac: float = clampf(float(n.hp) / float(maxi(1, n.max_hp)), 0.0, 1.0) if ("hp" in n and "max_hp" in n) else 1.0
+		hpb.append(int(round(frac * 255.0)))
+	Net.broadcast([Net.M.SNAP, _clock, ids, xy, fl, hpb], false)
