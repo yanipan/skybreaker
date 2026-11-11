@@ -15,7 +15,7 @@ signal disconnected
 signal message(peer_id: int, msg: Array)   ## peer_id = 0 on the client side
 
 enum Mode { OFF, SERVER, CLIENT }
-const PROTO: int = 2
+const PROTO: int = 3
 const DEFAULT_PORT: int = 24620
 const CH_RELIABLE: int = 0
 const CH_FAST: int = 1
@@ -40,12 +40,13 @@ enum M {
 	SHOP_BOUGHT,  ## [SHOP_BOUGHT, peer, item]
 	SHOP_TIMER,   ## [SHOP_TIMER, seconds]  the slower player is on the clock
 	SHOP_CLOSE,   ## [SHOP_CLOSE]  everyone ready: GET READY countdown, then the world runs
+	REVIVE,       ## [REVIVE, peer, by_peer]  a downed ship is back (its pod was picked up)
 	# Phone -> server
 	JOIN = 50,    ## [JOIN, proto, name]
 	SHIP,         ## [SHIP, state:Dictionary]  pos, alive, weapon, power, firing
 	HITS,         ## [HITS, Dictionary id -> damage]
 	CLAIM,        ## [CLAIM, pickup_id]
-	DOWN,         ## [DOWN]  lost its last life
+	DOWN,         ## [DOWN, position]  lost its last life: a rescue pod appears there
 	READY,        ## [READY, level]  this phone has the sector scene loaded
 	SYNC,         ## [SYNC]  resend a SPAWN for everything alive (scene reload, reconnect)
 	DOCK,         ## [DOCK, starbase_id]  this ship touched the starbase

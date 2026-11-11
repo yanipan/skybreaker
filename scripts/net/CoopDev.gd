@@ -15,6 +15,8 @@ var port: int = Net.DEFAULT_PORT
 var pilot: String = "Pilot"
 var autopilot: bool = false
 var shot_every: float = 0.0
+var die_at: float = -1.0  ## --die_at=T: the autopilot loses its last life T s in (DOWN / rescue demo)
+var no_rescue: bool = false  ## --no_rescue: the autopilot ignores the partner's pod
 var dev_money: int = -1   ## --money=N: start the co-op run with N credits (solo money is restored after)
 
 
@@ -28,6 +30,8 @@ func _ready() -> void:
 			"autopilot": autopilot = true
 			"coopshots": shot_every = float(kv[1])
 			"money": dev_money = int(kv[1])
+			"die_at": die_at = float(kv[1])
+			"no_rescue": no_rescue = true
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
 	# The solo state is frozen FIRST (start_coop takes the hold), then the
@@ -66,5 +70,7 @@ func _ready() -> void:
 		h.pilot = pilot
 		h.autopilot = autopilot
 		h.shot_every = shot_every
+		h.die_at = die_at
+		h.no_rescue = no_rescue
 		get_tree().root.add_child(h)   # outlives the per-sector scene reloads
 	get_tree().change_scene_to_file("res://scenes/main/Main.tscn")

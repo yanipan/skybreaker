@@ -6,6 +6,12 @@ extends Node
 var pilot: String = "Pilot"
 var autopilot: bool = false
 var shot_every: float = 0.0
+## --die_at=T: T seconds after the first ship appears, this pilot loses its
+## last life on purpose (to show DOWN, the rescue pod and the revive).
+var die_at: float = -1.0
+var no_rescue: bool = false
+var _flown: float = 0.0
+var _died: bool = false
 var _shot_t: float = 0.0
 var _shot_n: int = 0
 var _t: float = 0.0
@@ -67,8 +73,23 @@ func _process(delta: float) -> void:
 				if d < best:
 					best = d
 					want_x = p.x + (-70.0 if Net.seat == 0 else 70.0)   # two ships, two lanes
+			_flown += delta
+			if die_at >= 0.0 and not _died and _flown >= die_at and me.visible and me.has_method("_die"):
+				_died = true
+				GameState.lives = 1
+				me._die()
+				return
 			# A starbase in view: fly into it (docking opens the shared shop).
 			var want_y: float = size.y * 0.80
+			# The partner's rescue pod comes first.
+			for pod in get_tree().get_nodes_in_group(&"revive_pods"):
+				if not no_rescue and is_instance_valid(pod) and pod.for_peer != Net.my_peer and not pod.claimed:
+					want_x = (pod as Node2D).global_position.x
+					want_y = (pod as Node2D).global_position.y
+					me.set_stick_target(Vector2(want_x / size.x, want_y / size.y), true)
+					me._fire_button_held = true
+					me._is_firing = true
+					return
 			for sb in get_tree().get_nodes_in_group(&"starbases"):
 				if is_instance_valid(sb) and not sb._used and (sb as Node2D).global_position.y > 120.0:
 					want_x = (sb as Node2D).global_position.x

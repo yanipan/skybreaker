@@ -97,6 +97,9 @@ var _coop: bool = false
 var _coop_level: int = 0          ## Sector this scene was loaded for
 var _partners: Dictionary = {}    ## peer -> PartnerShip
 var _coop_over: bool = false
+## This phone's ship has no lives left: it waits for a rescue (the partner
+## flies through its pod) or for the next sector, where it returns anyway.
+var _coop_down: bool = false
 
 
 func _ready() -> void:
@@ -195,6 +198,7 @@ func _coop_setup() -> void:
 	c.sector_cleared.connect(_coop_on_sector_cleared)
 	c.game_over.connect(_coop_on_game_over)
 	c.partner_state.connect(_coop_on_partner_state)
+	c.revived.connect(_coop_on_revived)
 	Net.disconnected.connect(_coop_on_disconnected)
 	# Shared shop: the server opens and closes it for both phones.
 	var shop: Node = load("res://scripts/net/CoopShop.gd").new()
@@ -224,7 +228,68 @@ func _coop_on_sector_started(level: int) -> void:
 func _coop_on_sector_cleared(level: int) -> void:
 	if level != _coop_level or _level_transitioning or _death_active or _coop_over:
 		return
+	if _coop_down:
+		# No ship to fly the warp with: come back with one life in the next sector.
+		_coop_return(mini(level + 1, GameState.MAX_LEVEL), true)
+		return
 	_begin_warp_transition()
+
+
+## Out of lives in co-op: DOWN, not game over. The gear is kept, a rescue pod
+## appears on the server where the ship fell, and this phone watches.
+func _coop_go_down() -> void:
+	_coop_down = true
+	var player := get_tree().get_first_node_in_group(&"player") as Node2D
+	var at: Vector2 = player.global_position if player != null else _viewport_size * Vector2(0.5, 0.6)
+	if player != null:
+		GameState.stash_respawn(player)
+	GameState.lives = 0
+	Net.send(0, [Net.M.DOWN, at])
+	_refresh_hud()
+	var l := Label.new()
+	l.name = "CoopDownLabel"
+	l.text = "SHIP DOWN"
+	l.add_theme_font_override("font", Fonts.HEADLINE)
+	l.add_theme_font_size_override("font_size", 64)
+	l.add_theme_color_override("font_color", Color(1.0, 0.30, 0.25))
+	l.add_theme_color_override("font_outline_color", Color.BLACK)
+	l.add_theme_constant_override("outline_size", 8)
+	l.size = Vector2(_viewport_size.x, 80)
+	l.position = Vector2(0, _viewport_size.y * 0.36)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.z_index = 4000
+	add_child(l)
+	var s2 := Label.new()
+	s2.name = "CoopDownHint"
+	s2.text = "YOUR PARTNER CAN RESCUE YOU\nYOU RETURN IN THE NEXT SECTOR"
+	s2.add_theme_font_size_override("font_size", 26)
+	s2.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
+	s2.add_theme_color_override("font_outline_color", Color.BLACK)
+	s2.add_theme_constant_override("outline_size", 5)
+	s2.size = Vector2(_viewport_size.x, 80)
+	s2.position = Vector2(0, _viewport_size.y * 0.36 + 84.0)
+	s2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	s2.z_index = 4000
+	add_child(s2)
+	print("CO-OP: ship down, waiting for rescue")
+
+
+func _coop_on_revived(peer: int, _by: int) -> void:
+	if peer == Net.my_peer and _coop_down and not _coop_over:
+		_coop_return(_coop_level, false)
+
+
+## Back in the fight with one life: the same scene reload a normal respawn
+## uses (the gear stashed when the ship went down is restored by Player).
+func _coop_return(level: int, warp_in: bool) -> void:
+	_coop_down = false
+	GameState.lives = 1
+	GameState.current_level = level
+	GameState.pending_warp_entry = warp_in
+	Engine.time_scale = 1.0
+	_level_transitioning = true
+	print("CO-OP: back with one life in sector ", level)
+	get_tree().reload_current_scene.call_deferred()
 
 
 func _coop_on_partner_state(peer: int, st: Dictionary) -> void:
@@ -928,6 +993,9 @@ func _on_player_died() -> void:
 	# Sector already cleared and warping out — the warp wins, ignore the death
 	# so we never stash respawn/carry from a dead player one sector ahead.
 	if _warp_active or _level_transitioning:
+		return
+	if _coop and GameState.lives - 1 <= 0:
+		_coop_go_down()
 		return
 	_death_active = true
 	_death_time_left = DEATH_DURATION

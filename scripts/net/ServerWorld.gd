@@ -42,7 +42,7 @@ var _shop_ready: Dictionary = {}     ## peer -> bool
 var _shop_deadline: float = -1.0
 var _shop_resume_t: float = -1.0
 ## Stats for tests / logs
-var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0, "shops": 0}
+var stats := {"spawns": 0, "shots": 0, "kills": 0, "grants": 0, "hits": 0, "sectors": 0, "shops": 0, "downs": 0, "revives": 0}
 
 
 func _ready() -> void:
@@ -85,7 +85,9 @@ func _parse_args() -> void:
 
 func _on_join(peer: int) -> void:
 	var seat: int = seats.size()
-	seats[peer] = {"seat": seat, "name": "", "alive": true, "out": false}
+	# out = gone for good (left, disconnected); down = no lives left, can be
+	# rescued through its pod and returns anyway at the next sector.
+	seats[peer] = {"seat": seat, "name": "", "alive": true, "out": false, "down": false}
 	var s := Area2D.new()
 	s.name = "Ship%d" % peer
 	s.monitoring = false
@@ -154,17 +156,15 @@ func _on_msg(peer: int, msg: Array) -> void:
 		Net.M.CLAIM:
 			var pid: int = int(msg[1])
 			var p = entities.get(pid)
-			if p != null and is_instance_valid(p) and p is Pickup and not p.has_meta("granted"):
+			if p != null and is_instance_valid(p) and p is RevivePod:
+				_claim_pod(p, peer)
+			elif p != null and is_instance_valid(p) and p is Pickup and not p.has_meta("granted"):
 				p.set_meta("granted", peer)
 				Net.broadcast([Net.M.GRANT, pid, peer])
 				stats.grants += 1
 				p.queue_free()
 		Net.M.DOWN:
-			seats[peer]["out"] = true
-			seats[peer]["alive"] = false
-			_shop_ready.erase(peer)
-			_check_shop_done()
-			_check_over()
+			_go_down(peer, msg[1] if msg.size() > 1 and msg[1] is Vector2 else Vector2(FIELD.x * 0.5, FIELD.y * 0.5))
 		Net.M.DOCK:
 			_dock(peer, int(msg[1]))
 		Net.M.SHOP_READY:
@@ -206,6 +206,51 @@ func _joined() -> int:
 		if seats[p].get("joined", false):
 			n += 1
 	return n
+
+
+# --- Down and rescue ---
+
+## A ship lost its last life. It is DOWN, not out: a rescue pod appears where
+## it fell, the partner can fly through it, and the ship returns anyway at
+## the next sector. Everyone down (or gone) at the same time = run over.
+func _go_down(peer: int, at: Vector2) -> void:
+	if not seats.has(peer) or seats[peer]["down"] or seats[peer]["out"] or not _started or _over:
+		return
+	seats[peer]["down"] = true
+	seats[peer]["alive"] = false
+	if ships.has(peer):
+		ships[peer].remove_from_group(&"player")
+	stats.downs += 1
+	print("ServerWorld: peer ", peer, " is down")
+	if _all_down():
+		_game_over(false)
+		return
+	var pod := RevivePod.new()
+	pod.for_peer = peer
+	pod.pilot_name = str(seats[peer]["name"])
+	pod.position = Vector2(clampf(at.x, 60.0, FIELD.x - 60.0), clampf(at.y, 100.0, FIELD.y - 100.0))
+	world.add_child(pod)
+
+
+func _claim_pod(pod: RevivePod, by: int) -> void:
+	var who: int = pod.for_peer
+	if pod.claimed or by == who or not seats.has(by) or seats[by]["down"] or seats[by]["out"]:
+		return
+	if not seats.has(who) or not seats[who]["down"]:
+		return
+	pod.claimed = true
+	seats[who]["down"] = false
+	stats.revives += 1
+	Net.broadcast([Net.M.REVIVE, who, by])
+	print("ServerWorld: peer ", who, " rescued by peer ", by)
+	pod.queue_free()
+
+
+func _all_down() -> bool:
+	for p in seats:
+		if not seats[p]["out"] and not seats[p]["down"]:
+			return false
+	return true
 
 
 # --- Shared shop ---
@@ -337,15 +382,14 @@ func _revive_all() -> void:
 	for p in seats:
 		if not seats[p]["out"]:
 			seats[p]["alive"] = true
+			seats[p]["down"] = false   # a downed ship flies again in the new sector
 
 
 func _check_over() -> void:
 	if not _started or _over:
 		return
-	for p in seats:
-		if not seats[p]["out"]:
-			return
-	_game_over(false)
+	if _all_down():
+		_game_over(false)
 
 
 func _game_over(won: bool) -> void:
@@ -360,7 +404,7 @@ func _game_over(won: bool) -> void:
 # --- Replication ---
 
 func _on_child(n: Node) -> void:
-	if n is Enemy or n is Asteroid or n is Pickup or n is Boss or n is Starbase:
+	if n is Enemy or n is Asteroid or n is Pickup or n is Boss or n is Starbase or n is RevivePod:
 		var id: int = _next_id
 		_next_id += 1
 		n.set_meta("nid", id)
@@ -409,6 +453,10 @@ func _send_spawn(n: Node, only_peer: int = 0) -> void:
 		p["m"] = n.money_value
 	elif n is Starbase:
 		kind = "starbase"
+	elif n is RevivePod:
+		kind = "pod"
+		p["for"] = n.for_peer
+		p["nm"] = n.pilot_name
 	if only_peer != 0:
 		Net.send(only_peer, [Net.M.SPAWN, id, kind, p])
 		return

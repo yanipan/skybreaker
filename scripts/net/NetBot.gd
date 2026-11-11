@@ -25,11 +25,26 @@ var _in_shop: bool = false
 var _shops: int = 0
 var _dock_age: Dictionary = {}
 var _hits_in_shop: int = 0
+## Test hooks: --die_at=T makes the bot go DOWN T seconds into the first
+## sector; --no_rescue stops it picking up the partner's pod.
+var die_at: float = -1.0
+var give_up_after: float = 600.0   ## --timeout=N seconds (a full 24-sector run needs more)
+var no_rescue: bool = false
+var _down: bool = false
+var _died: bool = false
+var _mission_t: float = -1.0
+var _revived: int = 0
+var _rescues: int = 0
+var _claim_cd: float = 0.0
 
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=")
+		if kv.size() == 1:
+			if kv[0] == "no_rescue":   # flags have no value
+				no_rescue = true
+			continue
 		if kv.size() != 2:
 			continue
 		match kv[0]:
@@ -40,6 +55,8 @@ func _ready() -> void:
 			"loss": Net.fake_loss = float(kv[1])
 			"dmg": dmg = int(kv[1])
 			"shop_secs": shop_secs = float(kv[1])
+			"die_at": die_at = float(kv[1])
+			"timeout": give_up_after = float(kv[1])
 	get_window().content_scale_size = FIELD
 	get_window().size = FIELD
 	world = Node2D.new()
@@ -53,9 +70,19 @@ func _ready() -> void:
 	nc = NetClient.new()
 	nc.world = world
 	nc.player_name = bot_name
-	nc.ship_state = func() -> Dictionary: return {"p": ship.position, "a": true, "w": 0, "l": 5, "f": true}
+	nc.ship_state = func() -> Dictionary: return {"p": ship.position, "a": not _down, "w": 0, "l": 5, "f": not _down, "n": bot_name}
+	nc.revived.connect(func(peer: int, by: int) -> void:
+		if peer == Net.my_peer:
+			_down = false
+			_revived += 1
+		if by == Net.my_peer:
+			_rescues += 1)
 	add_child(nc)
-	nc.sector_started.connect(func(l: int) -> void: _sectors.append(l))
+	nc.sector_started.connect(func(l: int) -> void:
+		_sectors.append(l)
+		_down = false   # a downed ship returns in the new sector
+		if _mission_t < 0.0:
+			_mission_t = 0.0)
 	nc.sector_cleared.connect(func(l: int) -> void:
 		_cleared.append(l)
 		Net.send(0, [Net.M.READY, l + 1]))   # a bot has nothing to load
@@ -70,7 +97,7 @@ func _ready() -> void:
 	nc.game_over.connect(_on_over)
 	var err: int = Net.connect_to(host, port)
 	print(bot_name, ": connecting ", host, ":", port, " err=", err)
-	get_tree().create_timer(600.0).timeout.connect(func() -> void:
+	get_tree().create_timer(give_up_after).timeout.connect(func() -> void:
 		print(bot_name, ": TIMEOUT")
 		get_tree().quit(3))
 
@@ -79,7 +106,7 @@ func _ready() -> void:
 static func _hittable(n) -> bool:
 	if not is_instance_valid(n):
 		return false
-	if n is Starbase:
+	if n is Starbase or n is RevivePod:
 		return false
 	if "alive" in n and not n.alive:
 		return false
@@ -99,6 +126,26 @@ func _process(delta: float) -> void:
 				Net.send(0, [Net.M.DOCK, id])
 	if _in_shop:
 		return
+	if _mission_t >= 0.0:
+		_mission_t += delta
+	if die_at >= 0.0 and not _died and _mission_t >= die_at:
+		_died = true
+		_down = true
+		Net.send(0, [Net.M.DOWN, ship.position])
+	if _down:
+		return   # no ship: nothing to fly, shoot or grab
+	# Rescue: fly to the partner's pod and claim it on touch
+	_claim_cd = maxf(0.0, _claim_cd - delta)
+	if not no_rescue:
+		for id in nc.puppets.keys():
+			var pod = nc.puppets.get(id)
+			if pod != null and is_instance_valid(pod) and pod is RevivePod and pod.for_peer != Net.my_peer:
+				ship.position = ship.position.move_toward(pod.global_position, 600.0 * delta)
+				if ship.position.distance_to(pod.global_position) < 50.0 and _claim_cd <= 0.0:
+					_claim_cd = 1.0
+					Net.send(0, [Net.M.CLAIM, id])
+				return
+	ship.position.y = move_toward(ship.position.y, 1500.0, 600.0 * delta)
 	# Steer toward the nearest puppet's x
 	var best: Node2D = null
 	var bd: float = INF
@@ -138,6 +185,8 @@ func _on_over(won: bool) -> void:
 	s["cleared"] = _cleared
 	s["hits_sent"] = _hits_sent
 	s["shops"] = _shops
+	s["revived"] = _revived
+	s["rescues"] = _rescues
 	s["pending_shots"] = nc._shots.size()
 	s["pending_t"] = float(nc._shots[0][0]) if not nc._shots.is_empty() else -1.0
 	s["render_t"] = snappedf(nc.render_time(), 0.01) if nc._offset != -INF else -1.0

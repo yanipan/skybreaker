@@ -66,6 +66,23 @@ Phones -> server
 
 Effort: phase 1-2 about a week, the rest 3-5 weeks.
 
+## Progress (11/11)
+
+| Phase | State |
+|---|---|
+| 1 net layer, room server, puppets, bots | done |
+| 2 real game screen in a room (two windows on the Mac) | done |
+| 3a bosses, mini-bosses, breakable parts | done (bots: Iron Tortoise killed at 80 ms / 3% loss) |
+| 3b shared shop | done (bots + two real windows) |
+| 3c down / rescue pod / return next sector / both down = over | logic done and bot-tested; real-window check pending |
+| 3d full run to sector 24, co-op score | not started |
+| 4 lobby (code, QR, Play now) | not started |
+| 5 GCP | not started |
+| 6 balance for two, store notes | not started |
+| 7 AI partners | not started |
+
+Open design question: shop timer for matched games (proposal 30 s after the first player is ready, none with friends). The server already has it as `--shop_timer`, off by default.
+
 ## Files (planned)
 `scripts/net/Net.gd` (autoload), `scripts/net/Proto.gd` (codec), `scripts/net/ServerWorld.gd`
 + `scenes/net/ServerWorld.tscn`, `scripts/net/NetClient.gd` (proxies, interpolation, partner),

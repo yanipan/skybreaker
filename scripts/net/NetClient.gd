@@ -22,6 +22,7 @@ signal shop_state(peer: int, ready: bool)
 signal shop_bought(peer: int, item: String)
 signal shop_timer(seconds: float)
 signal shop_closed
+signal revived(peer: int, by: int)
 
 const INTERP: float = 0.10
 const SHIP_EVERY: float = 1.0 / 30.0
@@ -36,7 +37,7 @@ var player_name: String = "Pilot"
 var start_sector: int = 1       ## From HELLO
 var _flow_queue: Array = []     ## SECTOR / SECTOR_CLEAR / GAME_OVER / ALERT seen while detached
 const FLOW_KINDS: Array = [Net.M.SECTOR, Net.M.SECTOR_CLEAR, Net.M.GAME_OVER, Net.M.ALERT,
-		Net.M.SHOP_OPEN, Net.M.SHOP_STATE, Net.M.SHOP_TIMER, Net.M.SHOP_CLOSE]
+		Net.M.SHOP_OPEN, Net.M.SHOP_STATE, Net.M.SHOP_TIMER, Net.M.SHOP_CLOSE, Net.M.REVIVE]
 const WORLD_KINDS: Array = [Net.M.SPAWN, Net.M.SNAP, Net.M.SHOT, Net.M.BEAM, Net.M.KILL, Net.M.DESPAWN, Net.M.GRANT]
 ## Callable returning this phone's ship state Dictionary {p, a, w, l, f, ...};
 ## defaults to reading the node in group "player".
@@ -144,6 +145,8 @@ func _on_msg(_peer: int, msg: Array) -> void:
 		Net.M.SHOP_CLOSE:
 			reset_clock()
 			shop_closed.emit()
+		Net.M.REVIVE:
+			revived.emit(int(msg[1]), int(msg[2]))
 
 
 ## The server clock stood still (shop) while this phone's clock did not: drop
@@ -209,6 +212,13 @@ func _spawn(id: int, kind: String, p: Dictionary) -> void:
 					puppets[pid] = part
 					part.tree_exiting.connect(_forget.bind(pid), CONNECT_ONE_SHOT)
 			return
+		"pod":
+			var pod := RevivePod.new()
+			pod.for_peer = int(p.get("for", 0))
+			pod.pilot_name = str(p.get("nm", ""))
+			pod.net_puppet = true
+			pod.net_id = id
+			n = pod
 		"starbase":
 			var sb := Starbase.new()
 			sb.net_puppet = true
