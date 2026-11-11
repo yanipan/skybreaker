@@ -30,6 +30,7 @@ var _hits_in_shop: int = 0
 var die_at: float = -1.0
 var give_up_after: float = 600.0   ## --timeout=N seconds (a full 24-sector run needs more)
 var no_rescue: bool = false
+var no_pickups: bool = false
 ## --drop_at=T cuts the link T seconds into the run and stays away --drop_secs
 ## (then NetClient reconnects); --drop_in_shop cuts it when the shop opens;
 ## --give_up=N = how long the bot keeps trying.
@@ -56,6 +57,8 @@ func _ready() -> void:
 				no_rescue = true
 			if kv[0] == "drop_in_shop":
 				drop_in_shop = true
+			if kv[0] == "no_pickups":   # leave every pickup to the partner
+				no_pickups = true
 			continue
 		if kv.size() != 2:
 			continue
@@ -199,7 +202,7 @@ func _process(delta: float) -> void:
 			_hits_sent += 1
 	for id in nc.pickups.keys():
 		var k = nc.pickups.get(id)
-		if k == null or not is_instance_valid(k) or k.net_claimed:
+		if k == null or not is_instance_valid(k) or k.net_claimed or no_pickups:
 			continue
 		_claim_age[id] = float(_claim_age.get(id, 0.0)) + delta
 		if _claim_age[id] > 0.4:

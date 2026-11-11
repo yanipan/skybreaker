@@ -315,6 +315,8 @@ func _on_go(sector: int, _seed: int) -> void:
 	if Net.disconnected.is_connected(_on_room_lost):
 		Net.disconnected.disconnect(_on_room_lost)
 	CoopSession.begin_run(sector)
+	# pk = partner kind (0 human, 1 labelled AI, 2 disguised AI): the bot experiment.
+	Telemetry.track("coop_start", {"pk": int(Net.client.partner_kind) if Net.client != null else 0, "via": "quick" if _matched_room else "friend"})
 	get_tree().change_scene_to_file(MAIN_SCENE)
 
 

@@ -365,6 +365,8 @@ func _coop_end(text: String) -> void:
 	if _coop_over:
 		return
 	_coop_over = true
+	Telemetry.track("coop_end", {"pk": int(Net.client.partner_kind) if Net.client != null and is_instance_valid(Net.client) else 0,
+			"sector": GameState.current_level, "why": text, "score": GameState.run_score})
 	_level_transitioning = true
 	Engine.time_scale = 1.0
 	var layer := CanvasLayer.new()

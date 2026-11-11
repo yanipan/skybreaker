@@ -80,10 +80,10 @@ Effort: phase 1-2 about a week, the rest 3-5 weeks.
 | 4a lobby service (`server/lobby/lobby.js`) + the room's waiting room | done 11/11 on the Mac, LobbyTest 27 |
 | 4b lobby screens: CO-OP button, Play now, Play with a friend (code + QR), Join with code, waiting room, 3-2-1 | done 11/11, seen in two real windows through the lobby |
 | 4c reconnect (done 11/11) | link lost mid-run: seat kept 60 s, phone retries 45 s with its HELLO token, same peer id after `Net.rebind`, RESUME + SYNC rebuilds the world, catches up on sector / shop / rescue; background > 3 s forces a reconnect; shop and next sector do not wait for an away phone; leaving on purpose (BYE) skips the window. `run_reconnect_test.sh` 3 scenarios + two real windows. Not proven on a real phone or a real network switch (Wi-Fi to mobile data changes the address: handled the same way, untested) |
-| 4c still open | AI partner when Play now finds nobody (phase 7); in-game branded QR scanner (needs two real phones) and a branded QR; the web page behind the invite link (shimonster.com/skybreaker/join/<code> does not exist yet); the hint under the QR still says "types the code" |
+| 4c still open | in-game branded QR scanner (needs two real phones) and a branded QR; the web page behind the invite link (shimonster.com/skybreaker/join/<code> does not exist yet); the hint under the QR still says "types the code" |
 | 5 GCP | not started |
 | 6 balance for two, store notes | not started |
-| 7 AI partners | not started |
+| 7 AI partners | first version done 11/11: `AiPilot` inside the room server, traits, shop, rescue both ways, 50/50 labelled or disguised, Play now falls back to it, telemetry `pk`. Open: it only uses the phaser; no takeover of a leaver's seat; bot games still need a server room (on-phone hosting not built); skill / difficulty not tuned against real players |
 
 Open design question: shop timer for matched games (proposal 30 s after the first player is ready, none with friends). The server already has it as `--shop_timer`, off by default.
 

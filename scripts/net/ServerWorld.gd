@@ -26,6 +26,11 @@ var shop_timer: float = 0.0
 var room_code: String = ""
 var lobby_timeout: float = 600.0
 const EMPTY_SECS: float = 45.0
+## AI partners (--bots=N): pilots that live in this process and take a seat
+## once the first human has joined. peer id -> AiPilot.
+var bot_count: int = 0
+var bots: Dictionary = {}
+const BOT_PEER: int = 900
 ## A phone whose link died keeps its seat this long (--reconnect_secs).
 var reconnect_secs: float = 60.0
 const PENDING_SECS: float = 6.0     ## A new connection must say who it is within this
@@ -91,6 +96,7 @@ func _parse_args() -> void:
 			"room": room_code = kv[1]
 			"lobby_timeout": lobby_timeout = float(kv[1])
 			"reconnect_secs": reconnect_secs = float(kv[1])
+			"bots": bot_count = int(kv[1])
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
 	if run_seed == 0:
@@ -127,6 +133,57 @@ func _on_join(peer: int) -> void:
 	ships[peer] = s
 	Net.send(peer, [Net.M.HELLO, Net.PROTO, peer, seat, start_sector, seats[peer]["token"]])
 	print("ServerWorld: peer ", peer, " joined as seat ", seat)
+
+
+## An AI partner takes the next free seat (called when the first human joins).
+func _add_bot() -> void:
+	var peer: int = BOT_PEER + bots.size()
+	var taken: Array = []
+	for q in seats:
+		taken.append(int(seats[q]["seat"]))
+	var seat: int = 0
+	while seat in taken:
+		seat += 1
+	var ai := AiPilot.new()
+	ai.name = "Ai%d" % peer
+	add_child(ai)
+	ai.setup(self, peer, run_seed + peer)
+	seats[peer] = {"seat": seat, "name": ai.pilot_name, "alive": true, "out": false, "down": false, "away": false, "away_t": 0.0,
+			"token": 0, "ai": true, "joined": true, "ready": true}
+	var s := Area2D.new()
+	s.name = "Ship%d" % peer
+	s.monitoring = false
+	s.monitorable = false
+	s.position = Vector2(FIELD.x * (0.35 + 0.3 * seat), FIELD.y * 0.64)
+	s.add_to_group(&"player")
+	s.set_meta("peer", peer)
+	add_child(s)
+	ships[peer] = s
+	ai.pos = s.position
+	bots[peer] = ai
+	print("ServerWorld: AI partner ", ai.pilot_name, " took seat ", seat, " (", "labelled" if ai.labelled else "disguised", ")")
+
+
+## What kind of partner this room has, for the phone's telemetry only:
+## 0 = human, 1 = labelled AI, 2 = disguised AI.
+func partner_kind() -> int:
+	for p in bots:
+		return 1 if bots[p].labelled else 2
+	return 0
+
+
+func humans_shop_ready() -> bool:
+	for p in _shop_ready:
+		if not bots.has(p) and not _shop_ready[p]:
+			return false
+	return true
+
+
+func bot_shop_ready(peer: int) -> void:
+	if _shop_open and _shop_ready.has(peer):
+		_shop_ready[peer] = true
+		Net.broadcast([Net.M.SHOP_STATE, peer, true])
+		_check_shop_done()
 
 
 func _on_left(peer: int, deliberate: bool = false) -> void:
@@ -229,10 +286,12 @@ func _on_msg(peer: int, msg: Array) -> void:
 				return
 			seats[peer]["name"] = str(msg[2]).substr(0, 24) if msg.size() > 2 else ""
 			seats[peer]["joined"] = true
+			while bots.size() < bot_count and seats.size() < expected:
+				_add_bot()
 			_send_lobby()
 			if not _started and not _go_sent and _joined() >= expected:
 				_go_sent = true
-				Net.broadcast([Net.M.GO, start_sector, run_seed])
+				Net.broadcast([Net.M.GO, start_sector, run_seed, partner_kind()])
 				print("ServerWorld: room full, GO")
 		Net.M.READY:
 			# The phone has the sector scene up. The first sector starts when
@@ -311,7 +370,7 @@ func _send_lobby() -> void:
 ## Every seat still in the run has its scene loaded.
 func _all_ready() -> bool:
 	for p in seats:
-		if not seats[p]["out"] and not seats[p]["away"] and not seats[p].get("ready", false):
+		if not seats[p]["out"] and not seats[p]["away"] and not seats[p].has("ai") and not seats[p].get("ready", false):
 			return false   # a phone that lost its link holds nobody up; it catches up when it is back
 	return true
 
@@ -374,6 +433,14 @@ func _claim_pod(pod: RevivePod, by: int) -> void:
 
 
 func _all_down() -> bool:
+	if not bots.is_empty():
+		# An AI partner never carries a run on its own: no human left = over.
+		var human_in: bool = false
+		for p in seats:
+			if not seats[p].has("ai") and not seats[p]["out"]:
+				human_in = true
+		if not human_in:
+			return true
 	for p in seats:
 		if not seats[p]["out"] and not seats[p]["down"]:
 			return false
@@ -402,6 +469,8 @@ func _dock(peer: int, base_id: int) -> void:
 	world.process_mode = Node.PROCESS_MODE_DISABLED
 	stats.shops += 1
 	Net.broadcast([Net.M.SHOP_OPEN, base_id, peer])
+	for b in bots:
+		bots[b].shop_opened()
 	print("ServerWorld: shop open (docked by peer ", peer, "), world frozen")
 
 
@@ -421,6 +490,11 @@ func _check_shop_done() -> void:
 
 
 func _process_shop(delta: float) -> void:
+	if _shop_open:
+		for b in bots:
+			bots[b].shop_tick(delta)
+			if not _shop_open:
+				break
 	if _shop_open and _shop_deadline >= 0.0:
 		_shop_deadline -= delta
 		if _shop_deadline <= 0.0:
@@ -481,6 +555,10 @@ func _process(delta: float) -> void:
 		_process_shop(delta)
 		return   # frozen: no clock, no sector timer, no snapshots
 	_clock += delta
+	for b in bots:
+		bots[b].tick(delta)
+		if _over:
+			return
 	if spawner != null and is_instance_valid(spawner):
 		var dur: float = spawner.get_level_duration() * duration_mul
 		# Same rule as Main._check_level_complete: every boss dead, then the
@@ -538,6 +616,8 @@ func _game_over(won: bool) -> void:
 		if seats[p].get("joined", false):
 			players.append([p, str(seats[p]["name"]), int(seats[p].get("score", 0))])
 	Net.broadcast([Net.M.GAME_OVER, won, GameState.current_level, players])
+	for b in bots:
+		print("ServerWorld: AI ", bots[b].pilot_name, " score ", bots[b].score, " level ", bots[b].level, " money ", bots[b].money, " lives ", bots[b].lives, " ", bots[b].stats)
 	print("ServerWorld: game over won=", won, " stats=", stats, " out=", Net.bytes_out, " in=", Net.bytes_in, " clock=", snappedf(_clock, 0.01), " last_shot=", snappedf(_last_shot_t, 0.01))
 	await get_tree().create_timer(1.0).timeout
 	Net.stop()
@@ -656,7 +736,11 @@ func _on_gone(n: Node) -> void:
 	var dead: bool = ("hp" in n) and int(n.hp) <= 0
 	if dead:
 		stats.kills += 1
-		Net.broadcast([Net.M.KILL, id, int(n.get_meta("last_hitter", 0)), int(n.reward) if "reward" in n else 0])
+		var killer: int = int(n.get_meta("last_hitter", 0))
+		var reward: int = int(n.reward) if "reward" in n else 0
+		if bots.has(killer):
+			bots[killer].on_kill(reward)
+		Net.broadcast([Net.M.KILL, id, killer, reward])
 	else:
 		Net.broadcast([Net.M.DESPAWN, id])
 

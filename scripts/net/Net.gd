@@ -43,7 +43,7 @@ enum M {
 	SHOP_CLOSE,   ## [SHOP_CLOSE]  everyone ready: GET READY countdown, then the world runs
 	REVIVE,       ## [REVIVE, peer, by_peer]  a downed ship is back (its pod was picked up)
 	LOBBY,        ## [LOBBY, players:Array of [peer, seat, name], needed]  who is in the room before the run
-	GO,           ## [GO, start_sector, seed]  everyone is here: load the game and answer READY
+	GO,           ## [GO, start_sector, seed, partner_kind]  everyone is here: load the game and answer READY
 	REFUSED,      ## [REFUSED, reason]  "version" = update the game to play co-op
 	RESUME,       ## [RESUME, level, between_sectors, shop_open, down]  answer to a reconnect: where the room is now
 	LINK,         ## [LINK, peer, state]  a partner's connection: 0 = lost (may return), 1 = back, 2 = gone for good

@@ -68,6 +68,8 @@ var first_retry_after: float = 0.5        ## test hook: stay away longer
 var reconnecting: bool = false
 var reconnects: int = 0
 var shop_is_open: bool = false
+## From GO, for telemetry only: 0 = human partner, 1 = labelled AI, 2 = disguised AI.
+var partner_kind: int = 0
 var _token: int = 0
 var _seat_peer: int = 0
 var _in_run: bool = false                 ## between the first SECTOR and GAME_OVER
@@ -253,6 +255,7 @@ func _on_msg(_peer: int, msg: Array) -> void:
 			lobby_changed.emit(msg[1], int(msg[2]))
 		Net.M.GO:
 			start_sector = int(msg[1])
+			partner_kind = int(msg[3]) if msg.size() > 3 else 0
 			go.emit(int(msg[1]), int(msg[2]))
 		Net.M.REFUSED:
 			refused.emit(str(msg[1]))

@@ -42,6 +42,8 @@ const PORT_MAX = parseInt(process.env.ROOM_PORT_MAX || '24839', 10);
 const MAX_ROOMS = parseInt(process.env.MAX_ROOMS || '8', 10);
 const SIG_KEY = process.env.SB_SIG_KEY || '';
 const QUICK_WAIT_MS = parseInt(process.env.QUICK_WAIT_MS || '10000', 10);
+// BOT_FILL=0 turns the AI partner off (Play now then ends in "nobody found").
+const BOT_FILL = (process.env.BOT_FILL || '1') !== '0';
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0 O 1 I L
 const CODE_TTL_MS = 10 * 60 * 1000;
 const REQ_PER_MIN = parseInt(process.env.REQ_PER_MIN || '600', 10);
@@ -73,7 +75,7 @@ function freePort() {
 
 // One headless Godot process = one room. Its stdout tells us how full it is
 // and when the run starts (the code is retired then).
-function startRoom(proto, kind) {
+function startRoom(proto, kind, bots = 0) {
   if (rooms.size >= MAX_ROOMS) return null;
   const port = freePort();
   const code = newCode();
@@ -82,9 +84,10 @@ function startRoom(proto, kind) {
     `--port=${port}`, '--players=2', '--sector=1', `--room=${code}`];
   // A matched room that does not fill fast is abandoned fast; a friend room waits for the code's lifetime.
   args.push(kind === 'quick' ? '--lobby_timeout=45' : '--lobby_timeout=600');
+  if (bots > 0) args.push(`--bots=${bots}`);   // an AI partner takes the second seat
   if (process.env.ROOM_EXTRA_ARGS) args.push(...process.env.ROOM_EXTRA_ARGS.split(' ').filter(Boolean));   // tests only
   const child = spawn(GODOT, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  const room = { code, port, proto, kind, child, created: Date.now(), joined: 0, started: false };
+  const room = { code, port, proto, kind, bots, child, created: Date.now(), joined: 0, started: false };
   rooms.set(code, room);
   let buf = '';
   child.stdout.on('data', d => {
@@ -100,7 +103,7 @@ function startRoom(proto, kind) {
   child.stderr.on('data', () => {});
   child.on('exit', (c) => { rooms.delete(code); log('room', code, 'closed, exit', c, '| rooms', rooms.size); });
   child.on('error', (e) => { rooms.delete(code); log('room', code, 'spawn error', e.message); });
-  log('room', code, kind, 'on port', port, '| rooms', rooms.size);
+  log('room', code, kind, bots > 0 ? 'with AI partner' : '', 'on port', port, '| rooms', rooms.size);
   return room;
 }
 
@@ -167,9 +170,18 @@ function handle(pathname, body, ip) {
         waiting.delete(body.player_id);
         return { ok: true, matched: true, host: PUBLIC_HOST, port: room.port };
       }
-      if (!me) { me = { proto: body.proto, since: now, seen: now, room: null }; waiting.set(body.player_id, me); }
+      // Nobody else is looking: after a search of varying length (so it does not
+      // always end on the same second) an AI partner fills the room.
+      if (!me) { me = { proto: body.proto, since: now, seen: now, room: null, botAt: QUICK_WAIT_MS * (0.55 + 0.4 * Math.random()) }; waiting.set(body.player_id, me); }
       me.seen = now;
       me.proto = body.proto;
+      if (BOT_FILL && now - me.since >= me.botAt) {
+        const room = startRoom(body.proto, 'quick', 1);
+        if (room) {
+          waiting.delete(body.player_id);
+          return { ok: true, matched: true, host: PUBLIC_HOST, port: room.port };
+        }
+      }
       return { ok: true, matched: false, waited_ms: now - me.since, give_up_ms: QUICK_WAIT_MS };
     }
     case '/v1/quick/cancel': {
