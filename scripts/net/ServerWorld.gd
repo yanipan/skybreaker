@@ -173,6 +173,8 @@ func _on_msg(peer: int, msg: Array) -> void:
 					if alive: ship.add_to_group(&"player")
 					else: ship.remove_from_group(&"player")
 				seats[peer]["alive"] = alive
+			if st.has("sc"):
+				seats[peer]["score"] = maxi(0, int(st["sc"]))   # for the end-of-run screen
 			Net.broadcast([Net.M.PARTNER, peer, st], false, peer)
 		Net.M.HITS:
 			var d: Dictionary = msg[1]
@@ -448,7 +450,11 @@ func _check_over() -> void:
 
 func _game_over(won: bool) -> void:
 	_over = true
-	Net.broadcast([Net.M.GAME_OVER, won])
+	var players: Array = []
+	for p in seats:
+		if seats[p].get("joined", false):
+			players.append([p, str(seats[p]["name"]), int(seats[p].get("score", 0))])
+	Net.broadcast([Net.M.GAME_OVER, won, GameState.current_level, players])
 	print("ServerWorld: game over won=", won, " stats=", stats, " out=", Net.bytes_out, " in=", Net.bytes_in, " clock=", snappedf(_clock, 0.01), " last_shot=", snappedf(_last_shot_t, 0.01))
 	await get_tree().create_timer(1.0).timeout
 	Net.stop()

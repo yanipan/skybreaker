@@ -76,8 +76,10 @@ Effort: phase 1-2 about a week, the rest 3-5 weeks.
 | 3b shared shop | done (bots + two real windows) |
 | 3c down / rescue pod / return next sector / both down = over | done (bots: rescue, both down; two real windows) |
 | 3d full run to sector 24 | done with bots 11/11: 24 sectors, all 8 boss types incl. the Herald + Skybreaker finale, won=true, 0 script errors, 15 min at duration_mul 0.35 (that run has no mini-bosses, shops or megas: they sit past the shortened sector end; mini-boss checked separately on sector 6 at full length) |
-| 3e co-op result screen (both scores at the end of a run) | not started; goes with the lobby UI in phase 4 |
-| 4 lobby (code, QR, Play now) | not started |
+| 3e co-op result screen (both scores at the end of a run) | done 11/11 (RUN OVER / RUN COMPLETE, sector reached, both pilots, team total) |
+| 4a lobby service (`server/lobby/lobby.js`) + the room's waiting room | done 11/11 on the Mac, LobbyTest 27 |
+| 4b lobby screens: CO-OP button, Play now, Play with a friend (code + QR), Join with code, waiting room, 3-2-1 | done 11/11, seen in two real windows through the lobby |
+| 4c still open | reconnect after a dropped connection / app in the background; AI partner when Play now finds nobody (phase 7); in-game branded QR scanner (needs two real phones) and a branded QR; the web page behind the invite link (shimonster.com/skybreaker/join/<code> does not exist yet); the hint under the QR still says "types the code" |
 | 5 GCP | not started |
 | 6 balance for two, store notes | not started |
 | 7 AI partners | not started |

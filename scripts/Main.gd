@@ -319,29 +319,102 @@ func _coop_on_disconnected() -> void:
 	_coop_end("CONNECTION LOST")
 
 
-## Co-op is over for this phone: say why, then back to the menu with the
-## solo run, money and lives exactly as they were before co-op started.
+## Co-op is over for this phone: say why and show both pilots' scores, then
+## back to the menu with the solo run, money and lives exactly as they were
+## before co-op started. CONTINUE leaves at once; otherwise after RESULT_SECS.
+const COOP_RESULT_SECS: float = 20.0
+
 func _coop_end(text: String) -> void:
 	if _coop_over:
 		return
 	_coop_over = true
 	_level_transitioning = true
 	Engine.time_scale = 1.0
+	var layer := CanvasLayer.new()
+	layer.name = "CoopResult"
+	layer.layer = 120
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+	var dim := ColorRect.new()
+	dim.color = Color(0.01, 0.02, 0.05, 0.82)
+	dim.size = _viewport_size
+	layer.add_child(dim)
+	var box := VBoxContainer.new()
+	box.position = Vector2(_viewport_size.x * 0.07, _viewport_size.y * 0.22)
+	box.size = Vector2(_viewport_size.x * 0.86, _viewport_size.y * 0.5)
+	box.add_theme_constant_override("separation", 14)
+	layer.add_child(box)
+	box.add_child(_coop_result_label(text, 58, Color(0.65, 0.95, 1.0), true))
+	var res: Dictionary = Net.client.last_result if Net.client != null and is_instance_valid(Net.client) else {}
+	var players: Array = res.get("players", [])
+	if not players.is_empty():
+		box.add_child(_coop_result_label("SECTOR %d REACHED" % int(res.get("sector", GameState.current_level)), 28, Color(0.78, 0.80, 0.92), false))
+		var rows: Array = players.duplicate()
+		rows.sort_custom(func(a, b) -> bool: return int(a[2]) > int(b[2]))
+		var total: int = 0
+		for r in rows:
+			total += int(r[2])
+			var mine: bool = int(r[0]) == Net.my_peer
+			# My own score is the one on my HUD (the server's copy can be a moment old).
+			var sc: int = GameState.run_score if mine else int(r[2])
+			var nm: String = str(r[1]) if str(r[1]) != "" else "PILOT"
+			box.add_child(_coop_result_label("%s   %s%s" % [nm, _coop_fmt(sc), "   (YOU)" if mine else ""], 36,
+					Color(1.0, 0.85, 0.40) if mine else Color(1, 1, 1), true))
+		box.add_child(_coop_result_label("TEAM   %s" % _coop_fmt(total), 30, Color(0.55, 1.0, 0.65), true))
+	var b := Button.new()
+	b.name = "Continue"
+	b.text = "CONTINUE"
+	b.add_theme_font_override("font", Fonts.HEADLINE)
+	b.add_theme_font_size_override("font_size", 32)
+	b.custom_minimum_size = Vector2(_viewport_size.x * 0.86, 88)
+	b.add_theme_color_override("font_color", Color(0.55, 0.95, 1.0))
+	b.add_theme_color_override("font_outline_color", Color.BLACK)
+	b.add_theme_constant_override("outline_size", 5)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.10, 0.22, 0.28, 0.75 if state == "normal" else 0.95)
+		sb.border_color = Color(0.55, 0.95, 1.0)
+		sb.set_border_width_all(3)
+		sb.set_corner_radius_all(8)
+		b.add_theme_stylebox_override(state, sb)
+	b.pressed.connect(_coop_leave_to_menu)
+	box.add_child(b)
+	await get_tree().create_timer(COOP_RESULT_SECS, true, false, true).timeout
+	if is_inside_tree():
+		_coop_leave_to_menu()
+
+
+func _coop_result_label(text: String, size_px: int, col: Color, headline: bool) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.add_theme_font_override("font", Fonts.HEADLINE)
-	l.add_theme_font_size_override("font_size", 60)
-	l.add_theme_color_override("font_color", Color(0.65, 0.95, 1.0))
+	if headline:
+		l.add_theme_font_override("font", Fonts.HEADLINE)
+	l.add_theme_font_size_override("font_size", size_px)
+	l.add_theme_color_override("font_color", col)
 	l.add_theme_color_override("font_outline_color", Color.BLACK)
 	l.add_theme_constant_override("outline_size", 6)
-	l.size = Vector2(_viewport_size.x, 80)
-	l.position = Vector2(0, _viewport_size.y * 0.40)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.z_index = 4000
-	add_child(l)
-	await get_tree().create_timer(3.0, true, false, true).timeout
-	if not is_inside_tree():
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(_viewport_size.x * 0.86, 0)
+	return l
+
+
+## 12345 -> "12,345"
+static func _coop_fmt(n: int) -> String:
+	var t: String = str(absi(n))
+	var out: String = ""
+	while t.length() > 3:
+		out = "," + t.substr(t.length() - 3) + out
+		t = t.substr(0, t.length() - 3)
+	return ("-" if n < 0 else "") + t + out
+
+
+var _coop_left: bool = false
+
+func _coop_leave_to_menu() -> void:
+	if _coop_left or not is_inside_tree():
 		return
+	_coop_left = true
 	get_tree().paused = false
 	Net.leave_coop()
 	get_tree().change_scene_to_file("res://scenes/main/StartScreen.tscn")
@@ -359,8 +432,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	# Survival score — one point per second of staying alive
-	_survival_accumulator += delta
+	# Survival score — one point per second of staying alive (not while this
+	# ship is down in co-op, and not once the co-op run is over)
+	if _coop_over or _coop_down:
+		_survival_accumulator = 0.0
+	_survival_accumulator += delta if not (_coop_over or _coop_down) else 0.0
 	if _survival_accumulator >= 1.0:
 		var ticks: int = int(_survival_accumulator)
 		_survival_accumulator -= ticks

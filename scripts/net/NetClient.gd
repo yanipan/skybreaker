@@ -38,6 +38,8 @@ const SHIP_EVERY: float = 1.0 / 30.0
 var world: Node
 var player_name: String = "Pilot"
 var start_sector: int = 1       ## From HELLO
+## The last GAME_OVER: {won, sector, players: [[peer, name, score], ...]}.
+var last_result: Dictionary = {}
 var _flow_queue: Array = []     ## SECTOR / SECTOR_CLEAR / GAME_OVER / ALERT seen while detached
 const FLOW_KINDS: Array = [Net.M.SECTOR, Net.M.SECTOR_CLEAR, Net.M.GAME_OVER, Net.M.ALERT,
 		Net.M.SHOP_OPEN, Net.M.SHOP_STATE, Net.M.SHOP_TIMER, Net.M.SHOP_CLOSE, Net.M.REVIVE]
@@ -117,6 +119,8 @@ func _on_msg(_peer: int, msg: Array) -> void:
 		Net.M.SECTOR_CLEAR:
 			sector_cleared.emit(int(msg[1]))
 		Net.M.GAME_OVER:
+			last_result = {"won": bool(msg[1]), "sector": int(msg[2]) if msg.size() > 2 else GameState.current_level,
+					"players": msg[3] if msg.size() > 3 and msg[3] is Array else []}
 			game_over.emit(bool(msg[1]))
 		Net.M.SPAWN:
 			_spawn(int(msg[1]), str(msg[2]), msg[3])
@@ -429,8 +433,8 @@ func _grant(id: int, peer: int) -> void:
 func _default_ship_state() -> Dictionary:
 	var me = get_tree().get_first_node_in_group(&"player")
 	if me == null or not is_instance_valid(me) or not (me is Node2D):
-		return {"a": false}
-	var st: Dictionary = {"p": me.global_position, "a": me.visible, "n": player_name}
+		return {"a": false, "sc": GameState.run_score}
+	var st: Dictionary = {"p": me.global_position, "a": me.visible, "n": player_name, "sc": GameState.run_score}
 	if "weapon_type" in me:
 		st["w"] = int(me.weapon_type)
 		if "weapon_levels" in me:

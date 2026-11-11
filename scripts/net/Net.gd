@@ -15,7 +15,7 @@ signal disconnected
 signal message(peer_id: int, msg: Array)   ## peer_id = 0 on the client side
 
 enum Mode { OFF, SERVER, CLIENT }
-const PROTO: int = 4
+const PROTO: int = 5
 const DEFAULT_PORT: int = 24620
 const CH_RELIABLE: int = 0
 const CH_FAST: int = 1
@@ -34,7 +34,7 @@ enum M {
 	GRANT,        ## [GRANT, pickup_id, peer]
 	PARTNER,      ## [PARTNER, peer, state:Dictionary]
 	ALERT,        ## [ALERT, text]
-	GAME_OVER,    ## [GAME_OVER, won]
+	GAME_OVER,    ## [GAME_OVER, won, sector_reached, players:Array of [peer, name, score]]
 	SHOP_OPEN,    ## [SHOP_OPEN, starbase_id, docker_peer]  world frozen, both phones shop
 	SHOP_STATE,   ## [SHOP_STATE, peer, ready]
 	SHOP_BOUGHT,  ## [SHOP_BOUGHT, peer, item]
