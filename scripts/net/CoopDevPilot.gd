@@ -10,6 +10,14 @@ var shot_every: float = 0.0
 ## last life on purpose (to show DOWN, the rescue pod and the revive).
 var die_at: float = -1.0
 var no_rescue: bool = false
+## --perf: sample the script time per frame (Performance.TIME_PROCESS) while a
+## ship is flying and print PERF lines (avg / p95 / worst, frames per second).
+var perf: bool = false
+var _perf_ms: PackedFloat32Array = PackedFloat32Array()
+var _perf_t: float = 0.0
+var _perf_frames: int = 0
+var _perf_puppets: int = 0
+var _perf_shots: int = 0
 var _flown: float = 0.0
 var _died: bool = false
 var _shot_t: float = 0.0
@@ -55,7 +63,71 @@ func _drive_shop(delta: float) -> void:
 			shop._on_leave()
 
 
+## PERF: real time between frames while a ship is flying (hitches show up as
+## long frames), plus Godot's own process-time monitor, which is the WORST
+## process step of the last second (so its median is "a typical bad frame").
+## The first PERF_GRACE seconds after a scene (re)load are left out.
+const PERF_GRACE: float = 3.0
+var god: bool = false            ## --god: the ship cannot be hit (keeps the sample going)
+var _perf_last_usec: int = 0
+var _perf_ship_id: int = 0
+var _perf_ship_age: float = 0.0
+var _perf_mon: PackedFloat32Array = PackedFloat32Array()
+
+func _perf_sample(delta: float) -> void:
+	var now: int = Time.get_ticks_usec()
+	var gap_ms: float = float(now - _perf_last_usec) / 1000.0
+	_perf_last_usec = now
+	var me = get_tree().get_first_node_in_group(&"player")
+	if me == null or not is_instance_valid(me) or get_tree().paused:
+		_perf_ship_id = 0
+		return
+	if god and me.monitoring:
+		me.set_deferred("monitoring", false)
+	if me.get_instance_id() != _perf_ship_id:
+		_perf_ship_id = me.get_instance_id()
+		_perf_ship_age = 0.0
+	_perf_ship_age += delta
+	if _perf_ship_age < PERF_GRACE:
+		return
+	_perf_ms.append(gap_ms)
+	_perf_mon.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
+	_perf_puppets += get_tree().get_nodes_in_group(&"enemies").size()
+	_perf_shots += get_tree().get_nodes_in_group(&"enemy_bullets").size()
+	_perf_t += gap_ms / 1000.0
+	if _perf_t >= 20.0:
+		_perf_report()
+
+
+func _perf_report() -> void:
+	if _perf_ms.is_empty():
+		return
+	var sorted: Array = Array(_perf_ms)
+	sorted.sort()
+	var mon: Array = Array(_perf_mon)
+	mon.sort()
+	var n: int = sorted.size()
+	var sum: float = 0.0
+	var over25: int = 0
+	var over50: int = 0
+	for v in sorted:
+		sum += v
+		if v > 25.0: over25 += 1
+		if v > 50.0: over50 += 1
+	print("PERF %s %s sector=%d frames=%d fps=%.1f  frame ms avg=%.2f p50=%.2f p95=%.2f p99=%.2f worst=%.1f  long frames >25ms=%d >50ms=%d  | process-step monitor median=%.2f ms | avg enemies=%.1f enemy_shots=%.1f" % [
+			"CO-OP" if Net.is_client() else "SOLO", pilot, GameState.current_level, n, float(n) / maxf(0.001, _perf_t), sum / n,
+			sorted[n / 2], sorted[int(n * 0.95)], sorted[int(n * 0.99)], sorted[n - 1], over25, over50, mon[mon.size() / 2],
+			float(_perf_puppets) / n, float(_perf_shots) / n])
+	_perf_ms = PackedFloat32Array()
+	_perf_mon = PackedFloat32Array()
+	_perf_t = 0.0
+	_perf_puppets = 0
+	_perf_shots = 0
+
+
 func _process(delta: float) -> void:
+	if perf:
+		_perf_sample(delta)
 	_t += delta
 	if autopilot and not get_tree().paused:
 		var me = get_tree().get_first_node_in_group(&"player")

@@ -86,6 +86,18 @@ Effort: phase 1-2 about a week, the rest 3-5 weeks.
 
 Open design question: shop timer for matched games (proposal 30 s after the first player is ready, none with friends). The server already has it as `--shop_timer`, off by default.
 
+## Measurements (11/11, everything on one Mac, M5 Max, headless = no GPU drawing)
+
+| What | Result |
+|---|---|
+| Phone-side frame cost, sector 24, 60 s, ship untouchable, same sampler (`CoopDev --perf --god`, add `--solo --sector=24` for the baseline) | SOLO: 60.0 fps, frame p95 22 ms, p99 23.4, worst 45, frames over 25 ms: 6 per minute, over 50 ms: 0, process step (worst per second, median) 3.7-5.7 ms. CO-OP (each of two clients): 60.0 fps, p95 22, p99 23.5, worst 59 (once, near the sector start), over 25 ms: 10-11 per minute, over 50 ms: 1, process step 3.9-4.8 ms. Co-op costs the phone about the same as solo. |
+| Traffic per phone | down 7 KB/s (sector 13) to 15 KB/s (sector 18), up about 4 KB/s: roughly 40-70 MB per hour of play |
+| What the phone draws | its own ship and shots: no delay (local). Enemies: 100 ms behind the server plus the one-way network delay (measured 0.10 s behind with no simulated lag). A kill shows after the hit batch (up to 50 ms) plus one round trip. |
+| Correctness under bad network (bots) | 60-120 ms each way, 2-5% loss: every kill and pickup counted once, no enemy shot lost, full 24-sector run won |
+| Room server | 360-390 MB RAM; 13-17% of one core on sector 18, 28% on sector 24 while two clients ran on the same Mac. Not optimised (loads all art, 60 Hz tick). |
+| NOT measured | a real phone (CPU and GPU), a real mobile network, a cloud VM, how it FEELS to a human (nobody has flown it), enemy motion smoothness in motion (only still frames and the interpolation unit test) |
+| Known weak spots | the phone's clock estimate follows a server hiccup slowly (0.04 s per second), so enemies can jitter for a few seconds after one; no reconnect; enemies aim at where a ship was one network delay ago |
+
 ## Files (planned)
 `scripts/net/Net.gd` (autoload), `scripts/net/Proto.gd` (codec), `scripts/net/ServerWorld.gd`
 + `scenes/net/ServerWorld.tscn`, `scripts/net/NetClient.gd` (proxies, interpolation, partner),

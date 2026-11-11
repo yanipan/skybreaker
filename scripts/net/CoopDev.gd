@@ -16,6 +16,10 @@ var pilot: String = "Pilot"
 var autopilot: bool = false
 var shot_every: float = 0.0
 var die_at: float = -1.0  ## --die_at=T: the autopilot loses its last life T s in (DOWN / rescue demo)
+var god: bool = false   ## --god: this ship cannot be hit
+var solo: bool = false  ## --solo [--sector=N]: plain SINGLE-PLAYER run with the same helper (perf baseline)
+var solo_sector: int = 1
+var perf: bool = false  ## --perf: print script time per frame while flying
 var no_rescue: bool = false  ## --no_rescue: the autopilot ignores the partner's pod
 var dev_money: int = -1   ## --money=N: start the co-op run with N credits (solo money is restored after)
 
@@ -32,8 +36,27 @@ func _ready() -> void:
 			"money": dev_money = int(kv[1])
 			"die_at": die_at = float(kv[1])
 			"no_rescue": no_rescue = true
+			"perf": perf = true
+			"god": god = true
+			"solo": solo = true
+			"sector": solo_sector = int(kv[1])
 			"lag": Net.fake_lag_ms = int(kv[1])
 			"loss": Net.fake_loss = float(kv[1])
+	if solo:
+		# Single-player baseline: no network at all. The solo save is parked the
+		# same way so a dev run never touches it.
+		SaveSystem.begin_coop_hold()
+		CoopSession.begin_run(solo_sector)
+		await get_tree().process_frame   # the root is still adding this scene
+		var hs: Node = load("res://scripts/net/CoopDevPilot.gd").new()
+		hs.pilot = pilot
+		hs.autopilot = autopilot
+		hs.shot_every = shot_every
+		hs.perf = perf
+		hs.god = god
+		get_tree().root.add_child(hs)
+		get_tree().change_scene_to_file("res://scenes/main/Main.tscn")
+		return
 	# The solo state is frozen FIRST (start_coop takes the hold), then the
 	# run fields are reset for a fresh co-op run.
 	var err: int = Net.start_coop(host, port, pilot)
@@ -56,12 +79,14 @@ func _ready() -> void:
 			return
 	GameState.current_level = c.start_sector
 	print("CoopDev ", pilot, ": peer ", Net.my_peer, " seat ", Net.seat, " start sector ", c.start_sector)
-	if autopilot or shot_every > 0.0:
+	if autopilot or shot_every > 0.0 or perf:
 		var h: Node = load("res://scripts/net/CoopDevPilot.gd").new()
 		h.pilot = pilot
 		h.autopilot = autopilot
 		h.shot_every = shot_every
 		h.die_at = die_at
 		h.no_rescue = no_rescue
+		h.perf = perf
+		h.god = god
 		get_tree().root.add_child(h)   # outlives the per-sector scene reloads
 	get_tree().change_scene_to_file("res://scenes/main/Main.tscn")
