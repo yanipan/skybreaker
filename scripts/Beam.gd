@@ -51,14 +51,18 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(e):
 			continue
 		# Only consider enemies within our column and above the ship
-		if abs(e.global_position.x - origin.x) > hit_tolerance:
+		# A mega asteroid is a 260 px wall: it stops the beam anywhere across
+		# its face, at its lower edge, not only when the beam crosses its centre.
+		var wide: float = e.beam_half_w if "beam_half_w" in e else 0.0
+		if abs(e.global_position.x - origin.x) > hit_tolerance + wide:
 			continue
-		if e.global_position.y > origin.y:
+		var ey: float = e.global_position.y + wide * 0.8
+		if ey > origin.y:
 			continue
 		# Pick the LOWEST one (closest to player) — core beam stops on first target
-		if hit_target == null or e.global_position.y > hit_y:
+		if hit_target == null or ey > hit_y:
 			hit_target = e
-			hit_y = e.global_position.y
+			hit_y = ey
 	# --- Vaporize enemy bullets sitting in our column. Burn band was
 	# halo_tolerance * 2.08, cut to 1.5 / 56 px when the beam doubled as a
 	# shield, widened a notch to 1.8 / 64 px on 7/11 (beam burn felt weak);

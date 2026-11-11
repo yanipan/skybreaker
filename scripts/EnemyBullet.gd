@@ -367,6 +367,10 @@ func _process_motion(delta: float) -> void:
 			var cur: float = direction.angle()
 			direction = Vector2.RIGHT.rotated(rotate_toward(cur, want, homing_turn_rate * delta))
 	position += direction * speed * delta
+	# A mega asteroid is cover: enemy fire that reaches it stops there.
+	if not MegaAsteroid.live.is_empty() and MegaAsteroid.blocks(global_position):
+		queue_free()
+		return
 
 	# Battery pass 9/11. A shot flying straight has a trail that never changes
 	# in its own space (evenly spaced points behind the head), so it is built

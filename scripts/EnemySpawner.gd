@@ -80,6 +80,17 @@ const BOSS_FOLLOWUP_DELAY: float = 3.5
 var _asteroid_timer: float = 0.0
 var _asteroids_enabled: bool = false
 
+# Meteor showers + mega asteroid (Levels.METEOR_SHOWERS / MEGA_ASTEROIDS).
+const SHOWER_WARN_SECS: float = 1.6
+var _shower_times: Array = []       ## Pending start times (s), soonest first
+var _shower_left: float = 0.0       ## Seconds of rain left (> 0 = raining)
+var _shower_warn: float = 0.0       ## Warning countdown before the rain
+var _shower_tick: float = 0.0
+var _shower_angle: float = 0.0      ## Radians off straight down, per shower
+var _mega_time: float = -1.0
+var _mega_spawned: bool = false
+var _warning: CanvasLayer = null
+
 # Starbase — friendly shop. Random chance every level to roll one in mid-stage,
 # but never on a boss stage (the player is busy enough). Skipping early levels
 # so the first encounter is exciting rather than guaranteed.
@@ -152,6 +163,13 @@ func _ready() -> void:
 	_asteroids_enabled = (GameState.current_level >= 2 and not _boss_enabled)
 	if _asteroids_enabled:
 		_asteroid_timer = GameRng.randf_range(6.0, 12.0)
+	if not _boss_enabled:
+		for at in Levels.meteor_showers(GameState.current_level):
+			_shower_times.append(dur * float(at))
+		_shower_times.sort()
+		var mega_at: float = Levels.mega_asteroid_at(GameState.current_level)
+		if mega_at >= 0.0:
+			_mega_time = dur * mega_at
 	print("EnemySpawner _ready: level=", GameState.current_level,
 			" name=", _level_data.get("name", "?"),
 			" pool=", _level_data.get("enemy_pool", []))
@@ -162,7 +180,11 @@ func _process(delta: float) -> void:
 	_timer -= delta
 	if _timer <= 0.0:
 		_timer = _boss_wave_interval() if _boss_phase() else _spawn_interval
-		_spawn_wave()
+		if not shower_active():   # the rain IS the wave
+			_spawn_wave()
+	_process_shower(delta)
+	if _mega_time >= 0.0 and not _mega_spawned and _mission_time >= _mega_time and not _mini_alive():
+		_spawn_mega_asteroid()
 	if _guaranteed_power_enabled and not _guaranteed_power_dropped and _mission_time >= _guaranteed_power_time:
 		_drop_guaranteed_power()
 	if _weapon_change_enabled and not _weapon_change_dropped and _mission_time >= _weapon_change_time:
@@ -187,7 +209,7 @@ func _process(delta: float) -> void:
 					_spawn_boss()
 	if _starbase_enabled and not _starbase_spawned and _mission_time >= _starbase_time:
 		_spawn_starbase()
-	if _asteroids_enabled and not _mini_alive():   # no rocks during a mini-boss
+	if _asteroids_enabled and not _mini_alive() and not shower_active():   # no strays during a mini-boss or a shower
 		_asteroid_timer -= delta
 		if _asteroid_timer <= 0.0:
 			_spawn_asteroid()
@@ -362,6 +384,93 @@ func _spawn_asteroid() -> void:
 		vx = -abs(vx) - 40.0
 	rock.drift = Vector2(vx, vy)
 	get_parent().add_child(rock)
+
+
+## True from the warning until the last rock of a shower has been thrown.
+func shower_active() -> bool:
+	return _shower_warn > 0.0 or _shower_left > 0.0
+
+
+func _process_shower(delta: float) -> void:
+	if not shower_active():
+		# Next shower waits while a mini-boss lives (never stack the two)
+		if not _shower_times.is_empty() and _mission_time >= float(_shower_times[0]) and not _mini_alive():
+			_shower_times.pop_front()
+			_shower_warn = SHOWER_WARN_SECS
+			_shower_angle = deg_to_rad(GameRng.randf_range(-24.0, 24.0))
+			_show_warning("METEOR SHOWER", Color(1.0, 0.62, 0.25))
+		return
+	if _shower_warn > 0.0:
+		_shower_warn -= delta
+		if _shower_warn <= 0.0:
+			_shower_left = Levels.SHOWER_SECS
+			_shower_tick = 0.0
+		return
+	_shower_left -= delta
+	_shower_tick -= delta
+	if _shower_tick <= 0.0:
+		var lvl_t: float = clamp(float(GameState.current_level - 1) / float(GameState.MAX_LEVEL - 1), 0.0, 1.0)
+		_shower_tick = GameRng.randf_range(0.8, 1.2) * lerp(0.30, 0.19, lvl_t)
+		_spawn_shower_rock(lvl_t)
+	if _shower_left <= 0.0:
+		_shower_left = 0.0
+		_timer = max(_timer, 2.0)   # breathe before the next wave
+
+
+## One shower rock: mostly small, fast, all falling at the shower's angle
+## (with a little spread) so the player reads a direction and threads gaps.
+func _spawn_shower_rock(lvl_t: float) -> void:
+	var rock: Asteroid = AsteroidScript.new()
+	rock.shower = true
+	rock.size = AsteroidScript.Size.MEDIUM if GameRng.randf() < lerp(0.18, 0.35, lvl_t) else AsteroidScript.Size.SMALL
+	var ang: float = _shower_angle + deg_to_rad(GameRng.randf_range(-6.0, 6.0))
+	var spd: float = GameRng.randf_range(290.0, 400.0) * lerp(1.0, 1.15, lvl_t)
+	var dir := Vector2(sin(-ang), cos(ang))   # +angle leans the rain to the left
+	# Start upwind so angled rain still covers the whole width
+	var shift: float = -dir.x / maxf(dir.y, 0.3) * _viewport_size.y
+	var x: float = GameRng.randf_range(-30.0, _viewport_size.x + 30.0) + shift * GameRng.randf_range(0.0, 0.8)
+	rock.position = Vector2(x, -90.0)
+	rock.drift = dir * spd
+	rock.spin_speed = GameRng.randf_range(-3.0, 3.0)
+	get_parent().add_child(rock)
+
+
+func _spawn_mega_asteroid() -> void:
+	_mega_spawned = true
+	var rock: MegaAsteroid = MegaAsteroid.new()
+	rock.position = Vector2(GameRng.randf_range(_viewport_size.x * 0.30, _viewport_size.x * 0.70), -170.0)
+	rock.drift = Vector2(GameRng.randf_range(-14.0, 14.0), 46.0)
+	get_parent().add_child(rock)
+	_show_warning("MEGA ASTEROID", Color(1.0, 0.80, 0.35))
+	print("MEGA ASTEROID spawned hp=", rock.max_hp)
+
+
+## Big flashing warning text for ~2 s (its own layer, frees itself).
+func _show_warning(text: String, col: Color) -> void:
+	if _warning != null and is_instance_valid(_warning):
+		_warning.queue_free()
+	_warning = CanvasLayer.new()
+	_warning.layer = 5
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_override("font", Fonts.HEADLINE)
+	l.add_theme_font_size_override("font_size", 54)
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	l.add_theme_constant_override("outline_size", 8)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.size = Vector2(_viewport_size.x, 80)
+	l.position = Vector2(0, _viewport_size.y * 0.30)
+	_warning.add_child(l)
+	add_child(_warning)
+	var tw := l.create_tween()
+	tw.tween_property(l, "modulate:a", 0.25, 0.25)
+	tw.tween_property(l, "modulate:a", 1.0, 0.25)
+	tw.tween_property(l, "modulate:a", 0.25, 0.25)
+	tw.tween_property(l, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(0.6)
+	tw.tween_property(l, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(_warning.queue_free)
 
 
 ## Builds a procedural wave from the current level's enemy pool.

@@ -222,7 +222,10 @@ func _on_area_entered(area: Area2D) -> void:
 		# take a fixed ram hit, otherwise one touch (shield up = 0 hull
 		# damage) would delete a 320 HP boss.
 		if area.has_method("take_damage"):
-			area.take_damage(25 if (area.is_in_group(&"bosses") or area.is_in_group(&"boss_parts")) else 999)
+			if "ram_damage" in area:
+				area.take_damage(area.ram_damage)   # mega asteroid: no instant kill
+			else:
+				area.take_damage(25 if (area.is_in_group(&"bosses") or area.is_in_group(&"boss_parts")) else 999)
 		return
 
 

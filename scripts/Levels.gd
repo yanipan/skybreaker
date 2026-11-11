@@ -34,6 +34,29 @@ class_name Levels
 ## (9/11 expansion) add SHADE and ARTILLERY and keep climbing past the old
 ## sector-20 ceiling (Enemy.gd extends the ladder, LATE_SECTOR_MUL at 23-24).
 
+## METEOR SHOWERS (11/11): sector -> start points (0-1 of the sector). A
+## "METEOR SHOWER" warning, then SHOWER_SECS of fast angled rocks; waves
+## pause meanwhile. Never on boss sectors; kept clear of the mini-boss at 0.5.
+const METEOR_SHOWERS: Dictionary = {
+	3: [0.40], 7: [0.25, 0.70], 9: [0.30], 11: [0.30], 13: [0.30],
+	15: [0.30], 18: [0.25, 0.70], 20: [0.30], 21: [0.25], 23: [0.25],
+}
+const SHOWER_SECS: float = 9.0
+## MEGA ASTEROIDS (11/11): sector -> start point. One huge slow rock that
+## blocks shots both ways and always drops a weapon upgrade.
+const MEGA_ASTEROIDS: Dictionary = {
+	5: 0.60, 7: 0.45, 9: 0.65, 13: 0.65, 18: 0.50, 20: 0.65, 23: 0.75,
+}
+
+
+static func meteor_showers(level: int) -> Array:
+	return METEOR_SHOWERS.get(level, [])
+
+
+static func mega_asteroid_at(level: int) -> float:
+	return float(MEGA_ASTEROIDS.get(level, -1.0))
+
+
 const ENTRIES: Array = [
 	# --- ACT 1: Earth Defense (Levels 1-5) ---
 	{

@@ -23,6 +23,8 @@ enum Size { SMALL, MEDIUM, LARGE }
 @export var spin_speed: float = 0.0
 ## Drift vector — set by spawner so we can have angled crossings, not just downward.
 @export var drift: Vector2 = Vector2(0, 140)
+## Part of a meteor shower (EnemySpawner): lean drops, see _configure.
+@export var shower: bool = false
 
 var max_hp: int
 var hp: int
@@ -88,6 +90,12 @@ func _configure() -> void:
 			money_drop_chance = 0.90
 			power_drop_chance = 0.23    ## +15% — three weapon slots to feed
 			health_drop_chance = 0.045  ## Halved
+	if shower:
+		# Meteor-shower rocks come by the dozen: a few coins, no gear.
+		money_drop_chance *= 0.35
+		power_drop_chance = 0.0
+		health_drop_chance = 0.0
+		reward = int(reward * 0.5)
 	hp = max_hp
 
 
