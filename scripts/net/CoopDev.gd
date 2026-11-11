@@ -41,16 +41,7 @@ func _ready() -> void:
 	if err != OK:
 		get_tree().quit(2)
 		return
-	GameState.begin_run(randi_range(1, 2147483646))
-	GameState.lives = GameState.STARTING_LIVES
-	GameState.current_level = 1
-	GameState.clear_carry()
-	GameState.clear_respawn()
-	GameState.reset_mission_stats()
-	GameState.intro_seen = true
-	GameState.resume_pending = false
-	GameState.pending_warp_entry = false
-	GameState.has_active_run = true
+	CoopSession.begin_run(1)
 	if dev_money >= 0:
 		GameState.money = dev_money
 	var c: Node = Net.client
