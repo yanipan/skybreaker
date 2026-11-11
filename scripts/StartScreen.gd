@@ -50,6 +50,50 @@ var _menu_layer: CanvasLayer
 ## True after the player has clicked NEW GAME / CONTINUE — blocks further
 ## input so the player can't double-trigger the transition.
 var _transitioning: bool = false
+var _coop_ui: Node = null
+
+
+## DEV (debug builds, desktop): drive the co-op lobby from the command line.
+##   -- --lobby=http://127.0.0.1:24600 --name=ACE --coop_auto=menu|friend|join|quick [--pid=<uuid>] [--autopilot] [--coopshots=2]
+## (never use --shots / --beats: those belong to scripts/tools/ShotDirector.gd)
+func _coop_dev_args() -> void:
+	if not OS.is_debug_build():
+		return
+	var auto: String = ""
+	var pilot_wanted: bool = false
+	var pilot_args := {"autopilot": false, "shot_every": 0.0, "name": "Pilot"}
+	for a in OS.get_cmdline_user_args():
+		var kv: PackedStringArray = a.trim_prefix("--").split("=")
+		match kv[0]:
+			"lobby":
+				if kv.size() > 1: LobbyApi.url_override = a.trim_prefix("--lobby=")
+			"name":
+				if kv.size() > 1:
+					CoopSession.name_override = kv[1]
+					pilot_args["name"] = kv[1]
+			"coop_auto":
+				if kv.size() > 1: auto = kv[1]
+			"pid":
+				if kv.size() > 1: LobbyApi.player_id_override = kv[1]
+			"autopilot":
+				pilot_args["autopilot"] = true
+				pilot_wanted = true
+			"coopshots":
+				if kv.size() > 1:
+					pilot_args["shot_every"] = float(kv[1])
+					pilot_wanted = true
+	if pilot_wanted and get_tree().root.get_node_or_null("CoopDevPilot") == null:
+		var h: Node = load("res://scripts/net/CoopDevPilot.gd").new()
+		h.name = "CoopDevPilot"
+		h.pilot = str(pilot_args["name"])
+		h.autopilot = bool(pilot_args["autopilot"])
+		h.shot_every = float(pilot_args["shot_every"])
+		get_tree().root.add_child.call_deferred(h)
+	if auto != "" and not _coop_dev_done:
+		_coop_dev_done = true
+		_coop_ui.dev_auto.call_deferred(auto)
+
+static var _coop_dev_done: bool = false
 
 
 func _ready() -> void:
@@ -186,8 +230,22 @@ func _build_ui() -> void:
 		_continue_btn.modulate = Color(0.55, 0.55, 0.65, 0.6)
 	layer.add_child(_continue_btn)
 
-	var exit_btn := _make_button("EXIT", btn_w, btn_h, COL_RED, btn_font)
-	exit_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 2)
+	# Third row: EXIT alone, or CO-OP + EXIT where a co-op lobby exists.
+	var exit_w: float = btn_w
+	var exit_x: float = col_x
+	if LobbyApi.available():
+		var coop_w: float = (btn_w - gap) * 0.62
+		exit_w = btn_w - gap - coop_w
+		exit_x = col_x + coop_w + gap
+		var coop_btn := _make_button("CO-OP", coop_w, btn_h, Color(0.80, 0.62, 1.00), btn_font)
+		coop_btn.name = "CoopButton"
+		coop_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 2)
+		coop_btn.pressed.connect(func() -> void:
+			if not _transitioning:
+				_coop_ui.open_menu())
+		layer.add_child(coop_btn)
+	var exit_btn := _make_button("EXIT", exit_w, btn_h, COL_RED, btn_font)
+	exit_btn.position = Vector2(exit_x, col_y + (btn_h + gap) * 2)
 	exit_btn.pressed.connect(_on_exit)
 	layer.add_child(exit_btn)
 
@@ -206,6 +264,10 @@ func _build_ui() -> void:
 	_online_ui = preload("res://scripts/OnlineUI.gd").new()
 	_online_ui.host = self
 	add_child(_online_ui)
+	_coop_ui = preload("res://scripts/net/CoopLobbyUI.gd").new()
+	_coop_ui.host = self
+	add_child(_coop_ui)
+	_coop_dev_args()
 	if not GameState.last_run.is_empty():
 		_online_ui.call_deferred("open_last_run")
 	elif Online.should_ask_name():

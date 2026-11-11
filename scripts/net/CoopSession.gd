@@ -19,7 +19,13 @@ static func begin_run(start_sector: int) -> void:
 	GameState.last_run = {}
 
 
+## DEV: --name=X on the command line (two windows on one Mac share pilot.cfg).
+static var name_override: String = ""
+
+
 ## The name partners see. The leaderboard pilot name when there is one.
 static func pilot_name() -> String:
+	if name_override != "":
+		return name_override
 	var n: String = str(Online.pilot_name).strip_edges()
 	return n if n != "" else "PILOT"

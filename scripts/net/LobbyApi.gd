@@ -13,6 +13,10 @@ const DEV_URL: String = "http://127.0.0.1:24600"
 const TIMEOUT: float = 6.0
 ## Set from the command line (--lobby=http://host:port) on desktop.
 static var url_override: String = ""
+## DEV: two game windows on one Mac are the same installation and share one
+## player id, and the lobby (rightly) never matches a player with themselves.
+## --pid=<uuid> on the command line gives a window its own id. Debug builds only.
+static var player_id_override: String = ""
 
 
 static func base_url() -> String:
@@ -40,7 +44,7 @@ func call_api(path: String, body: Dictionary) -> Dictionary:
 	if base == "":
 		return {}
 	body["proto"] = Net.PROTO
-	body["player_id"] = Telemetry.player_id
+	body["player_id"] = player_id_override if (player_id_override != "" and OS.is_debug_build()) else Telemetry.player_id
 	var raw: String = JSON.stringify(body)
 	var ts: int = int(Time.get_unix_time_from_system())
 	var http := HTTPRequest.new()
