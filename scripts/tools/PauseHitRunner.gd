@@ -347,8 +347,10 @@ func _flow5() -> void:
 		else:
 			print("flow5 WARN no shop; forcing unpause")
 			get_tree().paused = false
-		await get_tree().process_frame
-		await get_tree().process_frame
+		# Since 9/11 leaving the shop starts the GET READY 3-2-1 countdown and
+		# the tree stays paused for it: hits are checked once it has run out.
+		await _wait_always(4.2)
+		print("flow5 after countdown paused=%s" % get_tree().paused)
 		await _run_probes("5_shop", i, "after")
 		await _ensure_closed(main)
 
