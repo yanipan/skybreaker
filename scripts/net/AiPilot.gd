@@ -52,6 +52,13 @@ var lives: int = 3
 var levels: Array = [1, 1, 1]
 var weapon: int = 0
 var favourite: int = 0
+## Weapon energy, like a player's: firing drains it, holding fire refills it,
+## an empty pool means letting go of the trigger. Energy cells from the shop
+## make the pool bigger and the refill faster (the same numbers as Player.gd).
+var cells: int = 0
+var charge: float = 100.0
+var _resting: bool = false
+var _rest_until: float = 0.6     ## How full the pool must be before this pilot fires again
 var _swap_t: float = 3.0
 var level: int:
 	get: return int(levels[weapon])
@@ -61,7 +68,7 @@ var score: int = 0
 var down: bool = false
 var firing: bool = false
 var goal: String = "patrol"
-var stats := {"hits_taken": 0, "deaths": 0, "kills": 0, "pickups": 0, "bought": 0, "docks": 0, "rescues": 0, "swaps": 0}
+var stats := {"hits_taken": 0, "deaths": 0, "kills": 0, "pickups": 0, "bought": 0, "docks": 0, "rescues": 0, "swaps": 0, "overheats": 0, "cells": 0}
 
 var _dead_t: float = -1.0
 var _frail_t: float = -1.0
@@ -96,6 +103,7 @@ func setup(world: Node, peer_id: int, seed_value: int) -> void:
 		pilot_name = str(NAMES_HUMAN[rng.randi() % NAMES_HUMAN.size()])
 	_wander_x = rng.randf_range(200.0, 620.0)
 	favourite = rng.randi() % 3
+	_rest_until = clampf(0.85 - 0.5 * aggression + 0.2 * caution, 0.3, 0.95)   # the eager fire again sooner
 	weapon = favourite if rng.randf() < 0.5 else 0
 	_swap_t = rng.randf_range(4.0, 9.0)
 	for arg in OS.get_cmdline_user_args():
@@ -154,6 +162,8 @@ func tick(delta: float) -> void:
 func _respawn() -> void:
 	_dead_t = -1.0
 	hp = MAX_HP
+	charge = charge_max()
+	_resting = false
 	shield = mini(1, shield_max)
 	_invuln = 2.5
 	pos = Vector2(clampf(pos.x, 160.0, 656.0), _home_y())
@@ -294,9 +304,32 @@ func _fly(delta: float) -> void:
 
 # --- Shooting: straight up, the first thing in the column takes it ---
 
+func charge_max() -> float:
+	return 100.0 * (1.0 + float(cells) * Player.ENERGY_CELL_BONUS_PCT)
+
+
+func _energy(delta: float) -> void:
+	if firing:
+		var drain: float = 0.8 * (1.0 + float(level - 1) * 0.032)          # phaser
+		if weapon == 1: drain = 1.3                                        # beam
+		elif weapon == 2: drain = 1.0 + float(level - 1) * 0.063           # missile
+		charge = maxf(0.0, charge - 50.0 * drain * delta)
+		if charge <= 0.0:
+			_resting = true
+			stats.overheats += 1
+	else:
+		var regen: float = 40.0 * (1.0 + float(cells) * Player.ENERGY_CELL_REGEN_PCT)
+		if weapon == 2: regen *= 0.65
+		charge = minf(charge_max(), charge + regen * delta)
+		if _resting and charge >= _rest_until * charge_max():
+			_resting = false
+
+
 func dps() -> float:
-	# Beam and missile trade a little damage for reach (see _reach).
-	var k: float = [1.0, 0.9, 0.85][weapon]
+	# Beam and missile trade a little damage for reach (see _reach). The 1.5
+	# makes up for the time spent refilling energy: about the old strength
+	# with a few cells, a little weaker with none.
+	var k: float = [1.0, 0.9, 0.85][weapon] * 1.5
 	return (6.9 + 0.49 * float(level - 1)) * 2.0 * (1.0 + 0.10 * float(level - 1)) * (0.5 + 0.4 * skill) * k
 
 
@@ -352,8 +385,9 @@ func _shoot(delta: float) -> void:
 		if absf(np.x - pos.x) <= _half_width(n) + _reach() and np.y > hit_y:
 			hit_y = np.y
 			hit = n
-	firing = any
-	if hit == null:
+	firing = any and not _resting
+	_energy(delta)
+	if hit == null or not firing:
 		return
 	_dmg_acc += dps() * delta
 	if _dmg_acc >= 1.0:
@@ -467,6 +501,7 @@ func _price(item: String) -> int:
 	match item:
 		"repair": return 5 * (MAX_HP - hp)
 		"shield": return 220 + 60 * (shield_max - 2)
+		"charge": return int([300, 520, 800, 1200, 1650, 2200, 2800, 3500][mini(cells, 7)])   # the real shop's ladder
 		_: return 180 + 30 * int(levels[_power_slot(item)])   # the real shop asks $210 at level 1
 
 
@@ -475,6 +510,9 @@ func _want() -> String:
 		return "repair"
 	if shield_max < 4 and caution > 0.55 and rng.randf() < 0.5:
 		return "shield"
+	# A pilot that keeps running dry wants a bigger energy pool.
+	if cells < Player.ENERGY_CELL_MAX and rng.randf() < 0.2 + 0.4 * aggression and money >= _price("charge"):
+		return "charge"
 	# Mostly the weapon in use, sometimes the favourite: upgrades follow how it flies.
 	var w: int = favourite if rng.randf() < 0.35 else weapon
 	return ["power_phaser", "power_beam", "power_missile"][w] if int(levels[w]) < MAX_LEVEL else ""
@@ -499,6 +537,10 @@ func shop_tick(delta: float) -> void:
 				"shield":
 					shield_max += 1
 					shield = shield_max
+				"charge":
+					cells += 1
+					stats.cells = cells
+					charge = charge_max()
 				_: levels[_power_slot(item)] = int(levels[_power_slot(item)]) + 1
 			Net.broadcast([Net.M.SHOP_BOUGHT, peer, item])
 	if _shop_t < _shop_leave_at:
