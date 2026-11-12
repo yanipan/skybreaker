@@ -1,12 +1,8 @@
 extends Node
-## CPU cost of a gameplay frame on a heavy sector, for before/after comparisons.
-## Run with a fixed timestep so every frame simulates exactly 1/60 s and the
-## wall clock per frame is the real CPU cost (no vsync / fps-cap sleeping):
-##   godot --headless --fixed-fps 60 --path . res://scenes/tools/PerfProbe.tscn [-- sector=24 frames=2400]
-## Headless has no GPU, so this measures scripts + physics + canvas command
-## building (every _draw call still runs), not fill rate. The ship is
-## untouchable and holds its fire button so both shot pools are busy.
-
+## Frame-cost probe of the real single-player game (run WINDOWED so drawing is
+## measured): plays sectors at normal speed with an untouchable ship and prints
+## the script time per frame, node count and draw calls.
+## Run: godot --path . res://scenes/tools/PerfProbe.tscn -- --probe_sectors=13,20 --probe_secs=40
 func _ready() -> void:
 	var runner := Node.new()
 	runner.set_script(load("res://scripts/tools/PerfProbeRunner.gd"))
