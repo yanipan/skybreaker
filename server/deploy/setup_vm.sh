@@ -27,7 +27,7 @@ GODOT=/opt/skybreaker/bin/skybreaker_server.x86_64
 ROOM_EXPORTED=1
 ROOM_PORT_MIN=24800
 ROOM_PORT_MAX=24839
-MAX_ROOMS=2
+MAX_ROOMS=4
 SB_SIG_KEY=
 ENV
   chmod 600 /etc/skybreaker/lobby.env
