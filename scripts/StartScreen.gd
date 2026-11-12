@@ -236,7 +236,8 @@ func _build_ui() -> void:
 	var exit_w: float = btn_w
 	var exit_x: float = col_x
 	if LobbyApi.available():
-		var coop_w: float = (btn_w - gap) * 0.62
+		# Where the app cannot close itself (iOS) there is no EXIT: CO-OP takes the row.
+		var coop_w: float = (btn_w - gap) * 0.62 if GameState.app_can_quit else btn_w
 		exit_w = btn_w - gap - coop_w
 		exit_x = col_x + coop_w + gap
 		var coop_btn := _make_button("CO-OP", coop_w, btn_h, Color(0.80, 0.62, 1.00), btn_font)
@@ -246,10 +247,12 @@ func _build_ui() -> void:
 			if not _transitioning:
 				_coop_ui.open_menu())
 		layer.add_child(coop_btn)
-	var exit_btn := _make_button("EXIT", exit_w, btn_h, COL_RED, btn_font)
-	exit_btn.position = Vector2(exit_x, col_y + (btn_h + gap) * 2)
-	exit_btn.pressed.connect(_on_exit)
-	layer.add_child(exit_btn)
+	if GameState.app_can_quit:
+		var exit_btn := _make_button("EXIT", exit_w, btn_h, COL_RED, btn_font)
+		exit_btn.name = "ExitButton"
+		exit_btn.position = Vector2(exit_x, col_y + (btn_h + gap) * 2)
+		exit_btn.pressed.connect(_on_exit)
+		layer.add_child(exit_btn)
 
 	var opt_font: int = int(clamp(opt_h * 0.40, 16, 26))
 	var half_w: float = (btn_w - gap) * 0.5

@@ -6,6 +6,9 @@ extends Node
 # True once the player has started a run from the start screen. Powers the
 # Continue button — if false, the start screen disables it.
 var has_active_run: bool = false
+## iOS does not let an app close itself (get_tree().quit() does nothing there),
+## so QUIT / EXIT buttons are not offered on it. A plain var so a test can flip it.
+var app_can_quit: bool = OS.get_name() != "iOS"
 
 # Set by the start screen's CONTINUE button, consumed by Main._ready: skip
 # the intro cutscene and show a 3-2-1 countdown instead. Never persisted.

@@ -1403,10 +1403,12 @@ func _open_pause() -> void:
 	menu_btn.pressed.connect(_on_main_menu)
 	_pause_layer.add_child(menu_btn)
 
-	var quit_btn := _make_pause_button("QUIT", btn_w, btn_h, Color(1.0, 0.55, 0.55))
-	quit_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 2)
-	quit_btn.pressed.connect(_on_quit_app)
-	_pause_layer.add_child(quit_btn)
+	if GameState.app_can_quit:
+		var quit_btn := _make_pause_button("QUIT", btn_w, btn_h, Color(1.0, 0.55, 0.55))
+		quit_btn.name = "QuitButton"
+		quit_btn.position = Vector2(col_x, col_y + (btn_h + gap) * 2)
+		quit_btn.pressed.connect(_on_quit_app)
+		_pause_layer.add_child(quit_btn)
 
 	# Small status line: tells a device bug report whether collisions are alive.
 	if _physics_watchdog != null:
@@ -1463,6 +1465,11 @@ func _on_main_menu() -> void:
 
 
 func _on_quit_app() -> void:
+	if not GameState.app_can_quit:
+		# Nothing would happen, and unpausing would leave the fight running
+		# behind the menu: leave the run the way MAIN MENU does.
+		_on_main_menu()
+		return
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().quit()
