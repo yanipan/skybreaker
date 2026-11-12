@@ -6,9 +6,8 @@ class_name LobbyApi
 ## Returns {} when the service cannot be reached.
 
 const KEYS := preload("res://config/online_keys.gd")
-## Where the lobby lives. Empty until the service is on a public server
-## (phase 5); debug builds fall back to a lobby on this machine.
-const PROD_URL: String = ""
+## Where the lobby lives for release builds; debug builds use a lobby on this machine.
+const PROD_URL: String = "https://35-246-144-83.sslip.io"   # test server (e2-micro, 12/11); a real domain before public release
 const DEV_URL: String = "http://127.0.0.1:24600"
 const TIMEOUT: float = 6.0
 ## Set from the command line (--lobby=http://host:port) on desktop.
@@ -22,9 +21,8 @@ static var player_id_override: String = ""
 static func base_url() -> String:
 	if url_override != "":
 		return url_override
-	if PROD_URL != "":
-		return PROD_URL
-	return DEV_URL if OS.is_debug_build() else ""
+	# Debug builds (the Mac, the tests) stay on the local lobby unless --lobby says otherwise.
+	return DEV_URL if OS.is_debug_build() else PROD_URL
 
 
 ## Co-op is offered only when there is a lobby to talk to.
