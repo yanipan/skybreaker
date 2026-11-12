@@ -31,7 +31,11 @@ signal link_restored                          ## back in the same seat
 signal link_failed                            ## gave up (or the room is gone): the run is over for this phone
 signal partner_link(peer: int, state: int)    ## 0 = partner lost its link, 1 = back, 2 = gone for good
 
-const INTERP: float = 0.10
+const INTERP: float = 0.10          ## Smallest delay behind the server clock
+const INTERP_MAX: float = 0.30      ## Largest (a bad mobile link)
+const CLOCK_SLEW: float = 0.06      ## The drawing clock runs at most 6% fast or slow to correct itself
+const CLOCK_JUMP: float = 0.35      ## An error this big is a hitch or a reconnect: taken at once
+const CLOCK_WINDOW: int = 40        ## Snapshots (about 2 s) the clock estimate looks back over
 const SHIP_EVERY: float = 1.0 / 30.0
 
 ## Where puppets/shots go: the current Main (or a test world). The session
@@ -55,7 +59,13 @@ var ship_state: Callable
 var puppets: Dictionary = {}    ## id -> Node2D
 var pickups: Dictionary = {}    ## id -> Pickup
 var _buf: Dictionary = {}       ## id -> Array of [server_t, Vector2]
-var _offset: float = -INF       ## server clock - local clock (best estimate)
+var _offset: float = -INF       ## server clock - local clock (best estimate: the fastest recent packet)
+var _samples: Array = []        ## Recent (server t - local now), newest last
+var _late: float = 0.0          ## How late snapshots have recently arrived compared with the fastest
+var _gap: float = 0.066         ## Measured time between snapshots
+var _last_snap_t: float = -1.0
+var _roff: float = -INF         ## Offset actually drawn with (includes the delay); glides, never jumps
+var test_now: float = -1.0      ## Tests drive the clock by hand
 var _shots: Array = []          ## pending [server_t, params]
 var _ship_t: float = 0.0
 ## Reconnect. The server keeps a lost phone's seat for 60 s; this phone tries
@@ -177,12 +187,31 @@ func _detach(w: Node) -> void:
 
 
 func _now() -> float:
-	return Time.get_ticks_usec() / 1e6
+	return test_now if test_now >= 0.0 else Time.get_ticks_usec() / 1e6
 
 
 ## Server clock time we are drawing right now.
 func render_time() -> float:
-	return _now() + _offset - INTERP
+	return _now() + (_roff if _roff != -INF else _offset - INTERP)
+
+
+## How far behind the server clock we draw: one snapshot gap plus how late
+## packets have been arriving, so a late or lost one still lands in time.
+func interp_delay() -> float:
+	return clampf(_gap + _late + 0.02, INTERP, INTERP_MAX)
+
+
+## Moves the drawing clock toward the estimate a little each frame. A packet
+## that arrives early or late changes the estimate at once; drawing with it
+## directly made fast enemies jump, so the drawn clock only glides.
+func _advance_clock(delta: float) -> void:
+	if _offset == -INF:
+		return
+	var want: float = _offset - interp_delay()
+	if _roff == -INF or absf(want - _roff) > CLOCK_JUMP:
+		_roff = want
+	else:
+		_roff = move_toward(_roff, want, delta * CLOCK_SLEW)
 
 
 func _on_msg(_peer: int, msg: Array) -> void:
@@ -272,6 +301,10 @@ func _on_msg(_peer: int, msg: Array) -> void:
 ## would be drawn far ahead of the server. The next snapshot starts afresh.
 func reset_clock() -> void:
 	_offset = -INF
+	_roff = -INF
+	_samples.clear()
+	_late = 0.0
+	_last_snap_t = -1.0
 	for id in _buf:
 		_buf[id] = []
 
@@ -390,9 +423,19 @@ func _forget(id: int) -> void:
 func _snap(t: float, ids: PackedInt32Array, xy: PackedFloat32Array, fl: PackedByteArray, hpb: PackedByteArray) -> void:
 	stats.snaps += 1
 	var sample: float = t - _now()
-	# Fastest packet = least delay; let the estimate creep down slowly so a
-	# clock that drifts is followed.
-	_offset = sample if _offset == -INF else maxf(sample, _offset - 0.002)
+	# Fastest packet of the last couple of seconds = least delay. A window
+	# (not a slow creep) follows a drifting clock and a server hitch alike.
+	_samples.append(sample)
+	if _samples.size() > CLOCK_WINDOW:
+		_samples.pop_front()
+	var best: float = sample
+	for s in _samples:
+		best = maxf(best, float(s))
+	_offset = best
+	_late = maxf(best - sample, _late * 0.985)
+	if _last_snap_t >= 0.0 and t > _last_snap_t:
+		_gap = lerpf(_gap, minf(t - _last_snap_t, 0.2), 0.1)
+	_last_snap_t = t
 	for i in ids.size():
 		var id: int = ids[i]
 		if _buf.has(id):
@@ -432,6 +475,7 @@ func _process(delta: float) -> void:
 		return
 	if not Net.is_client() or _offset == -INF:
 		return
+	_advance_clock(delta)
 	var rt: float = render_time()
 	for id in puppets.keys():
 		var n = puppets[id]
@@ -553,6 +597,8 @@ func _default_ship_state() -> Dictionary:
 		st["w"] = int(me.weapon_type)
 		if "weapon_levels" in me:
 			st["l"] = int(me.weapon_levels.get(me.weapon_type, 1))
+	if "shield" in me:
+		st["s"] = int(floor(float(me.shield)))
 	if "_is_firing" in me:
 		st["f"] = bool(me._is_firing) and not bool(me.get("firing_locked"))
 	return st

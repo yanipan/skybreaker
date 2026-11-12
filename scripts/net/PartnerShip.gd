@@ -38,6 +38,8 @@ var alive: bool = true
 var weapon: int = 0
 var power: int = 1
 var firing: bool = false
+var shield: int = 0             ## Full shield pips the partner has; the bubble shows while it is 1 or more
+var _shield_break: float = 0.0  ## Brief strobe after the shield drops to zero
 var target_pos: Vector2 = Vector2.ZERO
 
 var _sprite: Sprite2D
@@ -90,6 +92,11 @@ func apply_state(st: Dictionary) -> void:
 		power = int(st["l"])
 	if st.has("f"):
 		firing = bool(st["f"])
+	if st.has("s"):
+		var s: int = int(st["s"])
+		if shield >= 1 and s < 1 and alive:
+			_shield_break = 1.0
+		shield = s
 	if st.has("n"):
 		pilot_name = str(st["n"])
 		_name_label.text = pilot_name
@@ -109,6 +116,9 @@ func _process(delta: float) -> void:
 	_since_state += delta
 	if _since_state >= STALE_HIDE:
 		visible = false
+	if shield >= 1 or _shield_break > 0.0:
+		queue_redraw()   # the bubble is animated (and one last frame clears it)
+	_shield_break = maxf(0.0, _shield_break - delta)
 	if _active_fire():
 		if weapon == 0 or weapon == 2:
 			_fire_timer -= delta
@@ -134,6 +144,21 @@ func _active_fire() -> bool:
 func _draw() -> void:
 	if _active_fire() and weapon == 1:
 		draw_line(BEAM_FROM, BEAM_TO, BEAM_COLOR, 6.0)
+	# The partner's shield: the same bubble as the player's own, a little lighter.
+	var half: float = SHIP_SIZE * 0.5
+	if shield >= 1 and alive:
+		var t: float = float(Time.get_ticks_msec()) / 1000.0
+		var pct: float = clampf(float(shield) / 3.0, 0.34, 1.0)
+		var r: float = half + 22.0 + pct * 6.0 + sin(t * 4.0) * 1.5
+		draw_circle(Vector2.ZERO, r + 5.0, Color(0.35, 0.75, 1.0, 0.08 + pct * 0.05))
+		draw_circle(Vector2.ZERO, r, Color(0.30, 0.65, 1.0, 0.12 + pct * 0.08))
+		draw_circle(Vector2(-r * 0.42, -r * 0.45), r * 0.14, Color(1.0, 1.0, 1.0, 0.5))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 48, Color(0.75, 0.95, 1.0, (0.45 + 0.2 * sin(t * 8.0)) * (0.5 + pct * 0.5)), 2.5, true)
+		var spin: float = t * 2.2
+		draw_arc(Vector2.ZERO, r - 2.0, spin, spin + 0.7, 14, Color(0.9, 1.0, 1.0, 0.8), 2.5, true)
+		draw_arc(Vector2.ZERO, r - 2.0, spin + PI, spin + PI + 0.5, 12, Color(0.9, 1.0, 1.0, 0.8), 2.5, true)
+	elif _shield_break > 0.0 and int(_shield_break * 12.0) % 2 == 0:
+		draw_circle(Vector2.ZERO, half + 24.0, Color(0.6, 0.85, 1.0, 0.5 * _shield_break))
 
 
 func _update_banking(h_velocity: float) -> void:

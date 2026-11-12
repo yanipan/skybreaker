@@ -47,13 +47,21 @@ var hp: int = MAX_HP
 var shield: int = 2
 var shield_max: int = 2
 var lives: int = 3
-var level: int = 1
+## Three weapons like a player's ship: 0 phaser, 1 beam, 2 missile. `level`
+## is the level of the one in use; the pilot swaps by situation and taste.
+var levels: Array = [1, 1, 1]
+var weapon: int = 0
+var favourite: int = 0
+var _swap_t: float = 3.0
+var level: int:
+	get: return int(levels[weapon])
+	set(v): levels[weapon] = v
 var money: int = 0
 var score: int = 0
 var down: bool = false
 var firing: bool = false
 var goal: String = "patrol"
-var stats := {"hits_taken": 0, "deaths": 0, "kills": 0, "pickups": 0, "bought": 0, "docks": 0, "rescues": 0}
+var stats := {"hits_taken": 0, "deaths": 0, "kills": 0, "pickups": 0, "bought": 0, "docks": 0, "rescues": 0, "swaps": 0}
 
 var _dead_t: float = -1.0
 var _frail_t: float = -1.0
@@ -87,6 +95,9 @@ func setup(world: Node, peer_id: int, seed_value: int) -> void:
 	else:
 		pilot_name = str(NAMES_HUMAN[rng.randi() % NAMES_HUMAN.size()])
 	_wander_x = rng.randf_range(200.0, 620.0)
+	favourite = rng.randi() % 3
+	weapon = favourite if rng.randf() < 0.5 else 0
+	_swap_t = rng.randf_range(4.0, 9.0)
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--bot_frail":   # test hook: one hit and it is down
 			hp = 1
@@ -134,6 +145,7 @@ func tick(delta: float) -> void:
 			_shield_t = 0.0
 			shield += 1
 	_fly(delta)
+	_pick_weapon(delta)
 	_shoot(delta)
 	_touch()
 	_send_state(delta)
@@ -283,7 +295,46 @@ func _fly(delta: float) -> void:
 # --- Shooting: straight up, the first thing in the column takes it ---
 
 func dps() -> float:
-	return (6.9 + 0.49 * float(level - 1)) * 2.0 * (1.0 + 0.10 * float(level - 1)) * (0.5 + 0.4 * skill)
+	# Beam and missile trade a little damage for reach (see _reach).
+	var k: float = [1.0, 0.9, 0.85][weapon]
+	return (6.9 + 0.49 * float(level - 1)) * 2.0 * (1.0 + 0.10 * float(level - 1)) * (0.5 + 0.4 * skill) * k
+
+
+## Extra half-width of what the weapon in use can hit: missiles home a little.
+func _reach() -> float:
+	return 60.0 if weapon == 2 else 0.0
+
+
+## Every few seconds the pilot reconsiders its weapon: the beam for a boss,
+## missiles for a crowd, otherwise whichever is strongest, with a taste for
+## its favourite and some whim, so two pilots do not fly alike.
+func _pick_weapon(delta: float) -> void:
+	_swap_t -= delta
+	if _swap_t > 0.0:
+		return
+	_swap_t = rng.randf_range(5.0, 12.0)
+	var targets: int = 0
+	var boss: bool = false
+	for id in sw.entities:
+		var n = sw.entities[id]
+		if not _is_target(n):
+			continue
+		targets += 1
+		if n is Boss or "boss" in n:
+			boss = true
+	var best: int = weapon
+	var best_s: float = -INF
+	for w in 3:
+		var s: float = float(levels[w]) + rng.randf() * 2.0
+		if w == favourite: s += 1.5
+		if w == 1 and boss: s += 3.0
+		if w == 2 and targets >= 5: s += 3.0
+		if s > best_s:
+			best_s = s
+			best = w
+	if best != weapon:
+		weapon = best
+		stats.swaps += 1
 
 
 func _shoot(delta: float) -> void:
@@ -298,7 +349,7 @@ func _shoot(delta: float) -> void:
 		if np.y < 0.0 or np.y > pos.y:
 			continue
 		any = true
-		if absf(np.x - pos.x) <= _half_width(n) and np.y > hit_y:
+		if absf(np.x - pos.x) <= _half_width(n) + _reach() and np.y > hit_y:
 			hit_y = np.y
 			hit = n
 	firing = any
@@ -377,8 +428,14 @@ func _take_pickup(id: int, p: Pickup) -> void:
 	match p.type:
 		Pickup.Type.MONEY:
 			money += int(p.money_value)
-		Pickup.Type.POWER, Pickup.Type.POWER_PHASER, Pickup.Type.POWER_BEAM, Pickup.Type.POWER_MISSILE:
+		Pickup.Type.POWER:
 			level = mini(MAX_LEVEL, level + 1)
+		Pickup.Type.POWER_PHASER:
+			levels[0] = mini(MAX_LEVEL, int(levels[0]) + 1)
+		Pickup.Type.POWER_BEAM:
+			levels[1] = mini(MAX_LEVEL, int(levels[1]) + 1)
+		Pickup.Type.POWER_MISSILE:
+			levels[2] = mini(MAX_LEVEL, int(levels[2]) + 1)
 		Pickup.Type.HEALTH_SMALL:
 			hp = mini(MAX_HP, hp + 5)
 		Pickup.Type.HEALTH_MEDIUM:
@@ -410,7 +467,7 @@ func _price(item: String) -> int:
 	match item:
 		"repair": return 5 * (MAX_HP - hp)
 		"shield": return 220 + 60 * (shield_max - 2)
-		_: return 180 + 30 * level   # power_phaser (the real shop asks $210 at level 1)
+		_: return 180 + 30 * int(levels[_power_slot(item)])   # the real shop asks $210 at level 1
 
 
 func _want() -> String:
@@ -418,7 +475,13 @@ func _want() -> String:
 		return "repair"
 	if shield_max < 4 and caution > 0.55 and rng.randf() < 0.5:
 		return "shield"
-	return "power_phaser" if level < MAX_LEVEL else ""
+	# Mostly the weapon in use, sometimes the favourite: upgrades follow how it flies.
+	var w: int = favourite if rng.randf() < 0.35 else weapon
+	return ["power_phaser", "power_beam", "power_missile"][w] if int(levels[w]) < MAX_LEVEL else ""
+
+
+static func _power_slot(item: String) -> int:
+	return 1 if item == "power_beam" else (2 if item == "power_missile" else 0)
 
 
 func shop_tick(delta: float) -> void:
@@ -436,7 +499,7 @@ func shop_tick(delta: float) -> void:
 				"shield":
 					shield_max += 1
 					shield = shield_max
-				_: level += 1
+				_: levels[_power_slot(item)] = int(levels[_power_slot(item)]) + 1
 			Net.broadcast([Net.M.SHOP_BOUGHT, peer, item])
 	if _shop_t < _shop_leave_at:
 		return
@@ -467,4 +530,4 @@ func _send_state(delta: float) -> void:
 	if _state_t < STATE_EVERY:
 		return
 	_state_t = 0.0
-	Net.broadcast([Net.M.PARTNER, peer, {"p": pos, "a": ok, "n": pilot_name, "sc": score, "w": 0, "l": level, "f": firing and ok}], false)
+	Net.broadcast([Net.M.PARTNER, peer, {"p": pos, "a": ok, "n": pilot_name, "sc": score, "w": weapon, "l": level, "f": firing and ok, "s": shield if ok else 0}], false)

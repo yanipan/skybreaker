@@ -614,7 +614,7 @@ func _process(delta: float) -> void:
 			_begin_sector(GameState.current_level + 1)
 	_snap_t += delta
 	if _snap_t >= SNAP_EVERY:
-		_snap_t = 0.0
+		_snap_t = fmod(_snap_t, SNAP_EVERY)   # keep the remainder: a true 20 Hz, not every 4th frame
 		_send_snapshot()
 
 
