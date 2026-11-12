@@ -90,6 +90,8 @@ func _sign(ts: int, body: String) -> String:
 
 
 func online_ok() -> bool:
+	if OS.has_feature("dedicated_server"):
+		return false   # a room server is not a player: no leaderboard calls
 	return not OS.is_debug_build() or allow_debug
 
 

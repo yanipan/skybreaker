@@ -97,7 +97,7 @@ static func _valid_uuid(s: String) -> bool:
 # --- Events ---
 
 func track(event_name: String, data: Dictionary = {}) -> void:
-	if not enabled:
+	if not enabled or OS.has_feature("dedicated_server"):
 		return
 	var e: Dictionary = {
 		"name": event_name,
@@ -176,6 +176,8 @@ func flush() -> void:
 		return
 	if OS.is_debug_build() and not allow_debug_send:
 		return
+	if OS.has_feature("dedicated_server"):
+		return   # a room server is not an install: it sends no telemetry
 	if _http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
 		return
 	var batch: Array = _queue.slice(0, MAX_BATCH)

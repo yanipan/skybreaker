@@ -24,7 +24,7 @@ if [ ! -f /etc/skybreaker/lobby.env ]; then
 LOBBY_PORT=24600
 PUBLIC_HOST=$HOST
 GODOT=/opt/skybreaker/bin/skybreaker_server.x86_64
-ROOM_PACK=/opt/skybreaker/bin/skybreaker_server.pck
+ROOM_EXPORTED=1
 ROOM_PORT_MIN=24800
 ROOM_PORT_MAX=24839
 MAX_ROOMS=2
@@ -49,6 +49,7 @@ RestartSec=3
 MemoryMax=850M
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/opt/skybreaker
 ProtectHome=true
 PrivateTmp=true
 

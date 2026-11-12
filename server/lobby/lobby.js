@@ -37,7 +37,10 @@ const PORT = parseInt(process.env.LOBBY_PORT || '24600', 10);
 const PUBLIC_HOST = process.env.PUBLIC_HOST || '127.0.0.1';
 const GODOT = process.env.GODOT || '/Applications/Godot.app/Contents/MacOS/Godot';
 const PROJECT = process.env.PROJECT || path.resolve(__dirname, '..', '..');
-// On the server the room runs from an exported pack (Linux Server preset): GODOT is the exported binary, ROOM_PACK its .pck.
+// On the server GODOT is the exported Linux Server binary (ROOM_EXPORTED=1): it finds its .pck next to itself and
+// enters the room scene on its own (Boot.gd), because export templates refuse --path, --main-pack and a scene path.
+// ROOM_PACK runs the same pack with the editor binary, to test it on the Mac.
+const ROOM_EXPORTED = process.env.ROOM_EXPORTED === '1';
 const ROOM_PACK = process.env.ROOM_PACK || '';
 const PORT_MIN = parseInt(process.env.ROOM_PORT_MIN || '24800', 10);
 const PORT_MAX = parseInt(process.env.ROOM_PORT_MAX || '24839', 10);
@@ -82,7 +85,8 @@ function startRoom(proto, kind, bots = 0) {
   const port = freePort();
   const code = newCode();
   if (!port || !code) return null;
-  const args = ['--headless', ...(ROOM_PACK ? ['--main-pack', ROOM_PACK] : ['--path', PROJECT]), 'res://scenes/net/ServerWorld.tscn', '--',
+  const where = ROOM_EXPORTED ? [] : ROOM_PACK ? ['--main-pack', ROOM_PACK, 'res://scenes/net/ServerWorld.tscn'] : ['--path', PROJECT, 'res://scenes/net/ServerWorld.tscn'];
+  const args = ['--headless', ...where, '--',
     `--port=${port}`, '--players=2', '--sector=1', `--room=${code}`];
   // A matched room that does not fill fast is abandoned fast; a friend room waits for the code's lifetime.
   args.push(kind === 'quick' ? '--lobby_timeout=45' : '--lobby_timeout=600');

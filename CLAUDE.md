@@ -165,3 +165,12 @@ assets/fonts/
 - `GAME_DESIGN_DOC.md` — full design doc
 - `ROADMAP.md` — phase checklist (NOTE: shows Phase 0 but project is nearly complete)
 - `TASKS.md` — active task list (stale — update when working)
+
+## Co-op cloud server (12/11)
+
+- GCP VM `skybreaker-coop` (e2-micro, Debian 12, europe-west3-b), static IP `skybreaker-coop-ip` = 35.246.144.83, firewall rule `skybreaker-coop-game` (tcp 80/443, udp 24800-24839, tag `skybreaker-coop`). Lobby URL `https://35-246-144-83.sslip.io` (Caddy + Let's Encrypt in front of `lobby.js` on 24600, which is not open to the internet).
+- Project id and SSH access are in the private project memory, not in this public repo. Service `skybreaker-lobby` (systemd, env in `/etc/skybreaker/lobby.env`, root-only, holds SB_SIG_KEY), files in `/opt/skybreaker/{bin,lobby}`, `MAX_ROOMS=2`, 1 GB swap file.
+- Rooms run from the export preset "Linux Server" (dedicated server, visuals stripped; the preset lives in the gitignored `export_presets.cfg`). Export templates refuse `--path`, `--main-pack` and a scene path, so `Boot.gd` switches to `ServerWorld.tscn` when `OS.has_feature("dedicated_server")`; the lobby uses `ROOM_EXPORTED=1`. Telemetry and Online are off on that feature. `run/flush_stdout_on_print.dedicated_server=true` is required: the lobby reads the room's stdout.
+- Deploy a new server build: `server/deploy/push_build.sh <user>@<server>` (restarts the lobby, cuts running games). First-time setup: `server/deploy/setup_vm.sh <hostname>`.
+- Check it: `python3 scripts/net/cloud_smoke.py https://35-246-144-83.sslip.io` (two bots play a friend room over the internet). Measured there: about 110 MB and 4-5% CPU per room.
+- A protocol change (`Net.PROTO`) needs the server build pushed before phones with the new build can play.

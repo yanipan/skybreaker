@@ -78,6 +78,12 @@ var _splash_done_at: float = 0.0
 
 
 func _ready() -> void:
+	# The exported Linux Server build is a co-op room: export templates refuse a
+	# scene path on the command line, so the room is entered from here.
+	if OS.has_feature("dedicated_server"):
+		set_process(false)
+		get_tree().change_scene_to_file.call_deferred("res://scenes/net/ServerWorld.tscn")
+		return
 	_viewport_size = get_viewport_rect().size
 	_build_ui()
 	_spawn_stars()
