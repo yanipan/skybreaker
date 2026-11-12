@@ -37,6 +37,8 @@ const PORT = parseInt(process.env.LOBBY_PORT || '24600', 10);
 const PUBLIC_HOST = process.env.PUBLIC_HOST || '127.0.0.1';
 const GODOT = process.env.GODOT || '/Applications/Godot.app/Contents/MacOS/Godot';
 const PROJECT = process.env.PROJECT || path.resolve(__dirname, '..', '..');
+// On the server the room runs from an exported pack (Linux Server preset): GODOT is the exported binary, ROOM_PACK its .pck.
+const ROOM_PACK = process.env.ROOM_PACK || '';
 const PORT_MIN = parseInt(process.env.ROOM_PORT_MIN || '24800', 10);
 const PORT_MAX = parseInt(process.env.ROOM_PORT_MAX || '24839', 10);
 const MAX_ROOMS = parseInt(process.env.MAX_ROOMS || '8', 10);
@@ -80,7 +82,7 @@ function startRoom(proto, kind, bots = 0) {
   const port = freePort();
   const code = newCode();
   if (!port || !code) return null;
-  const args = ['--headless', '--path', PROJECT, 'res://scenes/net/ServerWorld.tscn', '--',
+  const args = ['--headless', ...(ROOM_PACK ? ['--main-pack', ROOM_PACK] : ['--path', PROJECT]), 'res://scenes/net/ServerWorld.tscn', '--',
     `--port=${port}`, '--players=2', '--sector=1', `--room=${code}`];
   // A matched room that does not fill fast is abandoned fast; a friend room waits for the code's lifetime.
   args.push(kind === 'quick' ? '--lobby_timeout=45' : '--lobby_timeout=600');
