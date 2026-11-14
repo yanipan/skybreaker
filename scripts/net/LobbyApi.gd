@@ -7,7 +7,7 @@ class_name LobbyApi
 
 const KEYS := preload("res://config/online_keys.gd")
 ## Where the lobby lives for release builds; debug builds use a lobby on this machine.
-const PROD_URL: String = "https://35-246-144-83.sslip.io"   # test server (e2-micro, 12/11); a real domain before public release
+const PROD_URL: String = "https://playskybreaker.shimonster.com"   # GCP e2-micro (Cloudflare DNS only, grey cloud); the old https://35-246-144-83.sslip.io stays served for builds <= 27
 const DEV_URL: String = "http://127.0.0.1:24600"
 const TIMEOUT: float = 6.0
 ## Set from the command line (--lobby=http://host:port) on desktop.

@@ -169,8 +169,16 @@ func drop_link() -> void:
 	if mode != Mode.CLIENT or _server_peer == null:
 		return
 	_server_peer.peer_disconnect_now(0)
+	# Destroy the whole host, do not keep it. Godot's ENetConnection.service()
+	# drops inactive peers from its list in a loop that reads the node it just
+	# freed (use after free): a peer cut with peer_disconnect_now() and left in
+	# a live host crashed the next frame (iPhone build 27, SIGSEGV in
+	# ENetConnection::service). destroy() clears the list safely. Reconnect
+	# builds a fresh host via connect_to().
 	if _host != null:
 		_host.flush()
+		_host.destroy()
+	_host = null
 	_server_peer = null
 	server_connected = false
 	_delayed.clear()
@@ -187,7 +195,11 @@ func rebind(new_id: int, old_id: int) -> void:
 	var old: ENetPacketPeer = _peers.get(old_id)
 	if old != null:
 		_ids.erase(old)
-		old.peer_disconnect_now(0)
+		# Graceful, not _now: a _now peer stays in the live host's list and
+		# trips the use after free in ENetConnection.service() (see drop_link).
+		# Its DISCONNECT event later removes it safely; _ids no longer knows it,
+		# so no peer_left fires.
+		old.peer_disconnect(0)
 	_peers.erase(new_id)
 	_peers[old_id] = p
 	_ids[p] = old_id
@@ -281,6 +293,8 @@ func _process(delta: float) -> void:
 				dp.send(d[2], d[3], d[4])
 	# Drain everything that arrived this frame
 	for i in 200:
+		if _host == null:
+			return   # a handler of the last event dropped or stopped the link
 		var ev: Array = _host.service(0)
 		var t: int = ev[0]
 		if t == ENetConnection.EVENT_NONE:
@@ -320,4 +334,5 @@ func _process(delta: float) -> void:
 				if v is Array and not (v as Array).is_empty():
 					var from: int = int(_ids.get(peer, 0)) if mode == Mode.SERVER else 0
 					message.emit(from, v)
-	_host.flush()
+	if _host != null:
+		_host.flush()

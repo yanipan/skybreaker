@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time setup of the Skybreaker co-op VM (Debian 12, x86_64). Run as root.
-# Usage: setup_vm.sh <public-hostname>      e.g. 34-1-2-3.sslip.io
+# Usage: setup_vm.sh <public-hostname>      e.g. playskybreaker.shimonster.com (DNS only, grey cloud) or 34-1-2-3.sslip.io
 # Safe to run again. The signing key is NOT set here: put it in
 # /etc/skybreaker/lobby.env (SB_SIG_KEY=...) by hand, the file is root-only.
 set -euo pipefail
